@@ -1,3 +1,4 @@
+import type { Database } from "bun:sqlite";
 import { pullRequestList, pullRequestProviders, withLinkedPullRequests, type PullRequest } from "@/shared/pull-requests";
 
 type Read = <T = any>(path: string) => Promise<T>;
@@ -67,6 +68,51 @@ export function linkedPullRequests(store: { get: (k: string) => string | undefin
       store.set(`prs:${board}`, JSON.stringify([...now]));
       if (!before) return null;
       return [...new Set([...before, ...now])].filter((key) => before.has(key) !== now.has(key));
+    },
+  };
+}
+
+type JiraPullRequests = { prCount?: number; prStatus?: PullRequest["status"] };
+/** What a stored number was read for: Jira's own count and state of the issue's pull requests. */
+const signatureOf = (issue: JiraPullRequests) => ({ count: issue.prCount ?? 0, status: issue.prStatus ?? "" });
+
+/** The number of an issue's one pull request by Jira's development detail, kept in the mirror's database so a restart keeps it.
+ *  Jira's Development field gives only a count and a state, so the detail is read once per issue that has one pull request, and
+ *  again only when Jira's count or state for it changes. Each number is stored with the count and state it was read for. */
+export function pullRequestNumbers(db: Database) {
+  db.run(
+    "CREATE TABLE IF NOT EXISTS pr_numbers (key TEXT PRIMARY KEY, count INTEGER NOT NULL, status TEXT NOT NULL, number TEXT NOT NULL)",
+  );
+  const stored = new Map(
+    db
+      .query<{ key: string; count: number; status: string; number: string }, []>("SELECT key, count, status, number FROM pr_numbers")
+      .all()
+      .map(({ key, ...row }) => [key, row]),
+  );
+  const forget = (key: string) => {
+    if (stored.delete(key)) db.query("DELETE FROM pr_numbers WHERE key = ?").run(key);
+  };
+  return {
+    /** The number to project for the issue as Jira alone counts its pull requests. While Jira still counts one, the stored number
+     *  stands even after its state moved (the same pull request was merged or closed: its number is unchanged) until the re-read
+     *  replaces it. Jira counting none or several forgets it: a later count of one may be a different pull request. */
+    apply(key: string, jira: JiraPullRequests): string | undefined {
+      if (jira.prCount !== 1) return void forget(key);
+      return stored.get(key)?.number || undefined;
+    },
+    /** Whether the issue needs its detail read: Jira counts one pull request and nothing was read for this count and state. */
+    stale(key: string, jira: JiraPullRequests) {
+      if (jira.prCount !== 1) return false;
+      const at = stored.get(key),
+        now = signatureOf(jira);
+      return !at || at.count !== now.count || at.status !== now.status;
+    },
+    /** Stores what the detail read for the count and state `jira` had when it was read: "" when it listed none or several. */
+    set(key: string, jira: JiraPullRequests, number: string) {
+      if (jira.prCount !== 1) return forget(key);
+      const row = { ...signatureOf(jira), number };
+      stored.set(key, row);
+      db.query("INSERT OR REPLACE INTO pr_numbers VALUES (?, ?, ?, ?)").run(key, row.count, row.status, row.number);
     },
   };
 }

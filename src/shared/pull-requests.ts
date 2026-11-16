@@ -126,7 +126,7 @@ export function mergePullRequests(jira: PullRequest[], github: PullRequest[]): P
   return sortPullRequests([...byUrl.values()]);
 }
 
-type PullRequestFields = { prCount?: number; prStatus?: PullRequest["status"] };
+type PullRequestFields = { prCount?: number; prStatus?: PullRequest["status"]; prNumber?: string };
 /** An issue's pull request count and state with Jira's development index as the judge of whether it has any. Jira's Development
  *  field (`customfield_10000`) is a cached summary that lags the index: it can list no pull request for an issue the index links
  *  one to, or still list one that was unlinked. `linked` is the index's answer (JQL `development[pullrequests].all > 0`); unknown
@@ -147,6 +147,22 @@ export function withGitHubPullRequests<T extends PullRequestFields>(issue: T, gi
   const extra = jiraUrls ? github.filter((pr) => !jiraUrls.includes(pr.url)) : github;
   const count = (jiraUrls ? jiraUrls.length : jira) + extra.length;
   return { ...issue, prCount: count, prStatus: leadingStatus([...(issue.prStatus ? [{ status: issue.prStatus }] : []), ...github]) };
+}
+
+/** The one pull request's number a list gives ("#12"), or "" when it lists none or several. */
+export const singlePullRequestNumber = (prs: Pick<PullRequest, "number">[]) => (prs.length === 1 ? prs[0]!.number : "");
+
+/** An issue's `prNumber`: the number of its one pull request, carried with the count so the badge draws "#12" on its first paint
+ *  as Linear's `mhn` does (it reads `prNumber` off the pull request model it already holds). GitHub's own row names it when GitHub
+ *  links the one pull request; otherwise `jira` is the number Jira's development detail gave. Gone for none or several. */
+export function withPullRequestNumber<T extends PullRequestFields>(
+  issue: T,
+  github: PullRequest[],
+  jira?: string,
+): T & { prNumber?: string } {
+  const { prNumber: _, ...rest } = issue;
+  const number = issue.prCount !== 1 ? undefined : github.length === 1 ? github[0]!.number : jira;
+  return (number ? { ...rest, prNumber: number } : rest) as T;
 }
 
 // ——— The issue's sidebar list (Linear's "Diffs" section: IssueDetailsPaneSidebar `Cg` → `yg` → `pg`) ———

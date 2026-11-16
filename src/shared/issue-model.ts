@@ -107,6 +107,8 @@ export type Issue = {
   prCount?: number;
   /** The state Jira's Development field summarises the PRs by (one PR's own state). */
   prStatus?: PullRequest["status"];
+  /** The one pull request's number ("#12") while `prCount` is 1, so the badge draws it on first paint (Linear's `prNumber`). */
+  prNumber?: string;
   statusSince?: string;
   started?: string;
   watchers?: User[];

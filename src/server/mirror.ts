@@ -6,9 +6,15 @@ import { boardFromInput, boardProject, withoutAddedBoard } from "./config";
 import type { Board } from "@/shared/issue-model";
 import { detailCache } from "./detail-cache";
 import { historyCache, readHistory } from "./issue-history";
-import { linkedPullRequests, readPullRequests } from "./pull-requests";
+import { linkedPullRequests, pullRequestNumbers, readPullRequests } from "./pull-requests";
 import { gitHubClient, gitHubConfiguration, gitHubPullRequests, gitHubToken, GitHubPaused } from "./github-pull-requests";
-import { mergePullRequests, withGitHubPullRequests } from "@/shared/pull-requests";
+import {
+  mergePullRequests,
+  singlePullRequestNumber,
+  withGitHubPullRequests,
+  withPullRequestNumber,
+  type PullRequest,
+} from "@/shared/pull-requests";
 import { missingLinkTitles, recentlyTouched, storeRemoteLinks } from "./remote-links";
 import { attachmentGateway, jiraAttachmentReader } from "@/shared/attachment-media";
 import { saveAddedBoard, serverAuth } from "./server-config";
@@ -118,13 +124,21 @@ const github = gitHubPullRequests(db, {
 /** The pull request URLs Jira's development panel lists, per issue, read where GitHub links the same issue, so a pull request both
  *  link counts once. */
 const jiraPrUrls = new Map<string, string[]>();
+/** The number of each issue's one pull request by Jira's development detail, for its badge's first paint. */
+const prNumbers = pullRequestNumbers(db);
 /** An issue's pull requests by Jira alone: its Development field, with the development index's say on whether it has any. */
 const jiraSlimOf = (raw: any, boards: number[]) => linkedPrs.apply(projection.slim(raw), boards);
-/** An issue as the board and search read it: Jira's pull requests, with GitHub's added. `boards` hold it (pull request links
- *  are read per board). */
+/** An issue as the board and search read it: Jira's pull requests, with GitHub's added, and the one pull request's number
+ *  (GitHub's, else Jira's detail's) in the same row as the count, so one board update brings both. `boards` hold it (pull
+ *  request links are read per board). */
 const slimOf = (raw: any, boards: number[]) => {
-  const slim = jiraSlimOf(raw, boards);
-  return withGitHubPullRequests(slim, github.forKey(slim.key), jiraPrUrls.get(slim.key));
+  const slim = jiraSlimOf(raw, boards),
+    fromGitHub = github.forKey(slim.key);
+  return withPullRequestNumber(
+    withGitHubPullRequests(slim, fromGitHub, jiraPrUrls.get(slim.key)),
+    fromGitHub,
+    prNumbers.apply(slim.key, slim),
+  );
 };
 const source = JSON.stringify({ site: configuration.site, email: configuration.email });
 if (getMeta("source") && getMeta("source") !== source)
@@ -245,7 +259,7 @@ async function incrementalSync(board: number): Promise<string[]> {
   return keys;
 }
 
-/** Re-projects the stored issues' pull request count and state. Returns whether any changed. */
+/** Re-projects the stored issues' pull request count, state and number. Returns whether any changed. */
 function reprojectPullRequests(rows: { key: string; slim: string; full: string }[]) {
   const update = db.query("UPDATE issues SET slim = ? WHERE key = ?");
   let changed = false;
@@ -254,8 +268,11 @@ function reprojectPullRequests(rows: { key: string; slim: string; full: string }
       // From the stored Jira record, so an issue the index links again gets the field's own count and state back.
       const slim = JSON.parse(row.slim),
         next = slimOf(JSON.parse(row.full), store.boardsOf(row.key));
-      if (next.prCount === slim.prCount && next.prStatus === slim.prStatus) continue;
-      update.run(JSON.stringify({ ...slim, prCount: next.prCount, prStatus: next.prStatus }), row.key);
+      if (next.prCount === slim.prCount && next.prStatus === slim.prStatus && next.prNumber === slim.prNumber) continue;
+      update.run(
+        JSON.stringify({ ...slim, prCount: next.prCount, prStatus: next.prStatus, prNumber: next.prNumber }),
+        row.key,
+      );
       changed = true;
     }
   })();
@@ -293,6 +310,47 @@ async function readOverlaps() {
     .slice(0, OVERLAP_READS);
   for (const row of keys) jiraPrUrls.set(row.key, (await readPullRequests(jira, row.key)).map((pr) => pr.url));
   return reprojectPullRequests(keys);
+}
+
+/** Jira development details read per poll for the number of an issue's one pull request. */
+const NUMBER_READS = 5;
+/** After a detail read fails, that issue waits this long, and every other one a minute (Jira refusing or rate limiting). */
+const NUMBER_RETRY_MS = 10 * 60_000,
+  NUMBER_PAUSE_MS = 60_000;
+const numberFailed = new Map<string, number>();
+let numbersBusy = false,
+  numbersPaused = 0;
+/** Reads Jira's development detail for a few issues with one pull request whose number neither GitHub nor an earlier read gave
+ *  (or whose Jira count or state moved since), beside the board loop and never holding it up, then re-projects them and tells open
+ *  tabs. Until it lands the badge keeps the number's room (card-badges.tsx). Reads only. */
+function readPullRequestNumbers() {
+  if (numbersBusy || Date.now() < numbersPaused) return;
+  const now = Date.now();
+  const due = db
+    .query<{ key: string; status: string | null }, []>(
+      "SELECT key, json_extract(slim, '$.prStatus') AS status FROM issues WHERE json_extract(slim, '$.prCount') = 1",
+    )
+    .all()
+    // GitHub names its own pull request's number; with none from GitHub the row's count and state are Jira's alone.
+    .filter(({ key }) => !github.forKey(key).length && now - (numberFailed.get(key) ?? 0) > NUMBER_RETRY_MS)
+    .map(({ key, status }) => ({ key, jira: { prCount: 1, prStatus: (status ?? undefined) as PullRequest["status"] | undefined } }))
+    .filter(({ key, jira }) => prNumbers.stale(key, jira))
+    .slice(0, NUMBER_READS);
+  if (!due.length) return;
+  numbersBusy = true;
+  void (async () => {
+    for (const { key, jira: at } of due) {
+      try {
+        prNumbers.set(key, at, singlePullRequestNumber(await readPullRequests(jira, key)));
+      } catch (e) {
+        numberFailed.set(key, Date.now());
+        numbersPaused = Date.now() + NUMBER_PAUSE_MS;
+        console.error(`[prs] ${key}:`, String((e as Error)?.message ?? e).slice(0, 200));
+        break;
+      }
+    }
+    if (reprojectPullRequests(rowsOf(due.map((d) => d.key)))) notify();
+  })().finally(() => (numbersBusy = false));
 }
 
 let githubPolled = 0,
@@ -387,6 +445,7 @@ async function loop() {
     );
     if (changed.includes(true)) notify();
     syncGitHub();
+    readPullRequestNumbers();
     if (live.clients.size)
       void unseenChanged().then(
         (moved) => moved && notify("inbox"),
@@ -597,12 +656,16 @@ export const history = async (key: string) => ((await kept(key)) ? histories(key
  *  asks. Jira's list also settles the issue's count where both link the same pull request. When Jira can't answer, GitHub's stand. */
 export async function pullRequests(key: string) {
   const fromGitHub = github.forKey(key);
+  // Jira's count and state as they were when the detail was asked for: the number read is stored for them.
+  const [row] = rowsOf([key]);
+  const at = row && jiraSlimOf(JSON.parse(row.full), store.boardsOf(key));
   const fromJira = await readPullRequests(jira, key).catch((error) => {
     if (!fromGitHub.length) throw error;
     return undefined;
   });
-  if (fromJira && fromGitHub.length) {
-    jiraPrUrls.set(key, fromJira.map((pr) => pr.url));
+  if (fromJira) {
+    if (fromGitHub.length) jiraPrUrls.set(key, fromJira.map((pr) => pr.url));
+    if (at) prNumbers.set(key, at, singlePullRequestNumber(fromJira));
     if (reprojectPullRequests(rowsOf([key]))) notify();
   }
   return mergePullRequests(fromJira ?? [], fromGitHub);

@@ -14,6 +14,8 @@ import {
   pullRequestTool,
   withGitHubPullRequests,
   withLinkedPullRequests,
+  withPullRequestNumber,
+  singlePullRequestNumber,
   type PullRequest,
 } from "./pull-requests";
 
@@ -227,4 +229,36 @@ test("a row of several names its pull request as Linear's description: owner/rep
     "acme/app#4 · Changes requested",
   );
   expect(pullRequestDescription({ ...row(4, "merged"), repo: "app", closedAt: "2026-11-13T12:00:00Z" }, now)).toBe("app#4 · Merged 1d ago");
+});
+
+test("an issue with one pull request carries its number, GitHub's or Jira's detail's; none or several carry none", () => {
+  type Fields = { key: string; prCount?: number; prStatus?: PullRequest["status"]; prNumber?: string };
+  const issue = (v: Fields) => v;
+  // GitHub links the one pull request: its own number.
+  expect(withPullRequestNumber(issue({ key: "ACME-1", prCount: 1, prStatus: "open" }), [pr(2965, "open")])).toEqual({
+    key: "ACME-1",
+    prCount: 1,
+    prStatus: "open",
+    prNumber: "#2965",
+  });
+  // GitHub's row wins over a number Jira's detail read.
+  expect(withPullRequestNumber(issue({ key: "ACME-1", prCount: 1 }), [pr(7, "open")], "#6").prNumber).toBe("#7");
+  // Jira alone: the number its development detail gave.
+  expect(withPullRequestNumber(issue({ key: "ACME-1", prCount: 1, prStatus: "merged" }), [], "#41").prNumber).toBe("#41");
+  // Not read yet, or the detail listed none: no number.
+  expect(withPullRequestNumber(issue({ key: "ACME-1", prCount: 1 }), [])).toEqual({ key: "ACME-1", prCount: 1 });
+  expect(withPullRequestNumber(issue({ key: "ACME-1", prCount: 1 }), [], "")).toEqual({ key: "ACME-1", prCount: 1 });
+  // None or several: none, and a number the issue carried before goes.
+  expect(withPullRequestNumber(issue({ key: "ACME-1", prCount: 0, prNumber: "#41" }), [], "#41")).toEqual({ key: "ACME-1", prCount: 0 });
+  expect(withPullRequestNumber(issue({ key: "ACME-1", prCount: 2, prNumber: "#41" }), [pr(1, "open"), pr(2, "open")], "#41")).toEqual({
+    key: "ACME-1",
+    prCount: 2,
+  });
+  expect(withPullRequestNumber(issue({ key: "ACME-1" }), [])).toEqual({ key: "ACME-1" });
+});
+
+test("a list names its pull request's number only when it lists exactly one", () => {
+  expect(singlePullRequestNumber([pr(12, "open")])).toBe("#12");
+  expect(singlePullRequestNumber([])).toBe("");
+  expect(singlePullRequestNumber([pr(1, "open"), pr(2, "open")])).toBe("");
 });

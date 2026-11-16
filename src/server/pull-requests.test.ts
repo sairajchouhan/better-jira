@@ -1,5 +1,6 @@
 import { expect, test } from "bun:test";
-import { linkedPullRequests, readLinkedPullRequestKeys, readPullRequests } from "./pull-requests";
+import { Database } from "bun:sqlite";
+import { linkedPullRequests, pullRequestNumbers, readLinkedPullRequestKeys, readPullRequests } from "./pull-requests";
 import type { PullRequest } from "@/shared/pull-requests";
 
 test("pull requests are read with GETs only: the issue id, the summary's providers, then each provider's detail", async () => {
@@ -68,4 +69,37 @@ test("an issue on two boards has a pull request when either board's index links 
   // Only boards that hold the issue count: board 8's read says nothing about an issue it doesn't hold.
   expect(prs.apply({ key: "K-1", prCount: 0 }, [8]).prCount).toBe(0);
   expect(prs.apply({ key: "K-1", prCount: 0 }, []).prCount).toBe(0);
+});
+
+test("one pull request's number is read once for Jira's count and state, kept across restarts, and read again when they move", () => {
+  const db = new Database(":memory:");
+  let numbers = pullRequestNumbers(db);
+  const open = { prCount: 1, prStatus: "open" } as const;
+  // Never read: due, and no number to project.
+  expect(numbers.stale("K-1", open)).toBe(true);
+  expect(numbers.apply("K-1", open)).toBeUndefined();
+  numbers.set("K-1", open, "#2965");
+  expect(numbers.stale("K-1", open)).toBe(false);
+  expect(numbers.apply("K-1", open)).toBe("#2965");
+  // A restart keeps it.
+  numbers = pullRequestNumbers(db);
+  expect(numbers.apply("K-1", open)).toBe("#2965");
+  expect(numbers.stale("K-1", open)).toBe(false);
+  // The state moved (merged): read again, the number standing meanwhile (the same pull request).
+  const merged = { prCount: 1, prStatus: "merged" } as const;
+  expect(numbers.stale("K-1", merged)).toBe(true);
+  expect(numbers.apply("K-1", merged)).toBe("#2965");
+  // The count moved: forgotten, so the one left after an unlink is read afresh.
+  expect(numbers.apply("K-1", { prCount: 2, prStatus: "open" })).toBeUndefined();
+  expect(numbers.apply("K-1", open)).toBeUndefined();
+  expect(numbers.stale("K-1", open)).toBe(true);
+  expect(pullRequestNumbers(db).apply("K-1", open)).toBeUndefined();
+  // Several or none never need a read.
+  expect(numbers.stale("K-2", { prCount: 2 })).toBe(false);
+  expect(numbers.stale("K-2", {})).toBe(false);
+  // A detail that listed none is not read again for the same count and state; it projects no number.
+  const linked = { prCount: 1 };
+  numbers.set("K-3", linked, "");
+  expect(numbers.stale("K-3", linked)).toBe(false);
+  expect(numbers.apply("K-3", linked)).toBeUndefined();
 });

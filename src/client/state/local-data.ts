@@ -81,6 +81,7 @@ const issueFields = new Set([
   "milestones",
   "prCount",
   "prStatus",
+  "prNumber",
   "statusSince",
   "started",
   "watchers",
