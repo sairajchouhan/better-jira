@@ -232,7 +232,8 @@ export const copyTable = (view: EditorView, tablePos: number) => {
   const table = view.state.doc.nodeAt(tablePos);
   if (table?.type.spec.tableRole !== "table") return;
   copyContent(view, Fragment.from(table)).then(
-    () => toasts.show("Table copied to clipboard"),
-    () => toasts.show("Table could not be copied to clipboard"),
+    // One toast per message, as Linear's toast id is its content (BJ-271): copying again restarts it.
+    () => toasts.show("Table copied to clipboard", { id: "table-copied" }),
+    () => toasts.show("Table could not be copied to clipboard", { id: "table-copy-failed" }),
   );
 };

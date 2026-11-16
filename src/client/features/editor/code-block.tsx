@@ -69,11 +69,13 @@ async function copyCode(text: string) {
   } catch {
     message = "Code contents could not be copied to clipboard";
   }
+  // One toast per message, as Linear's toast id is its content (BJ-271): copying again restarts it.
   toasts.show(
     <Toast>
       {message}
       <Toast.Close />
     </Toast>,
+    { id: `code-copy:${message}` },
   );
 }
 
