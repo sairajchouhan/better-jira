@@ -9,8 +9,7 @@ import { Icon, PullRequestStatusIcon, ReviewStatusIcon } from "@/client/componen
 import { LinkIcon } from "@/client/components/link-icon";
 import { ActionMenu, ContextMenu, type ActionEntry } from "@/client/components/action-menu";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
-import { showNotification } from "@/client/state/app-notifications";
-import { COPY_FAILED } from "./issue-copy";
+import { COPY_FAILED, showNotification } from "@/client/state/app-notifications";
 import { useStore } from "@/client/state/store";
 import { run, useCommand } from "@/client/features/navigation/commands";
 import { queryClient } from "@/client/state/server-data";

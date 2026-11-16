@@ -1,7 +1,7 @@
 import { newSubIssueDraft } from "@/client/features/issue/sub-issue-draft";
 import { hasLocalDraft, RESUME_EDITING } from "@/client/features/issue/composer-local-draft";
 import { type Issue } from "@/shared/issue-model";
-import { lastToastLink, showNotification } from "@/client/state/app-notifications";
+import { COPY_FAILED, lastToastLink, showNotification } from "@/client/state/app-notifications";
 import { toasts } from "@/client/components/toast-queue";
 import { recentIssues } from "./recents";
 import { isMyIssues } from "./navigation";
@@ -34,7 +34,7 @@ import {
   updateRule,
   viewSettings,
 } from "@/client/features/views/view-settings";
-import { COPY_FAILED, copyIssue, PAGE_URL_COPIED, type CopyKind } from "@/client/features/issue/issue-copy";
+import { copyIssue, PAGE_URL_COPIED, type CopyKind } from "@/client/features/issue/issue-copy";
 import { codeBlockBindings, editorBindings } from "@/client/features/editor/editor-bindings";
 import { Dialog } from "@/client/components/dialog";
 import { actionMenuOpen } from "@/client/components/open-action-menus";

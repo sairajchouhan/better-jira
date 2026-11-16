@@ -1,7 +1,6 @@
 import { issueDocumentChunk } from "@/client/routes/route-chunks";
 import { type Issue } from "@/shared/issue-model";
-import { showNotification } from "@/client/state/app-notifications";
-import { COPY_FAILED } from "./issue-copy";
+import { COPY_FAILED, showNotification } from "@/client/state/app-notifications";
 import { LoadingState } from "@/client/components/empty-state";
 import { Text } from "@/client/components/text";
 import { Dialog, ConfirmDialog } from "@/client/components/dialog";

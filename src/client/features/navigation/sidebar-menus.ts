@@ -10,7 +10,7 @@ import type { Board } from "@/shared/issue-model";
 import { defaultPreferences } from "@/shared/view-model";
 import { joinGroups, type ActionEntry } from "@/client/components/action-menu";
 import { get, set } from "@/client/state/store";
-import { showNotification } from "@/client/state/app-notifications";
+import { COPY_FAILED, showNotification } from "@/client/state/app-notifications";
 import { removeBoard } from "@/client/state/server-data";
 import { placeURL, ui } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
@@ -46,7 +46,7 @@ export const parseSidebarPrefs = (raw: unknown): SidebarPrefs => {
 const copy = (url: string, toast: string) =>
   void copyText(url).then(
     () => showNotification({ text: toast }),
-    (e) => showNotification({ text: String(e) }),
+    () => showNotification(COPY_FAILED),
   );
 const openInNewTab = (url: string) => window.open(url, "_blank", "noopener");
 

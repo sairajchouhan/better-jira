@@ -25,6 +25,8 @@ export function confirmationId(signature: readonly unknown[]) {
   return id;
 }
 export const INBOX_NOTIFICATION_ID = "inbox";
+/** Linear's error toast when a copy fails (`lM`, `wX`, `thn`: `new U(L.error, "Couldn’t copy to clipboard")`). */
+export const COPY_FAILED = { text: "Couldn’t copy to clipboard" } as const satisfies Notification;
 /** `icon` is the image before the text, as Linear's info toasts carry one (the copy icon on "Copied issue link to clipboard"). */
 export type Notification = { text: string; detail?: string; key?: string; undo?: () => void; icon?: IconName };
 type ContentProps = { notice: Notification; id: string };

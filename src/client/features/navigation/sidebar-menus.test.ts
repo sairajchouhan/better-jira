@@ -104,6 +104,16 @@ test("chrome-54: Copy link copies the row's address with Linear's toast", async 
   expect(latestNotification()?.text).toBe("Link copied to clipboard");
 });
 
+test("BJ-381: a refused Copy link shows Linear's \"Couldn’t copy to clipboard\", not the browser's error", async () => {
+  Object.defineProperty(globalThis.navigator, "clipboard", {
+    configurable: true,
+    value: { writeText: async () => Promise.reject(new Error("Document is not focused.")) },
+  });
+  sidebarItemEntries("myIssues", withPrefs()).find((e) => e.name === "Copy link")!.run!();
+  await Bun.sleep(0);
+  expect(latestNotification()?.text).toBe("Couldn’t copy to clipboard");
+});
+
 test("chrome-53: the More menu lists the hidden items, then Customize sidebar", () => {
   const more = moreEntries(
     { ...SIDEBAR_PREFS, myIssues: "MoreMenu" },

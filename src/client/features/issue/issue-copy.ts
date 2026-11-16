@@ -3,7 +3,7 @@ import { ME, get, statusOf } from "@/client/state/store";
 import { issueURL } from "./issue-urls";
 import { loadFull } from "@/client/state/server-data";
 import { isLocalIssue } from "@/client/state/local-edits";
-import { showNotification, type Notification } from "@/client/state/app-notifications";
+import { COPY_FAILED, showNotification, type Notification } from "@/client/state/app-notifications";
 import type { AdfNode } from "@/client/features/editor/rich-document";
 import { canCopyRich, copyLinkedTexts, copyText, copyTextAsync, formatLinkedText, linkedTextsMarkdown } from "@/client/lib/clipboard";
 import { modifiers } from "@/client/lib/modifier-keys";
@@ -233,8 +233,6 @@ export function copyToast(kind: CopyKind, issue: Pick<Issue, "key">, copied: str
 export const PAGE_URL_COPIED: Notification = { text: "Current URL copied to clipboard" };
 /** Kinds whose text needs the full issue (its comments), loaded first. */
 const needsFull = (kind: CopyKind) => kind === "everything as Markdown" || kind === "as prompt";
-/** Linear's error toast when a copy fails (`lM`, `wX`, `thn`: `new U(L.error, "Couldn’t copy to clipboard")`). */
-export const COPY_FAILED: Notification = { text: "Couldn’t copy to clipboard" };
 /** Linear's Copy as prompt when the prompt itself couldn't be made (`wX`: `ll(e, "Couldn’t generate prompt")`). */
 export const PROMPT_FAILED: Notification = { text: "Couldn’t generate prompt" };
 /** Linear's ⌥ Copy ID toast (`Rmt`): `${Model} ${pluralize("ID")} copied to clipboard`. */

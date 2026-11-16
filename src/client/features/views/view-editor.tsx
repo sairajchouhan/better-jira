@@ -1,4 +1,4 @@
-import { showNotification } from "@/client/state/app-notifications";
+import { COPY_FAILED, showNotification } from "@/client/state/app-notifications";
 import {
   cloneElement,
   useEffect,
@@ -208,7 +208,7 @@ export function viewActions(view: SavedView, favorite: boolean, contextMenu: boo
   const link = () =>
     void copyText(placeURL({ to: "view", id: view.id }))
       .then(() => showNotification({ text: "View link copied to clipboard" }))
-      .catch((e) => showNotification({ text: String(e) }));
+      .catch(() => showNotification(COPY_FAILED));
   return [
     [
       ["Edit…", "pencil", () => openViewEditor(editViewDraft(view.id))],

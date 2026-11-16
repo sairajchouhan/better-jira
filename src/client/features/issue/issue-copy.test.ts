@@ -1,9 +1,10 @@
 import { type Issue } from "@/shared/issue-model";
 import { afterEach, expect, test } from "bun:test";
-import { adfToMarkdown, copyDocument, copyIssue, copyKinds, copyShortcuts, copyAltNames, copyToast, COPY_FAILED, fillPrompt, ID_LINK_COPIED, issueCopy, PAGE_URL_COPIED, PROMPT_FAILED } from "./issue-copy";
+import { adfToMarkdown, copyDocument, copyIssue, copyKinds, copyShortcuts, copyAltNames, copyToast, fillPrompt, ID_LINK_COPIED, issueCopy, PAGE_URL_COPIED, PROMPT_FAILED } from "./issue-copy";
 import { deferred, fakeClipboard } from "@/client/test/fake-clipboard";
 import { modifiers } from "@/client/lib/modifier-keys";
 import { toasts } from "@/client/components/toast-queue";
+import { COPY_FAILED } from "@/client/state/app-notifications";
 import { get, set } from "@/client/state/store";
 import type { ReactElement } from "react";
 /** The newest toast's text. */
