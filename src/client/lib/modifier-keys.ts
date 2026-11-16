@@ -47,4 +47,4 @@ const none: Tracked = { altKey: false, metaKey: false, ctrlKey: false, shiftKey:
 export const modifiers: Tracked =
   typeof window !== "undefined" && typeof window.addEventListener === "function" ? trackModifiers(window) : none;
 /** Whether ⌥ is held, re-rendering when it goes down or up: Linear's action names read `fu.altKey` as the menu draws. */
-export const useAltKey = () => useSyncExternalStore(modifiers.subscribe, () => modifiers.altKey, () => false);
+export const useAltKey = () => useSyncExternalStore(modifiers.subscribe, () => modifiers.altKey, () => modifiers.altKey);

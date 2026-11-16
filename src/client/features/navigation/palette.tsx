@@ -103,7 +103,7 @@ function CommandRow({ cmd: c }: { cmd: Cmd }) {
       checked={c.checked}
       shortcut={c.keys?.length ? c.keys : undefined}
     >
-      <ActionLabel name={rowLabel(c)} altName={c.altName && rowLabel({ ...c, name: c.altName })} />
+      <CommandLabel cmd={c} />
       {/* Linear's row detail (M4e `L4e`): small, labelFaint, 4px after the name, truncated. */}
       {c.detail && (
         <Text as="span" variant="small" color="faint" wrap="truncate" className="ml-1 grow">
@@ -113,7 +113,11 @@ function CommandRow({ cmd: c }: { cmd: Cmd }) {
     </Menu.Item>
   );
 }
-const rowLabel = (c: Cmd) => [...(c.parents ?? []), c.name].join(" › ");
+/** A command row's label with its breadcrumb, and its ⌥ name while ⌥ is held. */
+export const CommandLabel = ({ cmd }: { cmd: Pick<Cmd, "name" | "parents" | "altName"> }) => (
+  <ActionLabel name={rowLabel(cmd)} altName={cmd.altName && rowLabel({ ...cmd, name: cmd.altName })} />
+);
+const rowLabel = (c: Pick<Cmd, "name" | "parents">) => [...(c.parents ?? []), c.name].join(" › ");
 /** A command row's menu value: what a page returns the highlight to when Backspace leaves it. */
 const rowValue = (c: Cmd) => `cmd:${c.id ? `${c.id} ` : ""}${rowLabel(c)}`;
 

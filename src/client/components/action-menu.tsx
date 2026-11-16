@@ -93,7 +93,15 @@ export function searchActions(entries: ActionEntry[], query: string, { root = tr
     ...entries.map((entry) => ({ entry, score: score(entry, query) })),
     ...entries.flatMap((entry) =>
       hoistedChildren(entry, query, { root }).map(
-        ({ child, path, score }): Ranked => ({ entry: { ...child, name: [...path, child.name].join(" › ") }, score }),
+        ({ child, path, score }): Ranked => ({
+          entry: {
+            ...child,
+            name: [...path, child.name].join(" › "),
+            // Its ⌥ name keeps the breadcrumb too ("Copy › Copy ID as link").
+            altName: child.altName && [...path, child.altName].join(" › "),
+          },
+          score,
+        }),
       ),
     ),
   ]
@@ -250,7 +258,7 @@ export const Row = memo(function Row({ entry }: { entry: ActionEntry }) {
     return (
       <Menu.Submenu
         value={entry.name}
-        label={<ActionLabel name={entry.name} />}
+        label={<EntryLabel entry={entry} />}
         icon={icon}
         shortcut={entry.shortcut}
         hint={hint}
@@ -275,7 +283,7 @@ export const Row = memo(function Row({ entry }: { entry: ActionEntry }) {
         onToggle={() => entry.run?.()}
         data-number={entry.number}
       >
-        <ActionLabel name={entry.name} />
+        <EntryLabel entry={entry} />
       </CheckRow>
     );
   return (
@@ -293,7 +301,7 @@ export const Row = memo(function Row({ entry }: { entry: ActionEntry }) {
         entry.run?.();
       }}
     >
-      <ActionLabel name={entry.name} altName={entry.altName} />
+      <EntryLabel entry={entry} />
     </Menu.Item>
   );
 });
@@ -361,6 +369,10 @@ export function ContextMenu({
     </div>
   );
 }
+/** A row's label: its name, or its ⌥ name while ⌥ is held. */
+export const EntryLabel = ({ entry }: { entry: Pick<ActionEntry, "name" | "altName"> }) => (
+  <ActionLabel name={entry.name} altName={entry.altName} />
+);
 /** Listed descendants read "Parent › Child": the path dimmed with a chevron between parts, as in Linear (M4e's labelMuted breadcrumbs).
  *  With `altName`, the label follows ⌥ (only such rows subscribe to it). */
 export function ActionLabel({ name, altName }: { name: string; altName?: string }) {

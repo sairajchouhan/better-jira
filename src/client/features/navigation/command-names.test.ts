@@ -27,10 +27,8 @@ test("BJ-244: ⌘K names the targeted issue's field commands as Linear's command
   ]);
 });
 
-test("BJ-244: parent, link, rename and copy commands take Linear's ⌘K wording; the shortcuts panel keeps the registry name", () => {
-  const target = issue({ parent: "ABC-1" });
-  expect(nameOf("parent-set", target)).toBe("Change parent issue…");
-  expect(nameOf("parent-set", issue())).toBe("Set parent issue…");
+test("BJ-244: link, rename and copy commands take Linear's ⌘K wording; the shortcuts panel keeps the registry name", () => {
+  const target = issue();
   expect(nameOf("link", target)).toBe("Add link…");
   expect(nameOf("rename", target)).toBe("Rename issue…");
   expect(nameOf("copy-id", target)).toBe("Copy issue ID");
@@ -51,4 +49,21 @@ test("BJ-379/380: ⌘K's Copy commands take Linear's ⌥ names", () => {
     "copy-title": "Copy issue title without ID",
     "copy-link": "Copy title without ID as link",
   });
+});
+
+import { renderToStaticMarkup } from "react-dom/server";
+import { createElement } from "react";
+import { CommandLabel } from "./palette";
+import { modifiers } from "@/client/lib/modifier-keys";
+
+test("BJ-379: a ⌘K command row draws its ⌥ name while ⌥ is held", () => {
+  const cmd = { name: "Copy issue ID", altName: COMMAND_ALT_NAMES["copy-id"] };
+  const draw = () => renderToStaticMarkup(createElement(CommandLabel, { cmd }));
+  expect(draw()).toBe("Copy issue ID");
+  (modifiers as { altKey: boolean }).altKey = true;
+  try {
+    expect(draw()).toBe("Copy issue ID as link");
+  } finally {
+    (modifiers as { altKey: boolean }).altKey = false;
+  }
 });

@@ -121,3 +121,22 @@ test("BJ-250: in a root search, Epic's values hoist only once the query names th
   // In a submenu the gate is off.
   expect(hoistedChildren(epic, "alpha", { root: false }).map((h) => h.child.name)).toEqual(["Alpha launch"]);
 });
+
+import { renderToStaticMarkup } from "react-dom/server";
+import { createElement } from "react";
+import { EntryLabel } from "./action-menu";
+import { modifiers } from "@/client/lib/modifier-keys";
+
+test("BJ-379: a row draws its ⌥ name while ⌥ is held, and a hoisted row keeps its breadcrumb", () => {
+  const copy: ActionEntry = { name: "Copy", children: [{ name: "Copy ID", altName: "Copy ID as link" }] };
+  const [hoisted] = searchActions([copy], "copy id").filter((e) => e.name !== "Copy");
+  expect(hoisted).toMatchObject({ name: "Copy › Copy ID", altName: "Copy › Copy ID as link" });
+  const draw = (entry: ActionEntry) => renderToStaticMarkup(createElement(EntryLabel, { entry })).replace(/<[^>]+>/g, "");
+  expect(draw(hoisted!)).toBe("CopyCopy ID");
+  (modifiers as { altKey: boolean }).altKey = true;
+  try {
+    expect(draw(hoisted!)).toBe("CopyCopy ID as link");
+  } finally {
+    (modifiers as { altKey: boolean }).altKey = false;
+  }
+});

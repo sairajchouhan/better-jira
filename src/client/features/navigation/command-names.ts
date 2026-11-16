@@ -63,9 +63,6 @@ export function issueCommandName(id: string, issue: Issue | undefined, lookup: L
       return issue && epicOf(issue, lookup) ? "Move to epic…" : "Add to epic…";
     case "milestone":
       return issue?.milestones?.length ? "Move to milestone…" : "Add to milestone…";
-    // LightboxEditorProvider `ii`: `Change parent issue…` once it has one.
-    case "parent-set":
-      return issue?.parent ? "Change parent issue…" : "Set parent issue…";
   }
   return undefined;
 }
