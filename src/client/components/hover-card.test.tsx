@@ -16,10 +16,12 @@ test("a closed hover card is only its trigger: the card, React Aria's preview di
 
 test("a disabled card's trigger owns no event, so nothing opens it (a favorite row while a favorite is dragged, Linear's `d5n`)", () => {
   const was = (globalThis as { Node?: unknown }).Node;
-  class FakeNode {}
+  class FakeNode {
+    readonly node = true;
+  }
   (globalThis as { Node?: unknown }).Node = FakeNode;
   try {
-    const event = { currentTarget: { contains: () => true }, target: new FakeNode() as EventTarget };
+    const event = { currentTarget: { contains: () => true }, target: new FakeNode() as unknown as EventTarget };
     expect(ownsEvent(false, event)).toBe(true);
     expect(ownsEvent(true, event)).toBe(false);
     // An event from a portal'd child the trigger doesn't contain isn't the trigger's either.
