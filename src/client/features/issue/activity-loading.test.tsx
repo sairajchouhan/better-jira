@@ -49,6 +49,11 @@ test("activity loading: the issue's Activity puts its comments and comment box i
   expect(issueView).toContain("useActivityReveal(firstKey(issue.key), !f || pending)");
 });
 
+test("activity loading: details Jira refused never leave the caret blinking; the Activity stays out as before", () => {
+  expect(issueView).toContain("const detailsFailed = !f && !!detailsError;");
+  expect(issueView.indexOf("if (detailsFailed) return null;")).toBeLessThan(issueView.indexOf("<ActivityGate ready={loaded}"));
+});
+
 test("activity loading: the fallback keeps Linear's 300px, the caret 14px down at its left edge", () => {
   const box = rule(indexCss, ".activity-loading");
   expect(box).toContain("position: relative;");

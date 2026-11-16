@@ -856,6 +856,9 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
   const { entries: history, pending } = useIssueHistoryState(issue.key, f?.updated);
   const reveal = useActivityReveal(firstKey(issue.key), !f || pending);
   const loaded = reveal.ready && !!f;
+  // Details Jira couldn't give: nothing to wait for (the description shows the error), so no caret blinking on forever.
+  const detailsError = useStore((s) => s.fullErrors.get(issue.key));
+  const detailsFailed = !f && !!detailsError;
   // Any other spot the address points at (an activity entry, an image's comments) centres once the issue shows, and on each
   // new link to it, as Linear's `oT(e, "center")`; comments ring and centre themselves (`useAnchorHighlight`). The router's
   // own hash scroll is off (tree.tsx): it aligned to the top, under the pane's copy bar (R4-inbox-D2).
@@ -938,6 +941,7 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
         })),
       ]
     : [];
+  if (detailsFailed) return null;
   const imageComments = imageCommentIds(issue.mediaEdits);
   return (
     <section ref={commentRef} className="issue-activity mt-4 border-t border-line pt-[18px]">
