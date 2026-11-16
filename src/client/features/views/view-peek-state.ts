@@ -37,6 +37,19 @@ export function peekPlacement(toolbarHeight = 0) {
   return { top: PEEK_TOP + toolbarHeight, right: PEEK_RIGHT, maxHeight: `calc(100dvh - ${PEEK_TOP + toolbarHeight}px)` };
 }
 
+/** Whether a key lands in a text field: Linear's global key listeners skip it unless they opt in (`runWithInputElementFocus`), and
+ *  the peek's Escape doesn't (`y_(e, …)` in startup-root.CnUSfl4j.js; `Ip` is the text-field check). Linear's own check is the
+ *  editable tags and contenteditable (its `mtn`: `isContentEditable||yen.has(tagName)`). */
+export function inTextField(target: unknown): boolean {
+  const element = target as { isContentEditable?: boolean; tagName?: string } | null;
+  return !!element && (!!element.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(element.tagName ?? ""));
+}
+
+/** Whether Escape closes the open peek: a plain Escape no one took yet, from outside a text field, which keeps it (BJ-269). */
+export function escapeClosesPeek(e: Pick<KeyboardEvent, "key" | "defaultPrevented" | "altKey" | "ctrlKey" | "metaKey" | "shiftKey" | "target">) {
+  return e.key === "Escape" && !e.defaultPrevented && !e.altKey && !e.ctrlKey && !e.metaKey && !e.shiftKey && !inTextField(e.target);
+}
+
 /** Whether the open peek must close for this state: its item is gone, or something covers or replaces the view. */
 export function peekClosesFor(peek: NonNullable<Peek>, s: State, board: number): boolean {
   return (
@@ -82,7 +95,7 @@ function start() {
   // Capture on window, so Escape closes the peek before anything else (clearing the selection) sees it: Linear's
   // `C("Escape", e => { d && (e.preventDefault(), e.stopPropagation(), m(!1)) })`.
   const keyDown = (e: KeyboardEvent) => {
-    if (e.key !== "Escape" || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
+    if (!escapeClosesPeek(e)) return;
     e.preventDefault();
     e.stopPropagation();
     update(null);

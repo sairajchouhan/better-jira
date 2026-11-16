@@ -5,6 +5,7 @@ import { navigate, ui } from "@/client/features/navigation/app-navigation";
 import {
   PEEK_HOLD_MS,
   closePeek,
+  escapeClosesPeek,
   followPeek,
   isPeekOpen,
   peekClosesFor,
@@ -109,4 +110,23 @@ test("B9: the peek's due line words the date as Linear's", () => {
   expect(peekDueText("2026-11-13", now)).toBe("1 day overdue");
   expect(peekDueText("2026-11-09", now)).toBe("5 days overdue");
   expect(peekDueText("2027-01-03", now)).toBe("in about 2 months");
+});
+
+test("BJ-269: Escape in a text field leaves the peek open, as Linear's peek Escape doesn't run with an input focused", () => {
+  const key = (target: unknown, more: Partial<KeyboardEvent> = {}) =>
+    ({ key: "Escape", defaultPrevented: false, altKey: false, ctrlKey: false, metaKey: false, shiftKey: false, target, ...more }) as KeyboardEvent;
+  const card = { tagName: "DIV", isContentEditable: false };
+  expect(escapeClosesPeek(key(card))).toBe(true);
+  expect(escapeClosesPeek(key(null))).toBe(true);
+  for (const tagName of ["INPUT", "TEXTAREA", "SELECT"]) expect(escapeClosesPeek(key({ tagName, isContentEditable: false }))).toBe(false);
+  expect(escapeClosesPeek(key({ tagName: "P", isContentEditable: true }))).toBe(false);
+  // Only a plain Escape no one took.
+  expect(escapeClosesPeek(key(card, { shiftKey: true }))).toBe(false);
+  expect(escapeClosesPeek(key(card, { defaultPrevented: true }))).toBe(false);
+  expect(escapeClosesPeek(key(card, { key: "Enter" }))).toBe(false);
+});
+
+test("BJ-269: the peek's capture listener asks escapeClosesPeek before it closes and stops Escape", async () => {
+  const source = await Bun.file(new URL("./view-peek-state.ts", import.meta.url)).text();
+  expect(source).toMatch(/const keyDown = \(e: KeyboardEvent\) => \{\s*if \(!escapeClosesPeek\(e\)\) return;\s*e\.preventDefault\(\);/);
 });
