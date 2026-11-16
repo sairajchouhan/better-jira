@@ -41,7 +41,7 @@ import { actionScore, MIN_APPLICABILITY, type ScoredAction } from "@/client/lib/
 import { issuePropertyEntries } from "@/client/features/issue/issue-menu";
 import { workOnIssueEntry } from "@/client/features/issue/coding-tools";
 import { COMMAND_KEYWORDS, VIEW_COMMAND_KEYWORDS } from "./command-keywords";
-import { paletteName } from "./command-names";
+import { COMMAND_ALT_NAMES, paletteName } from "./command-names";
 import {
   matchDocuments,
   matchesSearchFilters,
@@ -79,7 +79,17 @@ import {
 
 /** `keys`: the hotkey that does the same thing, drawn after the name. `id` keys the row when names repeat (its value keeps the name).
  *  It is scored as Linear scores an action (`actionScore`): by its name, `keywords` and, for a hoisted value, its `parents`. */
-type Cmd = ScoredAction & { id?: string; keys?: Keys; icon?: ReactNode; detail?: string; disabled?: boolean; checked?: boolean; run: () => void };
+type Cmd = ScoredAction & {
+  id?: string;
+  /** The name while ⌥ is held ("Copy issue ID as link"); search and the row's value stay on `name`. */
+  altName?: string;
+  keys?: Keys;
+  icon?: ReactNode;
+  detail?: string;
+  disabled?: boolean;
+  checked?: boolean;
+  run: () => void;
+};
 
 /** One command row (Linear's command-menu Item, Fgn): icon, name, shortcut; ⌘K's commands and every nested page's choices. A value
  *  hoisted from a parent leads with its breadcrumb ("Change status › In Progress", Linear's M4e) and checks the current value. */
@@ -93,7 +103,7 @@ function CommandRow({ cmd: c }: { cmd: Cmd }) {
       checked={c.checked}
       shortcut={c.keys?.length ? c.keys : undefined}
     >
-      <ActionLabel name={rowLabel(c)} />
+      <ActionLabel name={rowLabel(c)} altName={c.altName && rowLabel({ ...c, name: c.altName })} />
       {/* Linear's row detail (M4e `L4e`): small, labelFaint, 4px after the name, truncated. */}
       {c.detail && (
         <Text as="span" variant="small" color="faint" wrap="truncate" className="ml-1 grow">
@@ -829,6 +839,7 @@ function RootPalette({ initialPage }: { initialPage?: PalettePage }) {
   const command = (entry: (typeof shortcuts)[number]): Cmd => {
     const cmd: Cmd = {
       name: paletteName(entry, scoped, (key) => issues.get(key)),
+      altName: COMMAND_ALT_NAMES[entry.id],
       keywords: COMMAND_KEYWORDS[entry.id],
       keys: hotkeyOf(entry.id),
       detail: entry.detail?.(),

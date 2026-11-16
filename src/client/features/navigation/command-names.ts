@@ -32,6 +32,13 @@ export const COMMAND_NAMES: Readonly<Record<string, string>> = {
   "filter-last": "Clear last filter",
 };
 
+/** ⌘K's names while ⌥ is held, for the commands that copy differently then (`zmt`, `sM`, `uM` outside a contextual menu). */
+export const COMMAND_ALT_NAMES: Readonly<Record<string, string>> = {
+  "copy-id": "Copy issue ID as link",
+  "copy-title": "Copy issue title without ID",
+  "copy-link": "Copy title without ID as link",
+};
+
 type Lookup = (key: string) => Issue | undefined;
 
 /** ⌘K's name for an issue command whose Linear name reads the targeted issue: set or change, and the relation actions'

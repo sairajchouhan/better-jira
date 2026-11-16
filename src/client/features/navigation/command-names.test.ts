@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
 import type { Issue } from "@/shared/issue-model";
-import { paletteName } from "./command-names";
+import { COMMAND_ALT_NAMES, paletteName } from "./command-names";
 import { shortcuts } from "./shortcuts";
 
 const issue = (over: Partial<Issue> = {}) => ({ key: "ABC-7", labels: [], ...over }) as Issue;
@@ -42,4 +42,12 @@ test("BJ-244: relation, parent and copy commands take Linear's ⌘K wording; the
 
 test("BJ-244: Dismiss all toasts keeps its key but stays out of ⌘K, as Linear's hideInCommandMenu", () => {
   expect(shortcuts.find((s) => s.id === "dismiss-toast")).toMatchObject({ hotkey: "Mod+Alt+X", hideInCommandMenu: true });
+});
+
+test("BJ-379/380: ⌘K's Copy commands take Linear's ⌥ names", () => {
+  expect(COMMAND_ALT_NAMES).toEqual({
+    "copy-id": "Copy issue ID as link",
+    "copy-title": "Copy issue title without ID",
+    "copy-link": "Copy title without ID as link",
+  });
 });

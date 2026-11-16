@@ -1,5 +1,6 @@
 import { memo, use, useState, type ComponentProps, type ReactNode } from "react";
 import { actionScore, HOISTED_PER_PARENT, hoistedRow, menuFilter, MIN_APPLICABILITY } from "@/client/lib/fuzzy-score";
+import { useAltKey } from "@/client/lib/modifier-keys";
 import { Icon, type IconName } from "./icons";
 import type { Keys } from "./keycap";
 import { Menu } from "./menu";
@@ -10,6 +11,9 @@ import { useOpenActionMenu } from "./open-action-menus";
 /** One action row (Linear's action). `divider` starts a new group, drawn as a separator above the entry while the menu is unfiltered. */
 export type ActionEntry = {
   name: string;
+  /** The row's name while ⌥ is held (Linear's names that read `fu.altKey`: "Copy ID as link"); search, keys and the opened rows
+   *  stay on `name`. */
+  altName?: string;
   /** Filter applicability count; zero-match choices are revealed by the footer. */
   matchCount?: number;
   run?: () => void;
@@ -289,7 +293,7 @@ export const Row = memo(function Row({ entry }: { entry: ActionEntry }) {
         entry.run?.();
       }}
     >
-      <ActionLabel name={entry.name} />
+      <ActionLabel name={entry.name} altName={entry.altName} />
     </Menu.Item>
   );
 });
@@ -357,8 +361,15 @@ export function ContextMenu({
     </div>
   );
 }
-/** Listed descendants read "Parent › Child": the path dimmed with a chevron between parts, as in Linear (M4e's labelMuted breadcrumbs). */
-export function ActionLabel({ name }: { name: string }) {
+/** Listed descendants read "Parent › Child": the path dimmed with a chevron between parts, as in Linear (M4e's labelMuted breadcrumbs).
+ *  With `altName`, the label follows ⌥ (only such rows subscribe to it). */
+export function ActionLabel({ name, altName }: { name: string; altName?: string }) {
+  return altName ? <HeldLabel name={name} altName={altName} /> : <PathLabel name={name} />;
+}
+function HeldLabel({ name, altName }: { name: string; altName: string }) {
+  return <PathLabel name={useAltKey() ? altName : name} />;
+}
+function PathLabel({ name }: { name: string }) {
   const path = name.split(" › "),
     last = path.pop();
   return (

@@ -136,6 +136,12 @@ export const copyIcons = {
   "git branch name": "branch",
   "as prompt": "clipboard",
 } as const;
+/** The Copy submenu's names while ⌥ is held, which copy it so (Linear's contextual names: `zmt`, `sM`, `uM`). */
+export const copyAltNames: Partial<Record<CopyKind, string>> = {
+  ID: "Copy ID as link",
+  title: "Copy title without ID",
+  "title as link": "Copy title without ID as link",
+};
 export const copyShortcuts: Partial<Record<CopyKind, string>> = {
   ID: "copy-id",
   URL: "copy-url",
@@ -171,11 +177,11 @@ export function issueCopy(
     case "URL":
       return url;
     case "title":
-      // Linear `sM` with getModelIdentifier: "KEY: title" (⌥ copies the title without the ID).
-      return `${issue.key}: ${issue.summary}`;
+      // Linear `sM` with getModelIdentifier: "KEY: title", the title alone with ⌥ held.
+      return modifiers.altKey ? issue.summary : `${issue.key}: ${issue.summary}`;
     case "title as link":
-      // Linear's `uM`: the Markdown half of the link it copies (the HTML half is `linkedTextsHTML`).
-      return linkedTextsMarkdown([formatLinkedText(issue.summary, issue.key)], [url])!;
+      // Linear's `uM`: the Markdown half of the link it copies (the HTML half is `linkedTextsHTML`); ⌥ leaves the ID out.
+      return linkedTextsMarkdown([titleLinkText(issue)], [url])!;
     case "git branch name": {
       const owner = slug(user.split(/\s+/)[0] ?? "");
       return `${owner ? `${owner}/` : ""}${issue.key.toLowerCase()}-${slug(issue.summary)}`;
@@ -248,7 +254,7 @@ export async function copyIssue(kind: CopyKind, issue: Issue, url = issueURL(iss
       return showNotification(ID_LINK_COPIED);
     }
     if (kind === "title as link") {
-      await copyLinkedTexts([formatLinkedText(issue.summary, issue.key)], [url]);
+      await copyLinkedTexts([titleLinkText(issue)], [url]);
       return showNotification(copyToast(kind, issue, ""));
     }
     if (needsFull(kind)) {
@@ -268,6 +274,10 @@ export async function copyIssue(kind: CopyKind, issue: Issue, url = issueURL(iss
     showNotification(unavailable && kind === "as prompt" ? PROMPT_FAILED : COPY_FAILED);
   }
 }
+
+/** Title as link's text: "KEY: title", the title alone with ⌥ held (Linear's `uM` passes no identifier then). */
+const titleLinkText = (issue: Pick<Issue, "key" | "summary">) =>
+  formatLinkedText(issue.summary, modifiers.altKey ? undefined : issue.key);
 
 /** Copies one projection of an issue's document. Title as link copies HTML and Markdown at once, as Linear's `uM` does for a
  *  document (no identifier). */

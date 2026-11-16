@@ -360,3 +360,12 @@ describe("BJ-247: an epic parent is the issue's Project, never its Parent", () =
     expect(get().issues.get("E-5")?.parent).toBe("E-4");
   });
 });
+
+test("BJ-379/380: the issue menu's and breadcrumb's Copy rows carry Linear's ⌥ names, keeping their own as identity", () => {
+  const rows = issueBreadcrumbEntries(issue);
+  expect(rows.filter((e) => e.altName).map((e) => [e.name, e.altName])).toEqual([
+    ["Copy ID", "Copy ID as link"],
+    ["Copy title", "Copy title without ID"],
+    ["Copy title as link", "Copy title without ID as link"],
+  ]);
+});

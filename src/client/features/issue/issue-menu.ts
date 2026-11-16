@@ -10,7 +10,7 @@ import { epicChoices, epicLocked, epicOf, epicPatch, nestable, parentOf } from "
 import { createIssueDocument } from "./issue-resources";
 import { withMoveEntry } from "./sub-issue-model";
 import { MOVES, moveAvailability, runShortcut, hotkeyOf } from "@/client/features/navigation/shortcuts";
-import { copyIssue, copyKinds, copyIcons, copyShortcuts } from "./issue-copy";
+import { copyAltNames, copyIssue, copyKinds, copyIcons, copyShortcuts } from "./issue-copy";
 import { reminderSubmenu } from "@/client/features/reminders/reminders";
 import { post } from "@/client/features/navigation/commands";
 import { RELATION_ISSUE, jiraLinkType, relationName } from "@/shared/relations";
@@ -454,6 +454,7 @@ export function issueMenuEntries(
 export const copyEntries = (issue: Issue): ActionEntry[] =>
   copyKinds.map((kind) => ({
     name: `Copy ${kind}`,
+    altName: copyAltNames[kind],
     icon: copyIcons[kind],
     shortcut: hotkeyOf(copyShortcuts[kind] ?? ""),
     // ActionMenu already closed; closing again after the await would close whatever menu opened meanwhile.

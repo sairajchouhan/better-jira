@@ -165,3 +165,20 @@ test("the modifier tracker follows keys and pointer presses, and forgets them on
   target.dispatchEvent(new Event("blur"));
   expect(state.altKey).toBe(false);
 });
+
+test("BJ-379: the tracker tells its subscribers when ⌥ goes down or up, and only then, so ⌥ names redraw", () => {
+  const target = new EventTarget();
+  const state = trackModifiers(target);
+  let calls = 0;
+  const stop = state.subscribe(() => calls++);
+  const key = (type: string, altKey: boolean, shiftKey = false) =>
+    Object.assign(new Event(type), { altKey, metaKey: false, ctrlKey: false, shiftKey });
+  target.dispatchEvent(key("keydown", true));
+  target.dispatchEvent(key("keydown", true, true));
+  expect(calls).toBe(1);
+  target.dispatchEvent(new Event("blur"));
+  expect(calls).toBe(2);
+  stop();
+  target.dispatchEvent(key("keydown", true));
+  expect(calls).toBe(2);
+});

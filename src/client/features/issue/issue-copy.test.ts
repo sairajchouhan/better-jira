@@ -1,6 +1,6 @@
 import { type Issue } from "@/shared/issue-model";
 import { afterEach, expect, test } from "bun:test";
-import { adfToMarkdown, copyDocument, copyIssue, copyKinds, copyShortcuts, copyToast, COPY_FAILED, fillPrompt, ID_LINK_COPIED, issueCopy, PAGE_URL_COPIED, PROMPT_FAILED } from "./issue-copy";
+import { adfToMarkdown, copyDocument, copyIssue, copyKinds, copyShortcuts, copyAltNames, copyToast, COPY_FAILED, fillPrompt, ID_LINK_COPIED, issueCopy, PAGE_URL_COPIED, PROMPT_FAILED } from "./issue-copy";
 import { deferred, fakeClipboard } from "@/client/test/fake-clipboard";
 import { modifiers } from "@/client/lib/modifier-keys";
 import { toasts } from "@/client/components/toast-queue";
@@ -181,6 +181,29 @@ test("Copy ID copies the key, and with ⌥ held copies it as a link", async () =
   await copyIssue("ID", copied, KAN_7);
   expect(clip.writes[1]).toEqual({ "text/html": `<a href="${KAN_7}">KAN-7&#8203;</a>`, "text/plain": `[KAN-7](${KAN_7})` });
   expect(lastToast()).toBe(ID_LINK_COPIED.text);
+});
+
+test("BJ-380: with ⌥ held, Copy title and Copy title as link leave the issue ID out", async () => {
+  clip = fakeClipboard();
+  toasts.dismissAll();
+  (modifiers as { altKey: boolean }).altKey = true;
+  await copyIssue("title", copied, KAN_7);
+  expect(clip.writes[0]).toEqual({ "text/plain": "Fix [the menu](https://x.test/m) <now>" });
+  expect(lastToast()).toBe('"Fix [the menu](https://x.test/m) <now>" copied to clipboard');
+  await copyIssue("title as link", copied, KAN_7);
+  expect(clip.writes[1]).toEqual({
+    "text/html": `<a href="${KAN_7}">Fix the menu &lt;now&gt;&#8203;</a>`,
+    "text/plain": `[Fix the menu <now>](${KAN_7})`,
+  });
+  expect(lastToast()).toBe("Issue title copied to clipboard");
+});
+
+test("BJ-379/380: the Copy submenu names its ⌥ forms as Linear's contextual menu does", () => {
+  expect(copyAltNames).toEqual({
+    ID: "Copy ID as link",
+    title: "Copy title without ID",
+    "title as link": "Copy title without ID as link",
+  });
 });
 
 test("⌥ Copy ID copies the plain key where the browser has no ClipboardItem", async () => {
