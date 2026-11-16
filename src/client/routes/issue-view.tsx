@@ -25,6 +25,7 @@ import {
 import { type Attachment } from "@/shared/attachment-media";
 import { ReminderControl } from "@/client/features/reminders/reminders";
 import { CommentThreads, useCommentDraft, useDraftFiles } from "@/client/features/comments/comment-threads";
+import { revealCentred, useLocationAnchor } from "@/client/features/comments/anchor-highlight";
 import { ImageCommentCard } from "@/client/features/media/image-thread";
 import { linkTitle } from "@/shared/issue-resource";
 import { activityEvents, type ActivityEvent, type Relation } from "@/client/features/issue/issue-activity";
@@ -848,24 +849,22 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
     commentFocus.current = observer;
     return true;
   });
-  const followedAnchor = useRef<HTMLElement | null>(null);
+  // Any other spot the address points at (an activity entry, an image's comments) centres once the issue shows, and on each
+  // new link to it, as Linear's `oT(e, "center")`; comments ring and centre themselves (`useAnchorHighlight`). The router's
+  // own hash scroll is off (tree.tsx): it aligned to the top, under the pane's copy bar (R4-inbox-D2).
+  const { hash: anchor, entry } = useLocationAnchor();
   useEffect(() => {
-    if (!f || !location.hash) return;
+    if (!f || !anchor || anchor.startsWith("comment-")) return;
     let id: string;
     try {
-      id = decodeURIComponent(location.hash.slice(1));
+      id = decodeURIComponent(anchor);
     } catch {
       return;
     }
-    const frame = requestAnimationFrame(() => {
-      const target = document.getElementById(id);
-      if (target && target !== followedAnchor.current) {
-        target.scrollIntoView({ block: "center" });
-        followedAnchor.current = target;
-      }
-    });
-    return () => cancelAnimationFrame(frame);
-  }, [f]);
+    const target = document.getElementById(id);
+    if (target) revealCentred(target);
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- A new link to the same spot (a new history entry) reveals it again.
+  }, [f, anchor, entry]);
   const subscribed = isWatching(issue);
   /** An image comment whose image was removed from the description opens the image on its own. */
   const [viewing, setViewing] = useState<{ file: Attachment; external: boolean }>();

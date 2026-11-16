@@ -181,3 +181,11 @@ test("BJ-403: a missing issue, view or board is titled as Linear titles its mode
     expect([href, notFoundTitle(missing?.data)]).toEqual([href, title]);
   }
 });
+
+test("R4-inbox-D2: the router leaves `#comment-…` to the page, which centres and rings it; its own scroll put it at the top", async () => {
+  const { router } = await open("/issue/A-1");
+  expect(router.options.defaultHashScrollIntoView).toBe(false);
+  await router.navigate({ to: "/issue/$key/{-$slug}", params: { key: "A-1" } as never, hash: "comment-7" });
+  // oxlint-disable-next-line no-underscore-dangle -- the router's own state field.
+  expect(router.history.location.state.__hashScrollIntoViewOptions).toBe(false);
+});

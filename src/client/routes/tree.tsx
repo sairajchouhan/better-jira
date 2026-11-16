@@ -366,6 +366,9 @@ export function createAppRouter(history: RouterHistory, context: RouteContext) {
     // Back and Forward land where each entry was scrolled; a new navigation opens the issue at its top.
     scrollRestoration: typeof document !== "undefined",
     scrollToTopSelectors: ['[data-scroll-restoration-id="issue-body"]', '[data-scroll-restoration-id="document-body"]'],
+    // The pages reveal their own `#…` spots, centred as Linear's `oT(e, "center")` (anchor-highlight.ts): the router's
+    // `scrollIntoView(true)` put a linked comment at the pane's top, under its copy bar (R4-inbox-D2).
+    defaultHashScrollIntoView: false,
     // Linear wraps its route fallbacks in the boot fallback positioner, so a route still loading at boot keeps the shell.
     defaultPendingComponent: () => (
       <AppLoading>

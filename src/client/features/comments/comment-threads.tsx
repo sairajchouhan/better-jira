@@ -28,6 +28,7 @@ import { commentDraftKey, onRejectedComment, restoreRejectedDraft } from "./reje
 import { readStored, writeStored } from "@/client/state/stored-state";
 import { trackDraftUploads } from "@/client/features/issue/draft-uploads";
 import { mentionDraft, visibleComments, type IssueComment } from "./comment-thread";
+import { useAnchorHighlight, useLocationAnchor } from "./anchor-highlight";
 import { copyText } from "@/client/lib/clipboard";
 
 /** Copying a comment into a new issue; fetched by the idle walk. */
@@ -240,9 +241,17 @@ function Thread({
   trackEdit = () => {},
 }: Props & { root: IssueComment; replies: IssueComment[] }) {
   const state = issue.commentStates?.[root.id] ?? {};
-  const [expanded, setExpanded] = useState(() =>
-    [root, ...replies].some((c) => location.hash === `#comment-${c.id}`),
-  );
+  const { hash, entry } = useLocationAnchor();
+  const linked = [root, ...replies].find((c) => hash === `comment-${c.id}`);
+  const [expanded, setExpanded] = useState(!!linked);
+  // A link to one of its comments opens a resolved thread before the comment rings (adjusting state while rendering, so the
+  // highlight's layout effect finds the comment, not the collapsed row).
+  const [opened, setOpened] = useState(linked ? `${hash}@${entry}` : "");
+  if (linked && opened !== `${hash}@${entry}`) {
+    setOpened(`${hash}@${entry}`);
+    setExpanded(true);
+  }
+  const highlight = useAnchorHighlight(linked ? `comment-${linked.id}` : "");
   const [replying, setReplying] = useState(false),
     [editing, setEditing] = useState<string | null>(null),
     [composer, setComposer] = useState(0);
@@ -270,22 +279,6 @@ function Thread({
         document.getElementById("comment");
       target?.focus();
     });
-  const hashTargets = [root, ...replies].map((c) => `comment-${c.id}`).join(",");
-  useEffect(() => {
-    const reveal = () => {
-      if (hashTargets.split(",").includes(location.hash.slice(1))) {
-        setExpanded(true);
-        requestAnimationFrame(() =>
-          requestAnimationFrame(() =>
-            document.getElementById(location.hash.slice(1))?.scrollIntoView({ block: "center" }),
-          ),
-        );
-      }
-    };
-    reveal();
-    window.addEventListener("hashchange", reveal);
-    return () => window.removeEventListener("hashchange", reveal);
-  }, [hashTargets]);
   const cancelReply = () => {
     setReplying(false);
     requestAnimationFrame(() =>
@@ -386,7 +379,8 @@ function Thread({
         id={`comment-${comment.id}`}
         data-comment={comment.id}
         data-comment-parent={comment.parentId}
-        className={`comment-message ${comment.parentId ? "comment-reply" : ""}`}
+        data-highlight={linked?.id === comment.id ? highlight : undefined}
+        className={`comment-message anchor-highlight ${comment.parentId ? "comment-reply" : ""}`}
         onContextMenu={(event) => {
           if (editing === comment.id) return;
           const button = event.currentTarget.querySelector<HTMLElement>(

@@ -2342,6 +2342,61 @@ li[data-done="true"] > .todo-content {
   padding: 14px 16px;
   border-top: 0.5px solid var(--hidden-line);
 }
+/* Linear's linked-comment ring (startup-root `NL`, variant "outline", inset → `IL.ringOverlay`): an ::after over the comment,
+   1px controlPrimary, radius inherited (the root comment 8px 8px 2px 2px, live RAJ-65). In: border-color over 0.3s ease-out
+   after 0.4s; out: 0.6s ease-in, or 0.15s after a press (`FL`). Timing lives in anchor-highlight.ts. */
+.comment-message {
+  border-radius: 8px 8px 2px 2px;
+}
+.comment-reply {
+  border-radius: 2px;
+}
+.anchor-highlight[data-highlight] {
+  position: relative;
+  isolation: isolate;
+}
+.anchor-highlight[data-highlight]::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 999;
+  animation-fill-mode: forwards;
+}
+.anchor-highlight[data-highlight="in"]::after {
+  animation-name: anchor-ring-in;
+  animation-duration: 0.3s;
+  animation-delay: 0.4s;
+  animation-timing-function: ease-out;
+}
+.anchor-highlight[data-highlight="out"]::after,
+.anchor-highlight[data-highlight="fast-out"]::after {
+  animation-name: anchor-ring-out;
+  animation-duration: 0.6s;
+  animation-timing-function: ease-in;
+}
+.anchor-highlight[data-highlight="fast-out"]::after {
+  animation-duration: 0.15s;
+}
+@keyframes anchor-ring-in {
+  from {
+    border-color: transparent;
+  }
+  to {
+    border-color: var(--accent);
+  }
+}
+@keyframes anchor-ring-out {
+  from {
+    border-color: var(--accent);
+  }
+  to {
+    border-color: transparent;
+  }
+}
 .comment-head {
   display: flex;
   height: 18px;
