@@ -742,17 +742,20 @@ function FieldBadge({ issue, field, label, title, className, children }: FieldCo
   );
 }
 
-/** The card's Project badge: the issue's epic (shared/epics.ts), opening the project picker. */
-function ProjectBadge({ issue }: { issue: Issue }) {
+/** The card's Project badge: the issue's epic (shared/epics.ts), opening the project picker. Its icon is the epic's Jira type
+ *  (the violet Epic TypeDot), not Linear's project glyph: the user's choice (.raj/linear-differences.md). */
+export function ProjectBadge({ issue }: { issue: Issue }) {
   const epic = useStore((s) => epicOf(issue, (key) => s.issues.get(key)));
   const name = useStore((s) => (epic ? epicName(epic, (key) => s.issues.get(key)) : undefined));
+  // An epic outside the mirror is still an epic: its key came from the parent's level.
+  const type = useStore((s) => (epic ? (s.issues.get(epic)?.type ?? "Epic") : undefined));
   // An epic or a sub-issue can't pick its project (epicLocked), so its badge only names it, as the detail pill does.
   const locked = useStore((s) => epicLocked(issue, (key) => s.issues.get(key)));
   if (!name) return null;
   const content = (
     <>
       <Badge.Icon>
-        <Icon name="layers" />
+        <TypeDot type={type} />
       </Badge.Icon>
       <Badge.Text>{name}</Badge.Text>
     </>
