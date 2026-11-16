@@ -41,5 +41,5 @@ test("BJ-241: a sub-group keeps 2px under its header and after its rows; the lis
   expect(view).toContain('<div key={r.id} className={d.rows !== "none" ? "pb-0.5" : undefined}>');
   // The list scroller: padding-top 0, padding-bottom 8px (live --x-paddingTop / --x-paddingBottom).
   const list = /<div data-scroll-restoration-id=\{`board-\$\{board\.id\}`\} className="([^"]+)">/.exec(view)?.[1]?.split(" ") ?? [];
-  expect(list).toEqual(["flex-1", "overflow-auto", "pb-2"]);
+  expect(list).toEqual(["ui-scroll-stable", "flex-1", "overflow-auto", "pb-2"]);
 });

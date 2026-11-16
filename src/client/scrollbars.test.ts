@@ -76,7 +76,7 @@ test("the inbox list and the list layout keep a stable gutter through one shared
     "scrollbar-gutter: stable",
   );
   expect(await read("routes/inbox.tsx")).toContain('className="ui-scroll-stable min-h-0 flex-1 overflow-y-auto');
-  expect(await read("routes/board-view.tsx")).toContain('className="ui-scroll-stable flex-1 overflow-auto py-1"');
+  expect(await read("routes/board-view.tsx")).toContain('className="ui-scroll-stable flex-1 overflow-auto pb-2"');
 });
 
 test("hideScrollbars is one layered class, used by the menus, the create-issue chips and the editor toolbar", async () => {
