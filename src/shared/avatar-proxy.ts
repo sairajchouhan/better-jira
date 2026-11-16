@@ -16,6 +16,8 @@ const AVATAR_HOSTS = [
   /(^|\.)atlassian\.com$/,
   /(^|\.)gravatar\.com$/,
   /(^|\.)wp\.com$/,
+  // GitHub's avatars (a pull request author's, Linear's `I$t`): this host only, never raw.githubusercontent.com's arbitrary files.
+  /^avatars\.githubusercontent\.com$/,
 ];
 
 /** Only the configured Jira site gets credentials; other hops must be https avatar hosts. Redirects are followed by hand so each hop is checked. */

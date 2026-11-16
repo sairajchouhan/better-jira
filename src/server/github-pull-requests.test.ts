@@ -417,3 +417,16 @@ test("regression: pull requests stored under the old rule are matched again on s
   const again = gitHubPullRequests(db, { client, sources: ["org:acme-org"], backfillDays: 30, now: () => NOW });
   expect(again.forKey("ACME-7")).toHaveLength(1);
 });
+
+test("regression: a stored GitHub pull request reads back with its author's GitHub avatar, rows stored before it too", async () => {
+  const db = new Database(":memory:");
+  const gh = fakeGitHub(() => ({ nodes: [node()] }));
+  const prs = gitHubPullRequests(db, { client: gh.client, sources: ["org:acme-org"], backfillDays: 30, now: () => NOW });
+  await prs.refresh();
+  expect(prs.forKey("ACME-1")[0]!.authorAvatar).toBe("https://avatars.githubusercontent.com/ana-dev?size=32");
+  // The stored row keeps only what GitHub said: the avatar is added on read, so a row stored before this gets it after a restart.
+  const [row] = db.query<{ data: string }, []>("SELECT data FROM github_pull_requests").all();
+  expect(JSON.parse(row!.data).authorAvatar).toBeUndefined();
+  const again = gitHubPullRequests(db, { client: gh.client, sources: ["org:acme-org"], backfillDays: 30, now: () => NOW });
+  expect(again.forKey("ACME-1")[0]!.authorAvatar).toBe("https://avatars.githubusercontent.com/ana-dev?size=32");
+});

@@ -4,7 +4,7 @@
  *  poll reads the backfill window, each later one only what changed since the poll before. */
 import { $ } from "bun";
 import type { Database } from "bun:sqlite";
-import { sortPullRequests, type PullRequest } from "@/shared/pull-requests";
+import { sortPullRequests, withGitHubAuthorAvatar, type PullRequest } from "@/shared/pull-requests";
 
 type Environment = Record<string, string | undefined>;
 
@@ -326,7 +326,8 @@ export function gitHubPullRequests(db: Database, options: GitHubOptions) {
     if (index) return index;
     index = new Map();
     for (const row of db.query<{ keys: string; data: string }, []>("SELECT keys, data FROM github_pull_requests").all()) {
-      const pr = JSON.parse(row.data) as PullRequest;
+      // The author's avatar is added as the rows are read, not stored: rows stored before it get it too, and nothing re-polls.
+      const pr = withGitHubAuthorAvatar(JSON.parse(row.data) as PullRequest);
       for (const key of JSON.parse(row.keys) as string[]) index.set(key, [...(index.get(key) ?? []), pr]);
     }
     for (const [key, prs] of index) index.set(key, sortPullRequests(prs));

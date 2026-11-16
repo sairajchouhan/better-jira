@@ -156,3 +156,13 @@ test("a rate-limited avatar host is a passing failure, not a cached miss", async
   );
   expect([res.status, res.headers.get("Cache-Control")]).toEqual([502, "no-store"]);
 });
+
+test("regression: GitHub's avatar host is served (a pull request author's picture); raw.githubusercontent.com is not", async () => {
+  const url = "https://avatars.githubusercontent.com/ana-dev?size=32";
+  const { fetcher, calls } = fake({ [url]: () => image() });
+  const proxy = avatarProxy({ site: SITE, auth, cache: memoryAvatarCache(), fetcher });
+  const res = await proxy(ask(url));
+  expect(res.status).toBe(200);
+  expect(calls).toEqual([{ url, auth: null }]);
+  expect((await proxy(ask("https://raw.githubusercontent.com/acme/app/main/a.png"))).status).toBe(403);
+});

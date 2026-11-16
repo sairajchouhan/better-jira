@@ -12,6 +12,8 @@ import {
   pullRequestIdentifier,
   pullRequestStatusText,
   pullRequestTool,
+  gitHubAvatarUrl,
+  withGitHubAuthorAvatar,
   withGitHubPullRequests,
   withLinkedPullRequests,
   withPullRequestNumber,
@@ -261,4 +263,31 @@ test("a list names its pull request's number only when it lists exactly one", ()
   expect(singlePullRequestNumber([pr(12, "open")])).toBe("#12");
   expect(singlePullRequestNumber([])).toBe("");
   expect(singlePullRequestNumber([pr(1, "open"), pr(2, "open")])).toBe("");
+});
+
+test("Linear's GitHub avatar URL (I$t): the login at twice the 16px size, a bot without [bot], none off github.com", () => {
+  expect(gitHubAvatarUrl("SahilCs15")).toBe("https://avatars.githubusercontent.com/SahilCs15?size=32");
+  expect(gitHubAvatarUrl("dependabot[bot]", { host: "github.com" })).toBe("https://avatars.githubusercontent.com/dependabot?size=32");
+  expect(gitHubAvatarUrl("ana dev")).toBe("https://avatars.githubusercontent.com/ana%20dev?size=32");
+  expect(gitHubAvatarUrl("ana", { host: "github.acme.com" })).toBeUndefined();
+  expect(gitHubAvatarUrl(undefined)).toBeUndefined();
+});
+
+test("a GitHub-sourced pull request gets its author's GitHub avatar; one without an author, or off github.com, gets none", () => {
+  const pr: PullRequest = { url: "https://github.com/acme/app/pull/1", title: "One", number: "#1", status: "open", author: "ana-dev" };
+  expect(withGitHubAuthorAvatar(pr).authorAvatar).toBe("https://avatars.githubusercontent.com/ana-dev?size=32");
+  expect(withGitHubAuthorAvatar({ ...pr, author: undefined }).authorAvatar).toBeUndefined();
+  expect(withGitHubAuthorAvatar({ ...pr, url: "https://github.acme.com/acme/app/pull/1" }).authorAvatar).toBeUndefined();
+});
+
+test("regression: Jira's development panel author keeps Jira's own https picture, and its name never becomes a GitHub URL", () => {
+  const detail = (author: unknown) => [
+    { detail: [{ pullRequests: [{ id: "#1", name: "One", url: "https://github.com/acme/app/pull/1", status: "OPEN", author }] }] },
+  ];
+  expect(pullRequestList(detail({ name: "Ana Dev", avatar: "https://avatars.githubusercontent.com/u/9?v=4" }))[0]).toMatchObject({
+    author: "Ana Dev",
+    authorAvatar: "https://avatars.githubusercontent.com/u/9?v=4",
+  });
+  expect(pullRequestList(detail({ name: "Ana Dev" }))[0]!.authorAvatar).toBeUndefined();
+  expect(pullRequestList(detail({ name: "Ana Dev", avatar: "javascript:alert(1)" }))[0]!.authorAvatar).toBeUndefined();
 });

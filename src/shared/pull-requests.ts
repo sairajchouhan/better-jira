@@ -16,7 +16,11 @@ export type PullRequest = {
   /** The repository's owner when the source names it apart from `repo` (GitHub's `repository.owner`; Jira's `repositoryName` is
    *  already "owner/repo"): Linear's `repoOwner`, in the row's `fullIdentifier`. */
   owner?: string;
+  /** Who opened it: GitHub's login (the GitHub source), or the name Jira's development panel gives (`author.name`). */
   author?: string;
+  /** The author's picture for Linear's trailing avatar (`Khn`): GitHub's for a github.com login (`withGitHubAuthorAvatar`), or the
+   *  https image Jira's development panel sends with the author (`author.avatar`). */
+  authorAvatar?: string;
   /** The source branch Jira lists (`source.branch`) and the one it merges into (`destination.branch`). */
   branch?: string;
   target?: string;
@@ -75,6 +79,8 @@ export function pullRequestList(details: any[], providers: string[] = []): PullR
           status: jiraPullRequestStatus(pr.status) ?? "open",
           ...(pr.repositoryName ? { repo: pr.repositoryName } : {}),
           ...(pr.author?.name ? { author: pr.author.name } : {}),
+          // Only Jira's own picture: its `author.name` may be a display name, never a GitHub login to build a GitHub URL from.
+          ...(typeof pr.author?.avatar === "string" && pr.author.avatar.startsWith("https://") ? { authorAvatar: pr.author.avatar } : {}),
           ...(pr.source?.branch ? { branch: pr.source.branch } : {}),
           ...(pr.destination?.branch ? { target: pr.destination.branch } : {}),
           ...(tool ? { tool } : {}),
@@ -84,6 +90,27 @@ export function pullRequestList(details: any[], providers: string[] = []): PullR
         });
       }
   return [...byUrl.values()].sort((a, b) => Date.parse(b.updated ?? "") - Date.parse(a.updated ?? "") || 0);
+}
+
+/** Linear's GitHub avatar URL for a login (`I$t`): github.com only (none for GitHub Enterprise), a bot's without its "[bot]",
+ *  at twice the shown size (Linear's `tiny` avatar, 16px). */
+export function gitHubAvatarUrl(login: string | undefined, { host, size = 16 }: { host?: string; size?: number } = {}) {
+  if (!login || (host && host !== "github.com")) return undefined;
+  const name = login.endsWith("[bot]") ? login.slice(0, -5) : login;
+  return `https://avatars.githubusercontent.com/${encodeURIComponent(name)}?size=${2 * size}`;
+}
+
+/** A pull request the GitHub source read, with its author's GitHub avatar (Linear's `creatorLogin` → `I$t`): its `author` is a
+ *  GitHub login there, on the host its URL names. */
+export function withGitHubAuthorAvatar(pr: PullRequest): PullRequest {
+  let host: string | undefined;
+  try {
+    host = new URL(pr.url).hostname;
+  } catch {
+    return pr;
+  }
+  const authorAvatar = gitHubAvatarUrl(pr.author, { host });
+  return authorAvatar ? { ...pr, authorAvatar } : pr;
 }
 
 /** Linear's PR status text (`AP.statusForPopoversAndActions`, through `qhn`): an open pull request (not a draft) says its review

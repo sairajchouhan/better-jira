@@ -139,11 +139,14 @@ export function usePullRequests(issue: PullRequestIssue, read = true) {
 
 const PullRequestIcon = ({ pr }: { pr: PullRequest }) => <PullRequestStatusIcon status={pr.status} />;
 
-/** Linear's trailing author (`Khn`): the pull request's creator as a small avatar, at the end of its card's title and its row. */
+/** Linear's trailing author (`Khn`): the pull request's creator as a `tiny` (16px) avatar at the end of its card's title and its
+ *  row, their GitHub picture (`I$t`, `authorAvatar`), their initial while it loads or when there is none, named by `aria-label`.
+ *  Linear's first branch, a Linear user the PR is attributed to (`Ext` → `Bxt`), has no Jira counterpart: no GitHub login maps
+ *  to a Jira account. */
 const PullRequestAuthor = ({ pr }: { pr: PullRequest }) =>
   pr.author ? (
-    <span className="flex shrink-0 items-center">
-      <Avatar user={{ id: pr.author, name: pr.author }} size={16} title={null} />
+    <span role="img" aria-label={pr.author} className="flex shrink-0 items-center" data-pull-request-author={pr.author}>
+      <Avatar user={{ id: pr.author, name: pr.author, avatar: pr.authorAvatar }} size={16} title={null} />
     </span>
   ) : null;
 

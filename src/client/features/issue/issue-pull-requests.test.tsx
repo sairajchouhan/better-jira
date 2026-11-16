@@ -107,3 +107,19 @@ test("the badge's hover for several is Linear's rows (Whn): identifier · status
   // The icon's native tooltip is the status.
   expect(html).toContain('title="Changes requested"');
 });
+
+const authors = (html: string) => [...html.matchAll(/data-pull-request-author="([^"]+)"/g)].map((m) => m[1]);
+
+test("regression: the row's and card's trailing author is their GitHub picture (Linear's Khn), named, not a bare initial", () => {
+  const avatar = "https://avatars.githubusercontent.com/ana-dev?size=32";
+  const proxied = `src="/api/avatar?url=${encodeURIComponent(avatar)}"`;
+  const withAuthor = { author: "ana-dev", authorAvatar: avatar };
+  const rowsHtml = renderToStaticMarkup(<PullRequestsCardContent prs={[pr(1, "open", withAuthor), pr(2, "open", withAuthor)]} />);
+  expect(authors(rowsHtml)).toEqual(["ana-dev", "ana-dev"]);
+  expect(rowsHtml.split(proxied)).toHaveLength(3);
+  expect(rowsHtml).toContain('role="img" aria-label="ana-dev"');
+  const cardHtml = renderToStaticMarkup(<PullRequestCard pr={pr(3, "open", withAuthor)} />);
+  expect(cardHtml).toContain(proxied);
+  // No author: nothing at the end.
+  expect(authors(renderToStaticMarkup(<PullRequestsCardContent prs={[pr(4, "open"), pr(5, "open")]} />))).toEqual([]);
+});
