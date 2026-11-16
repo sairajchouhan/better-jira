@@ -105,6 +105,9 @@ export function pullRequestKeys(
     projects,
   );
 }
+/** Bumped whenever `pullRequestKeys` links differently, so stored pull requests are matched again under the new rule. 2: the
+ *  description links only keys after a magic word. */
+const MATCHER = "2";
 
 // ——— GitHub's answer as ours ———
 
@@ -346,6 +349,31 @@ export function gitHubPullRequests(db: Database, options: GitHubOptions) {
     return [...new Set([...old, ...keys])];
   };
 
+  /** Matches the stored pull requests again under a new `MATCHER`, from what they keep (branch name and title), so a link the old
+   *  rule made goes at once. The description isn't kept: the next poll reads again from the oldest one that changed, so its magic
+   *  words link once more. The keys whose list changed wait in `pending` for the next poll to return. */
+  const rematch = db.transaction(() => {
+    if (getMeta("matcher") === MATCHER) return;
+    setMeta("matcher", MATCHER);
+    const changed = new Set<string>(JSON.parse(getMeta("pending") ?? "[]"));
+    let oldest = Infinity;
+    for (const row of db
+      .query<{ url: string; keys: string; data: string }, []>("SELECT url, keys, data FROM github_pull_requests")
+      .all()) {
+      const pr = JSON.parse(row.data) as PullRequest;
+      const keys = pullRequestKeys({ headRefName: pr.branch, title: pr.title });
+      if (row.keys === JSON.stringify(keys)) continue;
+      for (const key of [...JSON.parse(row.keys), ...keys]) changed.add(key);
+      oldest = Math.min(oldest, Date.parse(pr.updated ?? "") || 0);
+      if (keys.length) put.run(row.url, JSON.stringify(keys), row.data);
+      else remove.run(row.url);
+    }
+    const since = Number(getMeta("since") ?? 0);
+    if (since && oldest < since) setMeta("since", String(oldest));
+    if (changed.size) setMeta("pending", JSON.stringify([...changed]));
+  });
+  rematch();
+
   async function sources(): Promise<string[]> {
     if (options.sources) return options.sources;
     const saved = getMeta("default-sources");
@@ -401,10 +429,15 @@ export function gitHubPullRequests(db: Database, options: GitHubOptions) {
     keys: () => [...byKey().keys()],
     /** Reads every pull request updated since the last poll (the backfill window on the first) and returns the keys it changed. */
     async refresh(): Promise<string[]> {
-      const changed = new Set<string>();
+      // Keys an earlier poll changed but couldn't return, as it failed (or the matcher changed on start).
+      const changed = new Set<string>(JSON.parse(getMeta("pending") ?? "[]"));
       try {
         await poll(changed);
+        db.run("DELETE FROM github_meta WHERE k = 'pending'");
         return [...changed];
+      } catch (error) {
+        if (changed.size) setMeta("pending", JSON.stringify([...changed]));
+        throw error;
       } finally {
         if (changed.size) index = undefined;
       }

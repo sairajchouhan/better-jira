@@ -239,7 +239,11 @@ test("a poll cut off midway resumes from the last page it read, not from the sta
   const db = new Database(":memory:");
   const pages = [
     { nodes: [node({ updatedAt: "2026-11-01T00:00:00Z" })], next: "p2" },
-    { nodes: [node({ url: "https://github.com/acme-org/widgets/pull/9", title: "ACME-9", updatedAt: "2026-11-02T00:00:00Z" })] },
+    {
+      nodes: [
+        node({ url: "https://github.com/acme-org/widgets/pull/9", title: "ACME-9", headRefName: "docs/x", updatedAt: "2026-11-02T00:00:00Z" }),
+      ],
+    },
   ];
   let fail = true;
   const client = {
@@ -256,7 +260,8 @@ test("a poll cut off midway resumes from the last page it read, not from the sta
   // What the first page read stands.
   expect(prs.forKey("ACME-1")).toHaveLength(1);
   fail = false;
-  await prs.refresh();
+  // The keys the cut-off poll changed come with the next one's, so their issues are re-projected.
+  expect((await prs.refresh()).toSorted()).toEqual(["ACME-1", "ACME-9"]);
   expect(queries.at(-1)).toBe("is:pr org:acme-org updated:>=2026-10-31T23:55:00Z sort:updated-asc");
 });
 
@@ -371,4 +376,44 @@ test("a poll links a description's key only after a magic word", async () => {
   const prs = gitHubPullRequests(db, { client: gh.client, sources: ["org:acme-org"], backfillDays: 30, now: () => NOW });
   expect((await prs.refresh()).toSorted()).toEqual(["ACME-1", "ACME-8"]);
   expect(prs.forKey("ACME-7")).toEqual([]);
+});
+
+test("regression: pull requests stored under the old rule are matched again on start, and their keys reach the next poll", async () => {
+  const db = new Database(":memory:");
+  // The old rule's store: a pull request for ACME-1 linked to ACME-7 by a plain mention in its description.
+  db.run("CREATE TABLE github_pull_requests (url TEXT PRIMARY KEY, keys TEXT NOT NULL, data TEXT NOT NULL)");
+  db.run("CREATE TABLE github_meta (k TEXT PRIMARY KEY, v TEXT NOT NULL)");
+  const stale = node({ updatedAt: "2026-11-01T00:00:00Z", body: "Follow-up: ACME-7" });
+  db.query("INSERT INTO github_pull_requests VALUES (?, ?, ?)").run(
+    stale.url!,
+    '["ACME-1","ACME-7"]',
+    JSON.stringify(gitHubPullRequest(stale)),
+  );
+  db.query("INSERT INTO github_meta VALUES ('scope', 'org:acme-org'), ('since', ?)").run(String(NOW - 60_000));
+
+  let fail = true;
+  const queries: string[] = [];
+  const client = {
+    graphql: async <T>(_query: string, variables: Record<string, unknown>): Promise<T> => {
+      if (fail) throw new Error("GitHub answered 502.");
+      queries.push(String(variables.q));
+      // The re-read finds its description now says "Part of ACME-7": a magic word links it again.
+      const nodes = [node({ updatedAt: "2026-11-01T00:00:00Z", body: "Part of ACME-7" })];
+      return { search: { issueCount: 1, pageInfo: { hasNextPage: false, endCursor: null }, nodes } } as T;
+    },
+  };
+  const prs = gitHubPullRequests(db, { client, sources: ["org:acme-org"], backfillDays: 30, now: () => NOW });
+  // At once, from the branch and title it keeps.
+  expect(prs.forKey("ACME-7")).toEqual([]);
+  expect(prs.forKey("ACME-1")).toHaveLength(1);
+  // A failed poll keeps the changed keys for the next one, which reads again from the oldest pull request matched anew.
+  await expect(prs.refresh()).rejects.toThrow("502");
+  fail = false;
+  expect((await prs.refresh()).toSorted()).toEqual(["ACME-1", "ACME-7"]);
+  expect(queries[0]).toBe("is:pr org:acme-org updated:>=2026-10-31T23:55:00Z sort:updated-asc");
+  expect(prs.forKey("ACME-7")).toHaveLength(1);
+  expect(await prs.refresh()).toEqual([]);
+  // Once matched, a restart doesn't match again: the description's link stands.
+  const again = gitHubPullRequests(db, { client, sources: ["org:acme-org"], backfillDays: 30, now: () => NOW });
+  expect(again.forKey("ACME-7")).toHaveLength(1);
 });
