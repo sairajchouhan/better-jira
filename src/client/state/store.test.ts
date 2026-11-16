@@ -1742,6 +1742,25 @@ test("navigation: issues open beside the board or as a page, and the board remem
   `);
 });
 
+test("navigation: a one-off view is never stored as the browser's last way to open issues, which seeds new boards on load", async () => {
+  const { navigate, openIssuesIn, get } = await navigationFixture();
+  const { savedOpenIn } = await import("./browser-preferences");
+  navigate({ selected: "NAV-1", panel: true });
+  openIssuesIn("page");
+  openIssuesIn("side");
+  expect(savedOpenIn()).toBe("side");
+  // The Inbox's or Enter's page shows the issue once: not stored.
+  navigate({ selected: "NAV-2", view: "page" });
+  expect([get().view, get().linkView, savedOpenIn()]).toEqual(["page", true, "side"]);
+  navigate({ panel: false });
+  // The user's own switch is.
+  navigate({ selected: "NAV-1", panel: true });
+  openIssuesIn("page");
+  expect(savedOpenIn()).toBe("page");
+  openIssuesIn("side");
+  navigate({ panel: false });
+});
+
 test("navigation: a link's view opens that issue once and never becomes the board's preference", async () => {
   const { navigate, ui, trace } = await navigationFixture();
   const steps = [];

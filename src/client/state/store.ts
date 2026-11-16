@@ -279,7 +279,8 @@ export function commit(patch: Partial<State>) {
         ? { ...state.viewPreferences, filters: mergeFilters(v.filters, state.overlayFilters) }
         : state.viewPreferences;
   }
-  const refused = persistPreferences(patch);
+  // A one-off view (a link, the Inbox, Enter's page) is not how issues open: it must not seed a new board's "Open issues in" on load.
+  const refused = persistPreferences(state.linkView && patch.view ? { ...patch, view: undefined } : patch);
   if (refused) {
     perfPosts++;
     state = { ...state, perf: refused };
