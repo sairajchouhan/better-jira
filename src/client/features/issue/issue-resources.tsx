@@ -1,4 +1,5 @@
 import { issueDocumentChunk } from "@/client/routes/route-chunks";
+import { DocumentGlyph } from "./document-glyph";
 import { type Issue } from "@/shared/issue-model";
 import { COPY_FAILED, showNotification } from "@/client/state/app-notifications";
 import { LoadingState } from "@/client/components/empty-state";
@@ -347,8 +348,10 @@ export function IssueResources({ issue }: { issue: Issue }) {
             >
               {resource.kind === "link" ? (
                 <LinkIcon src={resource.preview?.icon} />
+              ) : resource.kind === "document" ? (
+                <DocumentGlyph resource={resource} size={14} />
               ) : (
-                <Icon name={resource.kind === "document" ? "file" : "branch"} />
+                <Icon name="branch" />
               )}
               {/* Text has no anchor/time element variant; preserve native link and timestamp semantics. */}
               {resource.kind === "document" ? (

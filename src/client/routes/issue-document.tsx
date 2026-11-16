@@ -33,6 +33,7 @@ import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { useCommand } from "@/client/features/navigation/commands";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { emojiOptions } from "@/client/features/comments/reactions";
+import { DOCUMENT_ICON_COLOR, DOCUMENT_ICONS, DocumentGlyph } from "@/client/features/issue/document-glyph";
 import { ReminderMenu, reminderSubmenu } from "@/client/features/reminders/reminders";
 /** The icon-picker cells: no primitive yet (see the note at each). */
 const BUTTON = "rounded px-2 py-1.5 text-[13px] text-fg-2 hover:bg-(--control-tertiary-hover)";
@@ -639,18 +640,6 @@ function DocumentPeople({
   );
 }
 
-const documentIcons = [
-  "file",
-  "layers",
-  "list",
-  "board",
-  "calendar",
-  "comment",
-  "link",
-  "pencil",
-  "star",
-  "check",
-] as const;
 // Linear's named icon palette (measured on the synthetic document, 2026-11-08); its icon art is Linear's own, so ours keeps the app icon set.
 const iconColors = [
   ["Grey", "#bec2c8"],
@@ -663,14 +652,11 @@ const iconColors = [
   ["Pink", "#f7c8c1"],
   ["Red", "#eb5757"],
 ] as const;
-const iconName = (resource: IssueResource) =>
-  documentIcons.find((name) => name === resource.icon?.name) ?? "file";
 function DocumentIcon({ resource, issue }: { resource: IssueResource; issue: Issue }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null),
     [tab, setTab] = useState<"icons" | "emojis">("icons"),
     [query, setQuery] = useState("");
-  const color = resource.icon?.color ?? "#8b8b91",
-    emoji = resource.icon?.name.startsWith("emoji:") ? resource.icon.name.slice(6) : null;
+  const color = resource.icon?.color ?? DOCUMENT_ICON_COLOR;
   const paint = (next: string) =>
     actions.documentProperties(issue.key, resource.id, {
       icon: { name: resource.icon?.name ?? "file", color: next },
@@ -688,11 +674,7 @@ function DocumentIcon({ resource, issue }: { resource: IssueResource; issue: Iss
         style={{ color }}
         onClick={(e) => setAnchor(e.currentTarget)}
       >
-        {emoji ? (
-          <span className="text-[18px]">{emoji}</span>
-        ) : (
-          <Icon name={iconName(resource)} size={18} />
-        )}
+        <DocumentGlyph resource={resource} size={18} />
       </button>
       {anchor && (
         <MenuSurface
@@ -752,7 +734,7 @@ function DocumentIcon({ resource, issue }: { resource: IssueResource; issue: Iss
           {/* Picker cells: a 20px icon or a 24px emoji fills the cell, which no Button size draws. */}
           <div className="grid grid-cols-5 gap-1">
             {tab === "icons"
-              ? documentIcons
+              ? DOCUMENT_ICONS
                   .filter((name) => name.includes(query.toLowerCase()))
                   .map((name) => (
                     <button

@@ -1,4 +1,5 @@
 import { compareText } from "@/shared/compare";
+import { DocumentGlyph } from "@/client/features/issue/document-glyph";
 import { EntityIdentifier } from "@/client/components/entity-identifier";
 import { type Issue } from "@/shared/issue-model";
 import {
@@ -530,7 +531,7 @@ function DocumentRow({ match: { issue, resource }, q }: { match: DocumentMatch; 
         close();
         navigate({ board: issueBoardId(issue), selected: issue.key, panel: true, document: resource.id });
       }}
-      icon={<Icon name="file" size={16} />}
+      icon={<DocumentGlyph resource={resource} />}
       hint={issue.key}
     >
       {resource.title || "New document"}
