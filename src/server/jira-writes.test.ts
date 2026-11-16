@@ -811,3 +811,31 @@ test("BJ-341: the board a tab sends places only a new issue; an edit to an issue
   expect(boards).toEqual([undefined, 3]);
   refreshing = () => turn(() => undefined);
 });
+
+test("every issue is an issue: a sub-task type named under an epic takes the project's default, whatever Jira calls sub-tasks", async () => {
+  const sent: any[] = [];
+  calls.length = 0;
+  answer = (path, init) => {
+    if (path.includes("/createmeta/"))
+      return {
+        issueTypes: [
+          { name: "Bug", hierarchyLevel: 0 },
+          { name: "Task", hierarchyLevel: 0 },
+          { name: "Sub-task", hierarchyLevel: -1, subtask: true },
+        ],
+      };
+    if (path.endsWith("?fields=issuetype")) return { fields: { issuetype: { name: "Epic", hierarchyLevel: 1 } } };
+    if (path === "/rest/api/3/issue" && init?.method === "POST") {
+      sent.push(JSON.parse(String(init.body)).fields.issuetype.name);
+      return { key: `K-${200 + sent.length}` };
+    }
+    return {};
+  };
+  await applyOps("K-TYPE1", [
+    { op: "create", fields: { summary: "S", project: "K", type: "Sub-task", parent: "K-9" }, client: "K-TYPE1@t" },
+  ]);
+  await applyOps("K-TYPE2", [
+    { op: "create", fields: { summary: "S", project: "K", type: "Bug", parent: "K-9" }, client: "K-TYPE2@t" },
+  ]);
+  expect(sent).toEqual(["Task", "Bug"]);
+});

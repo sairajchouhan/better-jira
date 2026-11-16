@@ -74,9 +74,10 @@ async function typeFor(project: string, type: string | undefined, parent: string
   const meta = readMeta();
   meta.catch(() => {});
   const parentType = (await jira(`${at(parent)}?fields=issuetype`)).fields.issuetype;
-  if (parentType.hierarchyLevel > 0)
-    return type && type !== "Subtask" ? type : defaultIssueType((await meta).issueTypes);
   const { issueTypes } = await meta;
+  // Under an epic or above, any type a level down; a sub-task type (Jira names it "Subtask" or "Sub-task") takes the default.
+  if (parentType.hierarchyLevel > 0)
+    return type && !issueTypes.find((t) => t.name === type)?.subtask ? type : defaultIssueType(issueTypes);
   const subtask = issueTypes.find((t) => t.subtask);
   if (!subtask) throw new UserError(`Project ${project} has no sub-task issue type.`);
   return subtask.name as string;
