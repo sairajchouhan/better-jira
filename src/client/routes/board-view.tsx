@@ -227,9 +227,10 @@ export const BoardView = memo(function BoardView({
           </div>
         ) : (
           <div className="flex min-h-0 flex-1">
-            {/* Linear's board columns are 348px apart (CustomerCountPopover `et`: qe=348) with a 340px background
+            {/* Linear's boardRowsScroller (IssueList.CUOYX8Am.js): overscroll-behavior none and 90px scroll-padding top and bottom
+                (BJ-388). Linear's board columns are 348px apart (CustomerCountPopover `et`: qe=348) with a 340px background
                 (columnBackgroundWidth calc(100% - 8px)), so 8px between columns (BJ-386). */}
-            <div ref={boardScroller} data-scroll-restoration-id={`board-${board.id}`} className="min-h-0 min-w-0 flex-1 overflow-auto px-2 pt-1">
+            <div ref={boardScroller} data-scroll-restoration-id={`board-${board.id}`} className="min-h-0 min-w-0 flex-1 overflow-auto overscroll-none scroll-py-[90px] px-2 pt-1">
               {d.rows !== "none" && (
                 <div className="sticky top-0 z-10 flex w-max gap-2 bg-panel">
                   {show.map((col) => (

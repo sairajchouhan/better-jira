@@ -5,6 +5,12 @@ import { expect, test } from "bun:test";
  * Read as text, as board-colours.test.ts reads the board's CSS: the classes are the values.
  */
 const view = await Bun.file(new URL("./board-view.tsx", import.meta.url)).text();
+const scroller = /<div ref=\{boardScroller\}[^>]*className="([^"]+)"/.exec(view)?.[1] ?? "";
+
+test("BJ-388: the board scroller never chains its overscroll and keeps 90px clear above and below a scrolled-to card", () => {
+  // boardRowsScroller: overscroll-behavior none (sx-8du1vd), scroll-padding-top and -bottom 90px (sx-i6ts1u, sx-1xkdd5q).
+  expect(scroller.split(" ")).toEqual(expect.arrayContaining(["overflow-auto", "overscroll-none", "scroll-py-[90px]"]));
+});
 
 test("BJ-386: board columns sit 348px apart, a 340px column and 8px between, in every row", () => {
   // Linear's issue board column is qe=348 (`et`), its background calc(100% - 8px) (columnBackgroundWidth): 340 drawn, 8 between.
