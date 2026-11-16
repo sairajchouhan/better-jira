@@ -7,12 +7,23 @@ import { currentKey } from "./jira-sync";
 import { isLocalIssue } from "./local-edits";
 import { navigate } from "@/client/features/navigation/app-navigation";
 
-/** Each confirmation is a toast of its own, so a second one stacks over the first (up to the queue's four) instead of
- *  replacing it: Linear shows every `new U(…).show()` as a new sonner toast (ToastPresenter `visibleToasts: 4`, gap 8).
- *  Inbox undo keeps its own single slot. */
+/** Each different confirmation is a toast of its own, so a second one stacks over the first (up to the queue's four): Linear
+ *  shows every `new U(…).show()` as a sonner toast (ToastPresenter `visibleToasts: 4`, gap 8). The same one again takes the
+ *  queued toast's place and restarts its time, as Linear's toast id is its type, title, description and link (`d5`,
+ *  startup-entry), and sonner updates the toast that has it. Inbox undo keeps its own single slot. */
 const CONFIRMATION = "confirmation-";
 let confirmations = 0;
-const nextConfirmation = () => `${CONFIRMATION}${++confirmations}`;
+const confirmationIds = new Map<string, string>();
+/** The queued toast's id for the same content, else a new one. */
+export function confirmationId(signature: readonly unknown[]) {
+  const content = JSON.stringify(signature);
+  const queued = confirmationIds.get(content);
+  if (queued && toasts.has(queued)) return queued;
+  for (const [key, gone] of confirmationIds) if (!toasts.has(gone)) confirmationIds.delete(key);
+  const id = `${CONFIRMATION}${++confirmations}`;
+  confirmationIds.set(content, id);
+  return id;
+}
 export const INBOX_NOTIFICATION_ID = "inbox";
 /** `icon` is the image before the text, as Linear's info toasts carry one (the copy icon on "Copied issue link to clipboard"). */
 export type Notification = { text: string; detail?: string; key?: string; undo?: () => void; icon?: IconName };
@@ -100,13 +111,16 @@ let lastLink: string | undefined;
 export const lastToastLink = () => lastLink;
 
 /** Queue-owned lifetime keeps the existing 5s confirmations independent of presenter mounting. */
-export function showNotification(notice: Notification, id = nextConfirmation()) {
+export function showNotification(
+  notice: Notification,
+  id = confirmationId(["notice", notice.text, notice.detail ?? "", notice.key ?? ""]),
+) {
   if (notice.key) lastLink = notice.key;
   return toasts.show(<NotificationContent notice={notice} id={id} />, { id, duration: Infinity, expiresIn: 5000 });
 }
 /** "Issue created" for a new issue, a confirmation like the others so Open link from last toast finds it. */
 export function showIssueCreated(key: string) {
-  const id = nextConfirmation();
+  const id = confirmationId(["created", key]);
   lastLink = key;
   return toasts.show(<IssueCreatedContent notice={{ text: "Issue created", key }} id={id} />, {
     id,

@@ -15,21 +15,40 @@ test("R3-chrome-D5: confirmations stack up to four instead of replacing one anot
   showNotification({ text: "Created A-NEW2", key: "A-NEW2" });
   jest.advanceTimersByTime(4000);
   showNotification({ text: "Created A-NEW3", key: "A-NEW3" });
-  for (const text of ["Copied", "Copied", "Copied"]) showNotification({ text });
+  for (const text of ["Copied A", "Copied B", "Copied C"]) showNotification({ text });
   // Linear's Toaster shows the newest four; the oldest waits unshown.
   expect(toasts.visible()).toHaveLength(4);
   expect(toasts.all()).toHaveLength(5);
   rekeyNotification("A-NEW", "A-40");
   expect(toasts.all().filter((t) => (t.content as ReactElement<{ notice: { key?: string } }>).props.notice.key === "A-40")).toHaveLength(0);
   // Open link from last toast follows the newest confirmation with an issue; rekey preserves its lifetime.
-  expect(latestNotification()?.text).toBe("Copied");
+  expect(latestNotification()?.text).toBe("Copied C");
   rekeyNotification("A-NEW3", "A-37");
   jest.advanceTimersByTime(1000);
   expect(toasts.all()).toHaveLength(4); // A-NEW2's five seconds are up
   jest.advanceTimersByTime(3999);
-  expect(toasts.all().map((t) => (t.content as ReactElement<{ notice: { text: string } }>).props.notice.text)).toEqual(["Created A-37", "Copied", "Copied", "Copied"]);
+  expect(toasts.all().map((t) => (t.content as ReactElement<{ notice: { text: string } }>).props.notice.text)).toEqual(["Created A-37", "Copied A", "Copied B", "Copied C"]);
   jest.advanceTimersByTime(1);
   expect(latestNotification()).toBeUndefined();
+});
+
+test("BJ-271: the same confirmation again replaces the queued one and restarts its time, as Linear's toast id is its content", () => {
+  jest.useFakeTimers();
+  toasts.dismissAll();
+  const first = showNotification({ text: "Copied", detail: "ABC-1" });
+  jest.advanceTimersByTime(4000);
+  expect(showNotification({ text: "Copied", detail: "ABC-1" })).toBe(first);
+  expect(toasts.all()).toHaveLength(1);
+  // A different description or link is another toast.
+  showNotification({ text: "Copied", detail: "ABC-2" });
+  showNotification({ text: "Copied", detail: "ABC-1", key: "ABC-1" });
+  expect(toasts.all()).toHaveLength(3);
+  jest.advanceTimersByTime(4999);
+  expect(toasts.has(first)).toBe(true);
+  jest.advanceTimersByTime(1);
+  expect(toasts.has(first)).toBe(false);
+  // Once it is gone, the same content shows afresh.
+  expect(showNotification({ text: "Copied", detail: "ABC-1" })).not.toBe(first);
 });
 
 function actionIn(node: ReactNode): ReactElement<{ onClick: () => void }> | undefined {
