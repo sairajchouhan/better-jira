@@ -52,8 +52,9 @@ const subscribeConfirmation = (l: () => void) => (
   confirmListeners.add(l),
   () => void confirmListeners.delete(l)
 );
-export const useConfirmation = () =>
-  useSyncExternalStore(subscribeConfirmation, () => confirmation);
+/** The question waiting for an answer, if any. */
+export const pendingConfirmation = () => confirmation;
+export const useConfirmation = () => useSyncExternalStore(subscribeConfirmation, pendingConfirmation);
 
 /** How reading the issue of a notification shown on its own went (`missingIssueNote` words it). */
 export function useKeptOutcome(key: string) {
