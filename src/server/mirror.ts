@@ -37,7 +37,7 @@ import { faviconProxy } from "./favicon";
 import { smartLinkCache } from "./smart-link";
 import { droppedBoardMeta, issueStore } from "./issue-store";
 import { readWholeBoard, syncHealthOf } from "./board-sync";
-import { keptIssues } from "./kept-issues";
+import { keptChildren, keptIssues } from "./kept-issues";
 
 const configuration = serverConfiguration();
 // `bun --hot` re-runs this module on every edit; the loops and the open tabs live on globalThis so they survive it.
@@ -643,8 +643,40 @@ const details = detailCache(db, async (key) => {
   }
   return detail;
 });
-/** The issue's details; one the mirror lacks is read and kept first (`kept`). Undefined when Jira has no such issue. */
-export const issue = async (key: string) => ((await kept(key)) ? details.read(key) : undefined);
+/** Every child Jira gives an issue through its `parent` field, kept when no board brought it (kept-issues.ts `keptChildren`). */
+const children = keptChildren({
+  search: async (key) => {
+    const found: any[] = [];
+    let nextPageToken: string | undefined;
+    do {
+      const page = await jira<{ issues?: any[]; nextPageToken?: string }>(
+        "/rest/api/3/search/jql?" +
+          new URLSearchParams({
+            jql: `parent = "${key}"`,
+            fields: projection.fields,
+            maxResults: "100",
+            ...(nextPageToken ? { nextPageToken } : {}),
+          }),
+      );
+      found.push(...(page.issues ?? []));
+      nextPageToken = page.nextPageToken;
+    } while (nextPageToken);
+    return found;
+  },
+  updated: (key) => store.updated(key),
+  save: saveContent,
+});
+/** The issue's details; one the mirror lacks is read and kept first (`kept`). Undefined when Jira has no such issue. Its
+ *  children no board holds are read alongside, and open tabs hear when one arrives. */
+export const issue = async (key: string) => {
+  if (!(await kept(key))) return undefined;
+  const [row] = rowsOf([key]);
+  void children(key, row && JSON.parse(row.slim).level).then(
+    (saved) => saved && notify(),
+    (e) => console.error(`[sync] children of ${key}:`, String(e).slice(0, 200)),
+  );
+  return details.read(key);
+};
 const histories = historyCache(
   db,
   (key) => readHistory(jira, key),

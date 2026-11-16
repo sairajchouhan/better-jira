@@ -32,3 +32,44 @@ export function keptIssues({
     return pending;
   };
 }
+
+/**
+ * Keeps every child Jira gives an issue through its `parent` field, whatever the types and wherever the child lives: Linear's
+ * Sub-issues list a parent's children from any team (`issue.children`). A board's sync brings only the children its filter holds,
+ * so a child in another project or on no configured board (an epic's work items in a sibling project) is read here when its parent
+ * opens, kept on no board as `keptIssues` keeps a linked one, and saved again when Jira changed it. A sub-task has no children, so
+ * it is never asked. Resolves whether anything was saved; asks made while one search is out share it.
+ */
+export function keptChildren({
+  search,
+  updated,
+  save,
+}: {
+  /** Jira's `parent = <key>` search, every page, with the mirror's fields. */
+  search: (key: string) => Promise<any[]>;
+  /** The mirror's `updated` for a key, "" when it lacks it. */
+  updated: (key: string) => string;
+  save: (raw: any) => void;
+}) {
+  const reading = new Map<string, Promise<boolean>>();
+  return (key: string, level?: number): Promise<boolean> => {
+    if (typeof level === "number" && level < 0) return Promise.resolve(false);
+    let pending = reading.get(key);
+    if (!pending) {
+      pending = search(key)
+        .then((children) => {
+          let saved = false;
+          for (const child of children) {
+            const held = updated(child.key);
+            if (held && held >= (child.fields?.updated ?? "")) continue;
+            save(child);
+            saved = true;
+          }
+          return saved;
+        })
+        .finally(() => reading.delete(key));
+      reading.set(key, pending);
+    }
+    return pending;
+  };
+}
