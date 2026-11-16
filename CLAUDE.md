@@ -6,7 +6,7 @@ This applies to every bug fix, every behaviour question, and whenever the user s
 
 1. **Find Linear's way first**, before reading our code or proposing options:
    - **Bundle:** `/Users/sairaj.chouhan/cs/better-jira/.raj/linear-bundle/` (minified JS and style-*.css; a file with two hashes was saved in both versions). Find the component, its CSS rules, theme tokens, timings, wording and the conditions for when it shows. Every value comes from here, never from a screenshot.
-   - **Live site:** the user's Linear tab (team RAJ), through the browse MCP. Look only, change nothing. It confirms what the bundle says and settles values computed at runtime. Delegates don't open Linear: they list what needs a live look under "Inferred, not confirmed", and the lead checks it. If Linear won't load, tell the user at once with the symptom.
+   - **Live site:** https://linear.app/ (workspace sairajchouhan, team RAJ), through the browse MCP, in a new tab of your own named session; never touch the user's tabs. Look only, change nothing. It confirms what the bundle says and settles values computed at runtime. Delegates check it themselves; list only what they couldn't see under "Inferred, not confirmed". If Linear won't load, tell the user at once with the symptom.
 2. **Build it the way the bundle does:** same values, behaviour and component boundaries. The same control in two places is one component rendered twice. Fix the shared component so every instance gets the fix.
 3. **Verify against Linear:** run the same case in ours and in Linear, compare, and report what matches and what still differs.
 4. **Cite Linear** (the bundle file and symbol, and what the live site showed) in the reply. In every delegate brief, steps 1–3 come first.
