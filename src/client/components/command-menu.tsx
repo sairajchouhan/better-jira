@@ -1,4 +1,3 @@
-import { EntityIdentifier } from "./entity-identifier";
 import { type Issue } from "@/shared/issue-model";
 import { createContext, use, type ReactNode } from "react";
 
@@ -46,7 +45,7 @@ export function CommandMenu({
 }) {
   const body = (
     <div className="command-menu">
-      <CommandMenuTitle issue={issue} />
+      <CommandMenuTitle {...issueTitle(issue)} />
       {children}
     </div>
   );
@@ -61,15 +60,26 @@ export function CommandMenu({
 /** VK.WIDTH: every command menu, the ⌘K palette's included, is 720px wide. */
 export const COMMAND_MENU_WIDTH = 720;
 
-/** The command menu's title (VK.TITLE_CONTAINER_HEIGHT): the targeted issue's chip, as Linear promotes its group name to the title
- *  (`promoteToTitle` on the issue group AD). */
-export function CommandMenuTitle({ issue }: { issue: Issue }) {
+/** A targeted model's name with its kind or key before it, the prefix dimmed: Linear's `yg` (startup-root.CnUSfl4j.js) with
+ *  `highlightPrefix` and `highlightStyle: "dim"`, which joins them with " ⋅ " ("RAJ-14 ⋅ basic project setup",
+ *  "Notification ⋅ Due: RAJ-47 …"). Both the menu's title and a group heading (the issue under a targeted notification) use it. */
+export function PrefixedTitle({ prefix, title }: { prefix: string; title: string }) {
+  // One inline run: a flex group header would drop the space between a bare prefix span and the text after it.
+  return (
+    <span className="truncate">
+      <span className="command-menu-prefix">{prefix} ⋅</span> {title}
+    </span>
+  );
+}
+export const issueTitle = (issue: Issue) => ({ prefix: issue.key, title: issue.summary });
+
+/** The command menu's title (VK.TITLE_CONTAINER_HEIGHT): the targeted model's chip, as Linear promotes its group name to the
+ *  title (`promoteToTitle`: a notification's `OD`, else the issue's `AD`). */
+export function CommandMenuTitle(props: { prefix: string; title: string }) {
   return (
     <div className="command-menu-title">
       <span className="command-menu-chip">
-        <EntityIdentifier className="command-menu-key">{issue.key}</EntityIdentifier>
-        <span aria-hidden>·</span>
-        <span className="truncate">{issue.summary}</span>
+        <PrefixedTitle {...props} />
       </span>
     </div>
   );

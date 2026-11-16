@@ -2635,21 +2635,26 @@ li[data-done="true"] > .todo-content {
   align-items: flex-end;
   padding: 0 14px;
 }
+/* The title chip, as live (2026-11-16, an issue's and a notification's alike): 22px tall, 2px 6px, radius 10px, 12px/18px,
+   one line cut with an ellipsis, flush with the 34px title row's bottom. */
 .command-menu-chip {
-  display: flex;
-  height: 26px;
+  display: block;
+  height: 22px;
   max-width: 100%;
-  align-items: center;
-  gap: 6px;
-  border-radius: 6px;
+  overflow: hidden;
+  border-radius: 10px;
   background: var(--menu-sel);
-  padding: 0 8px;
+  padding: 2px 6px;
   font-size: 12px;
+  line-height: 18px;
+  white-space: nowrap;
+  text-overflow: ellipsis;
   color: var(--menu-fg);
 }
-.command-menu-key {
-  flex-shrink: 0;
-  color: var(--menu-fg-3);
+/* yg's highlighted prefix ("RAJ-14 ⋅", "Notification ⋅"): BSe.highlight's weight, VSe.dim's opacity. */
+.command-menu-prefix {
+  font-weight: 500;
+  opacity: 0.5;
 }
 .command-menu .menu-input {
   border-bottom: 0;

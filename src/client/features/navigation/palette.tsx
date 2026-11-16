@@ -34,7 +34,17 @@ import {
 } from "@/client/features/views/view-choices";
 import { MenuSurface } from "@/client/components/menu-surface";
 import { Menu } from "@/client/components/menu";
-import { COMMAND_MENU_WIDTH, CommandMenuPage, CommandMenuTitle, CommandTarget } from "@/client/components/command-menu";
+import {
+  COMMAND_MENU_WIDTH,
+  CommandMenuPage,
+  CommandMenuTitle,
+  CommandTarget,
+  issueTitle,
+  PrefixedTitle,
+} from "@/client/components/command-menu";
+import { facets as inboxFacets, selectedRow as selectedNotification } from "@/client/features/inbox/inbox";
+import { notificationTitle } from "@/shared/inbox-label";
+import type { InboxItem } from "@/shared/inbox-model";
 import { PropertyPicker, type IssueField } from "@/client/features/issue/personal-controls";
 import { ReminderPicker } from "@/client/features/reminders/reminders";
 import { Avatar } from "@/client/components/avatar";
@@ -357,7 +367,8 @@ type PaletteBodyProps = {
   q: string;
   setQ: (q: string) => void;
   /** The issue the commands act on, drawn as the menu's title chip. */
-  title?: Issue;
+  /** The targeted model's chip: Linear's promoted group name. */
+  title?: { prefix: string; title: string };
   /** A nested page's parent name, before the search. */
   chip?: ReactNode;
   placeholder?: string;
@@ -385,7 +396,7 @@ function PaletteBody({
 }: PaletteBodyProps) {
   const body = (
     <>
-      {title && <CommandMenuTitle issue={title} />}
+      {title && <CommandMenuTitle {...title} />}
       <Menu
         filter="none"
         search={q}
@@ -804,10 +815,45 @@ function OpenPage({ page, back }: { page: PalettePage; back: () => void }) {
   );
 }
 type Registered = (typeof shortcuts)[number];
-/** The registry commands ⌘K lists: the targeted issue's (`issue`) or the app's, that apply now, without those Linear keeps out of
- *  its command menu (`hideInCommandMenu`, as Dismiss all toasts). */
-export const paletteEntries = (entries: readonly Registered[], applies: (entry: Registered) => boolean, issue: boolean) =>
-  entries.filter((s) => Boolean(s.issue) === issue && !s.hideInCommandMenu && applies(s));
+/** Whom a registry command acts on: the targeted issue, the selected notification, or the app. */
+type Acts = "issue" | "notification" | "app";
+const actsOn = (s: Registered): Acts => (s.issue ? "issue" : s.notification ? "notification" : "app");
+/** The registry commands ⌘K lists for `acts`, that apply now, without those Linear keeps out of its command menu
+ *  (`hideInCommandMenu`, as Dismiss all toasts and the inbox's E) and without a second row of one name (↑ and K, Z and ⌘Z): the
+ *  first listed wins, so a hidden or inapplicable command never takes its twin's row away (Delete notification's ⌫ under E). */
+export const paletteEntries = (entries: readonly Registered[], applies: (entry: Registered) => boolean, acts: Acts) =>
+  entries
+    .filter((s) => actsOn(s) === acts && !s.hideInCommandMenu && applies(s))
+    .filter((s, i, listed) => listed.findIndex((other) => other.name === s.name) === i);
+/** The targeted models' groups, before the app's. The first one's is headless: Linear promotes its name to the menu's title
+ *  (`promoteToTitle`). A selected notification's (`OD`, priority 0) comes first, ahead of Notifications (`kD`, also 0 in the
+ *  inbox: `orderGroups` keeps this order); its issue's (`AD`, priority 1) then keeps its name, "RAJ-44 ⋅ title", as its heading. */
+export function targetedGroups<R>({
+  row,
+  issue,
+  notificationRows,
+  issueRows,
+}: {
+  row: InboxItem | undefined;
+  issue: Issue | undefined;
+  notificationRows: R[];
+  issueRows: R[];
+}) {
+  return [
+    { key: "notification", heading: undefined, priority: 0, rows: row ? notificationRows : [] },
+    {
+      key: "target",
+      heading: row && issue ? <PrefixedTitle {...issueTitle(issue)} /> : undefined,
+      priority: TARGET_PRIORITY,
+      rows: issueRows,
+    },
+  ];
+}
+/** ⌘K's title for the selected notification (Linear's `OD`): "Notification ⋅ Due: RAJ-47 …". */
+export const notificationChip = (row: InboxItem) => ({
+  prefix: "Notification",
+  title: notificationTitle(row, inboxFacets(row).statusType),
+});
 /** A registry command's ⌘K wording: its name for the targeted issue, and the one it takes while ⌥ is held (Copy issue ID as link). */
 export const commandWording = (entry: Registered, issue: Issue | undefined, lookup: (key: string) => Issue | undefined) => ({
   name: paletteName(entry, issue, lookup),
@@ -824,6 +870,8 @@ function RootPalette({ initialPage }: { initialPage?: PalettePage }) {
   const applyingIds = new Set(applicable.split(" "));
   const applies = (entry: (typeof shortcuts)[number]) => applyingIds.has(entry.id);
   const [scope, setScopeKey] = useState(get().document ? null : get().selected);
+  // The notification selected in the inbox: Linear targets it first (its group `OD` is the title, priority 0), then its issue.
+  const [row, setRow] = useState(() => (get().inbox ? selectedNotification() : undefined));
   // A page (an "Open …" page or the targeted issue's field command) opens over the root, which keeps its search and highlight.
   const [nav, setNav] = useState<Nav>(() => ({ q: "", page: initialPage ? { kind: "open", page: initialPage } : null }));
   const { q, page, returnTo } = nav;
@@ -873,20 +921,14 @@ function RootPalette({ initialPage }: { initialPage?: PalettePage }) {
   };
   // Only commands that would do something now, as Linear lists them.
   const issueCmds: Cmd[] = scoped
-    ? paletteEntries(shortcuts, applies, true).map(command)
+    ? paletteEntries(shortcuts, applies, "issue").map(command)
     : [];
+  const notificationCmds: Cmd[] = row ? paletteEntries(shortcuts, applies, "notification").map(command) : [];
   // The app's commands under Linear's group for each, with nothing filed twice under one name.
   const byGroup = new Map<PaletteGroup, Cmd[]>();
   const file = (group: PaletteGroup, cmd: Cmd) => byGroup.set(group, [...(byGroup.get(group) ?? []), cmd]);
-  const appCommands = new Set(paletteEntries(shortcuts, applies, false));
-  for (const [i, s] of shortcuts.entries())
-    if (
-      appCommands.has(s) &&
-      s.id !== "commands" &&
-      !(activeView && LISTED_BY_VIEW_GROUP.has(s.id)) &&
-      shortcuts.findIndex((other) => other.name === s.name) === i
-    )
-      file(paletteGroupOf(s), command(s));
+  for (const s of paletteEntries(shortcuts, applies, "app"))
+    if (s.id !== "commands" && !(activeView && LISTED_BY_VIEW_GROUP.has(s.id))) file(paletteGroupOf(s), command(s));
   for (const b of boards)
     if (b.id !== boardId)
       file("Navigation", {
@@ -905,16 +947,15 @@ function RootPalette({ initialPage }: { initialPage?: PalettePage }) {
     { name: filterCount(overlay) && !mergeable ? "Cannot merge these filters into the view" : "Save to this view", keys: hotkeyOf("view-save"), icon: commandIcon("view-save"), disabled: !mergeable, run: viewAction(() => { void saveOverlayToView().catch(e => set({ perf: String(e) })); }) },
     { name: "Create new view…", keys: hotkeyOf("view-create"), icon: commandIcon("view-create"), run: viewAction(createToolbarView) },
   ], q) }] : [
-    // The targeted issue's group is headless: Linear promotes its name to the menu's title (`promoteToTitle`).
-    // Hoisted values join the targeted issue's group (Linear's groupWhenLifted), ranked with its commands.
-    {
-      key: "target",
-      heading: undefined,
-      priority: TARGET_PRIORITY,
-      rows: [...ranked(issueCmds, q), ...(scoped ? hoistedValues(scoped, q, (id) => applyingIds.has(id)) : [])].sort(
+    ...targetedGroups({
+      row,
+      issue: scoped,
+      notificationRows: ranked(notificationCmds, q),
+      // Hoisted values join the targeted issue's group (Linear's groupWhenLifted), ranked with its commands.
+      issueRows: [...ranked(issueCmds, q), ...(scoped ? hoistedValues(scoped, q, (id) => applyingIds.has(id)) : [])].sort(
         ([a], [b]) => b - a,
       ),
-    },
+    }),
     { key: "view", heading: `View · ${activeView?.name ?? ""}`, priority: VIEW_PRIORITY, rows: ranked(viewCommands, q) },
     ...[...byGroup].map(([group, cmds]) => ({
       key: group,
@@ -959,9 +1000,9 @@ function RootPalette({ initialPage }: { initialPage?: PalettePage }) {
             if (keyword) setNav((current) => openPage(current, { kind: "open", page: keyword }));
             else setQ(next);
           }}
-          title={scoped}
+          title={row ? notificationChip(row) : scoped && issueTitle(scoped)}
           defaultValue={returnTo}
-          onBackspace={() => (savingTo ? setSavingTo(false) : setScopeKey(null))}
+          onBackspace={() => (savingTo ? setSavingTo(false) : (setRow(undefined), setScopeKey(null)))}
         >
           <PastedIssueGroup pasted={pasted} />
           {groups.map((g) => (
