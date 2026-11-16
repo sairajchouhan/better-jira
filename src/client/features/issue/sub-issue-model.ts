@@ -1,6 +1,6 @@
 import { compareNatural, compareText } from "@/shared/compare";
 import { type Board, type Issue } from "@/shared/issue-model";
-import { statusBoard, statusById } from "@/shared/board-catalog";
+import { issueStatus, statusBoard } from "@/shared/board-catalog";
 import { isEpic, listedUnder, type TitleLineVariant } from "@/shared/epics";
 import {
   ORDERINGS,
@@ -83,11 +83,11 @@ export function childrenByParent(issues: ReadonlyMap<string, Issue>): ChildrenIn
   indexes.set(issues, children);
   return children;
 }
-/** An issue's status on its own board, as every sub-issue list, count and menu reads it; "new" when the board doesn't know it. */
+/** An issue's status on its own board, as every sub-issue list, count and menu reads it; a child no board shows reads the one
+ *  Jira sent (`issueStatus`); "new" when neither knows it. */
 export const statusOf = (boards: readonly Board[], child: Issue) => {
-  const board = statusBoard(boards, child),
-    columns = board?.columns ?? [],
-    result = statusById(board, child.status);
+  const columns = statusBoard(boards, child)?.columns ?? [],
+    result = issueStatus(boards, child);
   return {
     name: result?.name ?? child.status,
     category: result?.category ?? "new",

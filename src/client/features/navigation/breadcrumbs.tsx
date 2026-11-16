@@ -14,7 +14,7 @@ import { IconButton } from "@/client/components/button";
 import { ContextMenu } from "@/client/components/action-menu";
 import { EntityIdentifier } from "@/client/components/entity-identifier";
 import { set, useStore, issueBoardId, issueBoard } from "@/client/state/store";
-import { statusById } from "@/shared/board-catalog";
+import { issueStatus } from "@/shared/board-catalog";
 import { issueURL } from "@/client/features/issue/issue-urls";
 import { copyEntries, issueBreadcrumbEntries } from "@/client/features/issue/issue-menu";
 import { useActiveView, useSavedViews } from "@/client/features/views/saved-views";
@@ -245,7 +245,8 @@ function IssueCrumb({ issue }: { issue: Issue }) {
 /** A document's issue: its status and key, back to the issue's page; the title is its tooltip. */
 function DocumentIssueCrumb({ issue }: { issue: Issue }) {
   const board = useStore((s) => issueBoard(issue, s));
-  const status = statusById(board, issue.status) ?? { name: issue.status, category: "new" as const };
+  const boards = useStore((s) => s.boards);
+  const status = issueStatus(boards, issue, board) ?? { name: issue.status, category: "new" as const };
   return (
     <Crumb id="document-issue" className="shrink-0">
       <CrumbLink to={{ document: null }} aria-label="Back to issue" title={issue.summary} className={CRUMB}>

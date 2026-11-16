@@ -1,5 +1,5 @@
 import { compareText } from "@/shared/compare";
-import { type Board, type Issue, type User, type JiraOptions } from "@/shared/issue-model";
+import { type Board, type Issue, type Status, type User, type JiraOptions } from "@/shared/issue-model";
 /** What a board offers to pick from: its statuses, the people an issue can be assigned to, and known labels. */
 import { priorityRank } from "./view-model";
 import { onBoard } from "./board-membership";
@@ -17,6 +17,15 @@ export const statusBoard = (boards: readonly Board[], issue: Pick<Issue, "boards
   boards.find((b) => onBoard(issue, b.id)) ??
   (preferred && statusById(preferred, issue.status) ? preferred : undefined) ??
   boards.find((b) => statusById(b, issue.status));
+/** An issue's status: its board's (`statusBoard`), else the name and category Jira sent with it, so a child whose project's
+ *  workflow no configured board shows still reads as done or started. Undefined when neither knows it. */
+export const issueStatus = (
+  boards: readonly Board[],
+  issue: Pick<Issue, "boards" | "status" | "jiraStatus">,
+  preferred?: Board,
+): Status | undefined =>
+  statusById(statusBoard(boards, issue, preferred), issue.status) ??
+  (issue.jiraStatus?.id === issue.status ? issue.jiraStatus : undefined);
 
 /** Everyone an issue can be assigned to: you first, then Jira's assignable users and anyone assigned an issue in the mirror, by name.
  *  The pickers group them with `assigneeGroups`. */

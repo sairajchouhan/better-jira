@@ -72,6 +72,9 @@ export type Issue = {
   boards: number[];
   summary: string;
   status: string;
+  /** Jira's own name and category for `status`, as it sent them: what a board that doesn't know the status (a child in another
+   *  project, kept on no configured board) shows. Read it through `issueStatus` (board-catalog.ts). */
+  jiraStatus?: Status;
   type?: string;
   priority?: string;
   assignee: User | null;
@@ -139,6 +142,7 @@ export const MIRRORED_ISSUE_FIELDS = [
   "key",
   "summary",
   "status",
+  "jiraStatus",
   "type",
   "typeIcon",
   "priority",

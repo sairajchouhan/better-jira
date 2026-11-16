@@ -1,6 +1,6 @@
 import { type Board, type Issue, type User, type JiraOptions } from "@/shared/issue-model";
 import { expect, test } from "bun:test";
-import { assignableUsers, knownLabels, statusBoard, statusById, statuses } from "./board-catalog";
+import { assignableUsers, issueStatus, knownLabels, statusBoard, statusById, statuses } from "./board-catalog";
 
 
 const board: Board = {
@@ -180,4 +180,9 @@ test("an issue no configured board holds reads its status from a board that know
   expect(statusBoard([board, other], kept, board)?.id).toBe(2);
   expect(statusBoard([board, other], { ...kept, status: "3" }, other)?.id).toBe(1);
   expect(statusBoard([board, other], { ...kept, boards: [1], status: "5" })?.id).toBe(1);
+  // No board knows it: the status Jira sent, only while it is still the issue's status.
+  const shipped = { id: "9", name: "Shipped", category: "done" };
+  expect(issueStatus([board, other], { ...kept, status: "9", jiraStatus: shipped })).toEqual(shipped);
+  expect(issueStatus([board, other], { ...kept, status: "8", jiraStatus: shipped })).toBeUndefined();
+  expect(issueStatus([board, other], { ...kept, status: "3", jiraStatus: { ...shipped, id: "3" } })?.name).toBe("Done");
 });

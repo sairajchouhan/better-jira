@@ -76,6 +76,9 @@ export function issueProjection(siteFields: any[] | null) {
         key: i.key,
         summary: f.summary,
         status: f.status.id,
+        jiraStatus: f.status.name
+          ? { id: f.status.id, name: f.status.name, category: f.status.statusCategory?.key ?? "new" }
+          : undefined,
         type: f.issuetype?.name,
         typeIcon: f.issuetype?.iconUrl,
         priority: f.priority?.name,
@@ -116,7 +119,7 @@ export function issueProjection(siteFields: any[] | null) {
 }
 export type IssueProjection = ReturnType<typeof issueProjection>;
 /** Bump when `slim`'s output changes: the mirror re-projects every stored issue on its next start. */
-export const SLIM_VERSION = "13";
+export const SLIM_VERSION = "14";
 
 /** A mirrored issue with what enrichment stored for it (null until enriched). */
 export type PropertyRow = {

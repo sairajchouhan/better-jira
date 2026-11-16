@@ -295,4 +295,8 @@ test("every issue is an issue: a child in another project, on no board, counts b
   expect(childrenByParent(issues).get("TEAM-1")?.map((i) => i.key)).toEqual(["OTHER-1", "TEAM-2"]);
   expect(statusOf([board], kept)).toEqual({ name: "Done", category: "done", order: 1 });
   expect(subIssueCount(issues, [board], "TEAM-1", "children")).toEqual({ done: 1, total: 2 });
+  // A child whose project's workflow no board shows reads the status Jira sent with it.
+  const foreign = { ...kept, status: "77", jiraStatus: { id: "77", name: "Shipped", category: "done" } } as Issue;
+  expect(statusOf([board], foreign)).toEqual({ name: "Shipped", category: "done", order: -1 });
+  expect(statusOf([board], { ...foreign, jiraStatus: undefined })).toEqual({ name: "77", category: "new", order: -1 });
 });
