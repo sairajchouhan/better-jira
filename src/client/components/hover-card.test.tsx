@@ -37,3 +37,9 @@ test("a block trigger keeps its row's full width (the sidebar's `_$.tooltipBlock
   );
   expect(html).toMatch(/^<span class="flex w-full min-w-0" data-hover-card-trigger="">/);
 });
+
+test("the card's surface is painted in Linear's menu theme (`T_`), so what it holds reads the menu's tokens", async () => {
+  const source = await Bun.file(new URL("./hover-card.tsx", import.meta.url)).text();
+  expect(source).toMatch(/data-hover-card=\{label\}\s*\{\.\.\.elevation\.props\}/);
+  expect(source).toContain("<ElevationScope level={elevation.level}>{children}</ElevationScope>");
+});

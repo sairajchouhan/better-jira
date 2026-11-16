@@ -12,7 +12,7 @@ import {
 import { Popover, PopoverContext } from "react-aria-components";
 import { Tooltip, useTooltip } from "./tooltip";
 import { OverlayBoundary } from "./overlay-boundary";
-import { isFocusReturn } from "./menu-surface";
+import { ElevationScope, isFocusReturn, useElevation } from "./menu-surface";
 import {
   CARD_FALLBACKS,
   choosePlacement,
@@ -228,6 +228,9 @@ function HoverCardTrigger({
 function HoverCardZone({ label, children }: { label?: string; children: ReactNode }) {
   const { surfaceRef, triggerRef, actions } = useTooltip();
   const pressedAt = useRef(-Infinity);
+  // Linear's card surface (`T_`) is painted in its menu theme, so what the card holds (a view's filter chips) reads that theme's
+  // tokens, as in a menu.
+  const elevation = useElevation();
   return (
     <div
       className="hover-card-zone"
@@ -250,9 +253,10 @@ function HoverCardZone({ label, children }: { label?: string; children: ReactNod
     >
       <div
         data-hover-card={label}
+        {...elevation.props}
         className="w-max min-w-[220px] max-w-[520px] rounded-lg border border-[var(--menu-line)] bg-[var(--menu)] px-2 py-[5px] text-xs text-[var(--menu-fg)] shadow-[var(--menu-shadow)]"
       >
-        {children}
+        <ElevationScope level={elevation.level}>{children}</ElevationScope>
       </div>
       <SafeArea />
     </div>
