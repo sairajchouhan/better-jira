@@ -41,6 +41,7 @@ import { actionScore, MIN_APPLICABILITY, type ScoredAction } from "@/client/lib/
 import { issuePropertyEntries } from "@/client/features/issue/issue-menu";
 import { workOnIssueEntry } from "@/client/features/issue/coding-tools";
 import { COMMAND_KEYWORDS, VIEW_COMMAND_KEYWORDS } from "./command-keywords";
+import { paletteName } from "./command-names";
 import {
   matchDocuments,
   matchesSearchFilters,
@@ -827,7 +828,7 @@ function RootPalette({ initialPage }: { initialPage?: PalettePage }) {
 
   const command = (entry: (typeof shortcuts)[number]): Cmd => {
     const cmd: Cmd = {
-      name: entry.label?.() ?? entry.name,
+      name: paletteName(entry, scoped, (key) => issues.get(key)),
       keywords: COMMAND_KEYWORDS[entry.id],
       keys: hotkeyOf(entry.id),
       detail: entry.detail?.(),
@@ -847,7 +848,7 @@ function RootPalette({ initialPage }: { initialPage?: PalettePage }) {
   };
   // Only commands that would do something now, as Linear lists them.
   const issueCmds: Cmd[] = scoped
-    ? shortcuts.filter((s) => s.issue && applies(s)).map(command)
+    ? shortcuts.filter((s) => s.issue && !s.hideInCommandMenu && applies(s)).map(command)
     : [];
   // The app's commands under Linear's group for each, with nothing filed twice under one name.
   const byGroup = new Map<PaletteGroup, Cmd[]>();
@@ -855,6 +856,7 @@ function RootPalette({ initialPage }: { initialPage?: PalettePage }) {
   for (const [i, s] of shortcuts.entries())
     if (
       !s.issue &&
+      !s.hideInCommandMenu &&
       applies(s) &&
       s.id !== "commands" &&
       !(activeView && LISTED_BY_VIEW_GROUP.has(s.id)) &&

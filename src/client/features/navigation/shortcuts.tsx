@@ -16,7 +16,7 @@ import { boardView, filterCount, groupStep, groupVisibility, visibleOrder } from
 import { collapseTarget } from "@/client/features/views/group-collapse";
 import { forgetIssueIntents, post, run as command } from "./commands";
 import { canHaveSubIssues } from "@/shared/issue-properties";
-import { epicLocked, epicOf, listsSubIssues, nestable, titleParentOf } from "@/shared/epics";
+import { epicLocked, listsSubIssues, nestable, titleParentOf } from "@/shared/epics";
 import { childrenByParent } from "@/client/features/issue/sub-issue-model";
 import { getHotkeyManager, type Hotkey, type HotkeyChord } from "@tanstack/react-hotkeys";
 import { boardOf, get, isWatching, ME, set, useStore, type Overlay, issueBoardId } from "@/client/state/store";
@@ -74,8 +74,10 @@ type Shortcut = {
   run: () => void;
   /** Whether it would act, from the state and the issue it would act on only: the ⌘K list calls it in a store selector. */
   when?: (s: State, issue: Issue | undefined) => boolean;
-  /** The ⌘K row's name when it depends on state, e.g. "Unfavorite issue". */
+  /** The ⌘K row's name when it depends on state, e.g. "Unfavorite issue"; fixed ⌘K names are command-names.ts's. */
   label?: () => string;
+  /** Kept out of ⌘K, as Linear's `hideInCommandMenu`: the key works, the command isn't listed. */
+  hideInCommandMenu?: boolean;
   /** Faint text after the ⌘K row's name, read as the list renders (Linear's action `detail`). */
   detail?: () => string | undefined;
 };
@@ -326,6 +328,8 @@ export const shortcuts: Shortcut[] = [
   {
     id: "sidebar",
     name: "Toggle left sidebar",
+    // Linear's `[`: `${sidebarCollapsed ? "Expand" : "Collapse"} navigation sidebar`.
+    label: () => `${ui.getSnapshot().context.sidebarHidden ? "Expand" : "Collapse"} navigation sidebar`,
     group: "Navigation",
     hotkey: "[",
     // Below 768px the sidebar opens over the page instead (Linear's Menu button).
@@ -339,6 +343,8 @@ export const shortcuts: Shortcut[] = [
   {
     id: "details",
     name: "Toggle right sidebar",
+    // Linear's `]`: `Close details` while they show, else `Open details`.
+    label: () => ((get().panel ? !get().issuePropertiesHidden : get().details) ? "Close details" : "Open details"),
     group: "Navigation",
     hotkey: "]",
     when: (s) => !s.document,
@@ -531,6 +537,8 @@ export const shortcuts: Shortcut[] = [
     id: "dismiss-toast",
     name: "Dismiss all toasts",
     group: "Navigation",
+    // Linear's ⌘⌥X is hideInCommandMenu.
+    hideInCommandMenu: true,
     hotkey: "Mod+Alt+X",
     run: () => toasts.dismissAll(),
   },
@@ -571,16 +579,9 @@ export const shortcuts: Shortcut[] = [
     hotkey,
     group: "Issues",
     issue: true,
-    // The project is the issue's epic (shared/epics.ts): only a standard issue picks one, and Linear's `zBn` reads "Move to
-    // project…" once the issue is in one. The Jira project itself never changes.
+    // The project is the issue's epic (shared/epics.ts): only a standard issue picks one. The Jira project itself never changes.
     ...(id === "project"
-      ? {
-          when: (s: State, issue?: Issue) => !!issue && !epicLocked(issue, (key) => s.issues.get(key)),
-          label: () => {
-            const issue = target();
-            return issue && epicOf(issue, (key) => get().issues.get(key)) ? "Move to epic" : "Add to epic";
-          },
-        }
+      ? { when: (s: State, issue?: Issue) => !!issue && !epicLocked(issue, (key) => s.issues.get(key)) }
       : {}),
     run: issueOverlay(value),
   })),
