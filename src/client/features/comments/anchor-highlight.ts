@@ -126,6 +126,15 @@ export function revealCentred(el: Element, timers: Pick<Timers, "setTimeout"> = 
  *  key. A remount (switching rows and back) doesn't ring again; a new visit to the link does. */
 const shown = new Set<string>();
 
+/** Whether `anchor` rings now: the address points at it, and this history entry hasn't rung it yet (it then counts as rung). */
+export function ringsNow(anchor: string, hash: string, entry: string, rung: Set<string> = shown) {
+  if (!anchor || hash !== anchor) return false;
+  const mark = `${anchor}@${entry}`;
+  if (rung.has(mark)) return false;
+  rung.add(mark);
+  return true;
+}
+
 /** The router's hash (without "#") and history entry. A hash set in place (`showAnchor`) keeps the entry. */
 export function useLocationAnchor() {
   const hash = useRouterState({ select: (s) => s.location.hash });
@@ -147,14 +156,11 @@ export function useAnchorHighlight(anchor: string) {
   const [timeline] = useState(() => highlightTimeline(setPhase));
   const target = !!anchor && hash === anchor;
   useLayoutEffect(() => {
-    if (!target) return;
-    const mark = `${anchor}@${entry}`;
-    if (shown.has(mark)) return;
-    shown.add(mark);
+    if (!target || !ringsNow(anchor, hash, entry)) return;
     timeline.start();
     const el = document.getElementById(anchor);
     if (el) revealCentred(el);
-  }, [target, anchor, entry, timeline]);
+  }, [target, anchor, hash, entry, timeline]);
   useEffect(() => () => timeline.stop(), [timeline]);
   useEffect(() => {
     if (phase !== "in") return;

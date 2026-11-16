@@ -7,6 +7,7 @@ import {
   alignDelta,
   highlightTimeline,
   revealCentred,
+  ringsNow,
   scrollToAlign,
   type HighlightPhase,
 } from "./anchor-highlight";
@@ -153,4 +154,14 @@ test("revealCentred is Linear's aMt: centre now, and again after 100 ms only whe
   frames.splice(0).forEach((run) => run());
   expect(pushed.calls).toHaveLength(2);
   expect(pushed.comment.top + 40).toBeCloseTo(53 + 811 / 2);
+});
+
+test("R4-inbox-D2: a linked comment rings once per visit: not again on a remount, again on a new visit to the link", () => {
+  const rung = new Set<string>();
+  expect(ringsNow("comment-7", "comment-8", "k1", rung)).toBe(false);
+  expect(ringsNow("", "", "k1", rung)).toBe(false);
+  expect(ringsNow("comment-7", "comment-7", "k1", rung)).toBe(true);
+  // Switching rows and back remounts the comment on the same history entry.
+  expect(ringsNow("comment-7", "comment-7", "k1", rung)).toBe(false);
+  expect(ringsNow("comment-7", "comment-7", "k2", rung)).toBe(true);
 });
