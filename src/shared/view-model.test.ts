@@ -87,6 +87,18 @@ const rule = (field: Rule["field"], values: string[], op: Rule["op"] = "is"): Ru
   values,
 });
 describe("view selection", () => {
+  test("BJ-390: by due date, issues with no due date tie on the key in natural order, PROJ-9 before PROJ-10", () => {
+    const prefs = defaultPreferences();
+    prefs.display.ordering = "due";
+    const keys = ["PROJ-10", "PROJ-9", "PROJ-100", "PROJ-2"].map((key) => issue(key));
+    const order = () => selectIssues(keys, board, prefs, false, "", "me", now).map((i) => i.key);
+    expect(order()).toEqual(["PROJ-2", "PROJ-9", "PROJ-10", "PROJ-100"]);
+    // An issue with a due date still comes first; the no-date tail stays natural either way round.
+    keys.push(issue("PROJ-11", { due: "2026-11-20" }));
+    expect(order()).toEqual(["PROJ-11", "PROJ-2", "PROJ-9", "PROJ-10", "PROJ-100"]);
+    prefs.display.descending = true;
+    expect(order()).toEqual(["PROJ-11", "PROJ-2", "PROJ-9", "PROJ-10", "PROJ-100"]);
+  });
   test("All issues includes older completions and still respects board, mine, and search", () => {
     const prefs = defaultPreferences();
     expect(

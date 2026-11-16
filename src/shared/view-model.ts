@@ -852,7 +852,7 @@ export function selectIssues(
         cmp = (b.links?.length ?? 0) - (a.links?.length ?? 0);
         break;
       case "due":
-        if (!a.due || !b.due) return a.due ? -1 : b.due ? 1 : compareText(a.key, b.key);
+        if (!a.due || !b.due) return a.due ? -1 : b.due ? 1 : compareNatural(a.key, b.key);
         cmp = compareText(a.due, b.due);
         break;
       case "updated":
