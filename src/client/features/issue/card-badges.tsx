@@ -322,7 +322,7 @@ export function PullRequestBadge({ issue, layout }: { issue: Issue; layout: "boa
         <Badge.Icon>
           <PullRequestStatusIcon status={(data?.length ? leadingStatus(data) : undefined) ?? issue.prStatus} />
         </Badge.Icon>
-        {text ? <Badge.Text>{text}</Badge.Text> : room && <PullRequestNumberRoom />}
+        {text ? <Badge.Text>{text}</Badge.Text> : room ? <PullRequestNumberRoom /> : null}
       </Badge.Button>
     </HoverCard>
   );

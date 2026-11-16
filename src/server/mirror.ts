@@ -317,15 +317,18 @@ const NUMBER_READS = 5;
 /** After a detail read fails, that issue waits this long, and every other one a minute (Jira refusing or rate limiting). */
 const NUMBER_RETRY_MS = 10 * 60_000,
   NUMBER_PAUSE_MS = 60_000;
+/** With nothing due at the last look and no board change since, the issues are looked over again only this often. */
+const NUMBER_IDLE_MS = 30_000;
 const numberFailed = new Map<string, number>();
 let numbersBusy = false,
-  numbersPaused = 0;
+  numbersPaused = 0,
+  numbersIdleSince = 0;
 /** Reads Jira's development detail for a few issues with one pull request whose number neither GitHub nor an earlier read gave
  *  (or whose Jira count or state moved since), beside the board loop and never holding it up, then re-projects them and tells open
  *  tabs. Until it lands the badge keeps the number's room (card-badges.tsx). Reads only. */
-function readPullRequestNumbers() {
-  if (numbersBusy || Date.now() < numbersPaused) return;
+function readPullRequestNumbers(boardsChanged: boolean) {
   const now = Date.now();
+  if (numbersBusy || now < numbersPaused || (!boardsChanged && now - numbersIdleSince < NUMBER_IDLE_MS)) return;
   const due = db
     .query<{ key: string; status: string | null }, []>(
       "SELECT key, json_extract(slim, '$.prStatus') AS status FROM issues WHERE json_extract(slim, '$.prCount') = 1",
@@ -336,7 +339,8 @@ function readPullRequestNumbers() {
     .map(({ key, status }) => ({ key, jira: { prCount: 1, prStatus: (status ?? undefined) as PullRequest["status"] | undefined } }))
     .filter(({ key, jira }) => prNumbers.stale(key, jira))
     .slice(0, NUMBER_READS);
-  if (!due.length) return;
+  if (!due.length) return void (numbersIdleSince = now);
+  numbersIdleSince = 0;
   numbersBusy = true;
   void (async () => {
     for (const { key, jira: at } of due) {
@@ -445,7 +449,7 @@ async function loop() {
     );
     if (changed.includes(true)) notify();
     syncGitHub();
-    readPullRequestNumbers();
+    readPullRequestNumbers(changed.includes(true));
     if (live.clients.size)
       void unseenChanged().then(
         (moved) => moved && notify("inbox"),
