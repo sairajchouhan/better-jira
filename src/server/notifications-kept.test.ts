@@ -86,3 +86,37 @@ test("R4-inbox-D5: the feed's groups go as parallel requests of six; a failed on
   expect(page.items).toHaveLength(14);
   expect(page.items.filter((i) => i.group).length).toBe(8);
 });
+
+test("R4-inbox-D5: the server keeps Jira's last first page for a browser with none, and drops it on a read-state write", async () => {
+  const { firstPage, keptFirstPage, writing } = await import("./notifications");
+  await firstPage();
+  expect(keptFirstPage()?.items[0]?.unread).toBe(true);
+  expect(keptFirstPage()?.unread).toEqual([{ id: "ari:cloud:jira:c:issue/0", head: "h0" }]);
+  expect(keptFirstPage("direct")).toBeUndefined();
+  // A write drops it at once, so no browser is shown the read state from before it; a fresh read replaces it after.
+  jira.readState = "read";
+  // (The mark itself is Jira's; here it only has to take a moment.)
+  const written = writing(() => settle());
+  expect(keptFirstPage()).toBeUndefined();
+  await written;
+  for (let i = 0; i < 20 && !keptFirstPage(); i++) await settle();
+  expect(keptFirstPage()?.items[0]?.unread).toBe(false);
+});
+
+test("R4-inbox-D5: a first page read while a write was under way is answered but never kept", async () => {
+  const { firstPage, keptFirstPage, writing } = await import("./notifications");
+  let release!: () => void;
+  jira.hold = new Promise<void>((done) => (release = done));
+  jira.readState = "unread";
+  // Asked before the write, answered after it (and after the write's own refresh).
+  const read = firstPage();
+  await settle();
+  jira.readState = "read";
+  await writing(() => settle());
+  for (let i = 0; i < 20 && !keptFirstPage(); i++) await settle();
+  expect(keptFirstPage()?.items[0]?.unread).toBe(false);
+  release();
+  expect((await read).items[0]?.unread).toBe(true);
+  // The late answer from before the write doesn't replace the kept page.
+  expect(keptFirstPage()?.items[0]?.unread).toBe(false);
+});

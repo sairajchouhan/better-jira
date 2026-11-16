@@ -47,6 +47,8 @@ export type InboxPorts = {
   read: <T>(name: string, fallback: T) => T;
   save: (name: string, value: object) => void;
   fetchPage: (query: URLSearchParams) => Promise<Feed>;
+  /** The server's last first page (`?kept`), shown while Jira's is read when this browser stored none; none yet: undefined. */
+  fetchKept?: (query: URLSearchParams) => Promise<Feed | undefined>;
   send: (body: object) => Promise<{ groups?: string[] } | null>;
   openRow: (item: InboxItem, open: "side" | "page") => void;
   clearSelection: () => void;
@@ -234,8 +236,23 @@ export function createInboxStore(ports: InboxPorts) {
         queryClient, options(category),
       );
       feeds.set(category, observer);
+      seedKept(category);
     }
     return observer;
+  }
+  /** With no first page stored in this browser, the server's kept one shows at once while Jira's is read (3–4 s), as a
+   *  stored one does: it counts as not fetched yet (`updatedAt` 0, like `initialData`), and Jira's replaces it on arrival.
+   *  Only while the query has no data, so it never stands in for a fetched page (R4-inbox-D5). */
+  function seedKept(category: Category) {
+    const key = ["inbox", category];
+    if (!ports.fetchKept || queryClient.getQueryData(key)) return;
+    void ports
+      .fetchKept(new URLSearchParams(category === "all" ? {} : { category }))
+      .then((page) => {
+        if (page?.items && !queryClient.getQueryData(key))
+          queryClient.setQueryData<InfiniteData<Feed, string>>(key, { pages: [page], pageParams: [""] }, { updatedAt: 0 });
+      })
+      .catch(() => {});
   }
   /** Every loaded page's rows; a row Jira repeats on a later page keeps its first place. */
   function itemsOf(data?: InfiniteData<Feed, string>) {

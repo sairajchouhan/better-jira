@@ -121,6 +121,11 @@ export const inbox = createInboxStore({
       );
     return res.json();
   },
+  fetchKept: async (query) => {
+    query.set("kept", "");
+    const res = await fetch(`/api/inbox?${query}`);
+    return res.status === 200 ? res.json() : undefined;
+  },
   openRow: openInboxRow,
   shown: () => get().inbox,
   fullPage: () => {

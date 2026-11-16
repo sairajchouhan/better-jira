@@ -182,6 +182,60 @@ export async function unreadGroups(): Promise<{ id: string; head: string }[]> {
   return out;
 }
 
+/** What GET /api/inbox answers without a cursor: a tab's first page, and for the whole feed every unread row (the badge). */
+export type FirstPage = InboxFeed & { unread?: { id: string; head: string }[] };
+/** The last first page Jira gave, per bell tab. Jira's feed takes 3–4 s to read (feed, then its groups); a browser with no
+ *  page of its own shows this one at once and reads Jira's meanwhile, as one with a stored page does (R4-inbox-D5). Linear's
+ *  inbox is instant because notifications are synced models in its local pool; this server is the nearest local copy. */
+const kept = new Map<string, FirstPage>();
+/** Bumped as each write to the feed starts and ends: a page read across a write may predate it, so it isn't kept. */
+let writes = 0;
+/** Jira's first page, fresh, kept for browsers that have none. */
+export async function firstPage(kind?: "direct" | "watching"): Promise<FirstPage> {
+  const at = writes;
+  const [page, unread] = await Promise.all([
+    feed(kind),
+    kind ? undefined : unreadGroups().catch(() => undefined),
+  ]);
+  const result: FirstPage = { ...page, ...(unread ? { unread } : {}) };
+  if (at === writes) kept.set(kind ?? "all", result);
+  return result;
+}
+/** The kept first page, without asking Jira; undefined until one was read since the server started or last wrote. */
+export const keptFirstPage = (kind?: "direct" | "watching") => kept.get(kind ?? "all");
+/** Runs a write to the feed's read state (read, unread, read all): the kept pages go, since they may now be wrong, and a fresh one is read
+ *  once it lands. */
+export async function writing<T>(write: () => Promise<T>): Promise<T> {
+  writes++;
+  kept.clear();
+  try {
+    return await write();
+  } finally {
+    writes++;
+    kept.clear();
+    refreshKept();
+  }
+}
+let refreshing = false,
+  again = false;
+/** Reads the whole feed's first page into the kept copy: at start, and after writes (one at a time, the last write wins). */
+export function refreshKept() {
+  if (refreshing) {
+    again = true;
+    return;
+  }
+  refreshing = true;
+  void firstPage()
+    .catch((e) => console.error("[inbox] refresh", String(e).slice(0, 200)))
+    .finally(() => {
+      refreshing = false;
+      if (again) {
+        again = false;
+        refreshKept();
+      }
+    });
+}
+
 /** Read or unread, per row: a row is a Jira notification group, so the whole group changes. */
 export async function mark(groups: string[], read: boolean) {
   const field = read ? "markNotificationsByGroupIdAsRead" : "markNotificationsByGroupIdAsUnread";

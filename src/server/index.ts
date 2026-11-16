@@ -23,6 +23,8 @@ const localOnly =
 
 // Field discovery, then the poll loops; the API serves only once the mirror can project issues.
 await mirror.start();
+// The inbox's first page is read now, so the first browser to open it has rows at once (R4-inbox-D5).
+inbox.refreshKept();
 
 const server = serve({
   hostname: "127.0.0.1",
@@ -110,16 +112,16 @@ const server = serve({
         try {
           const after = params.get("after") || undefined,
             kind = category === "direct" || category === "watching" ? category : undefined;
+          // `kept`: the server's last first page, for a browser with none of its own to show while Jira's is read (R4-inbox-D5).
+          if (params.has("kept")) {
+            const page = inbox.keptFirstPage(kind);
+            return page
+              ? Response.json({ ...page, writable: canWrite(serverConfiguration().site) })
+              : new Response(null, { status: 204 });
+          }
           // The badge counts every unread row, not just the loaded pages; without the list it falls back to them.
-          const [page, unread] = await Promise.all([
-            inbox.feed(kind, after),
-            after || kind ? undefined : inbox.unreadGroups().catch(() => undefined),
-          ]);
-          return Response.json({
-            ...page,
-            ...(unread ? { unread } : {}),
-            writable: canWrite(serverConfiguration().site),
-          });
+          const page = after ? await inbox.feed(kind, after) : await inbox.firstPage(kind);
+          return Response.json({ ...page, writable: canWrite(serverConfiguration().site) });
         } catch (e) {
           console.error("[inbox]", String(e).slice(0, 300));
           return Response.json({ error: "Could not read Jira notifications." }, { status: 503 });
@@ -144,14 +146,14 @@ const server = serve({
           : [];
         try {
           if ((body.action === "read" || body.action === "unread") && groups.length)
-            await inbox.mark(groups, body.action === "read");
+            await inbox.writing(() => inbox.mark(groups, body.action === "read"));
           else if (body.action === "read-all") {
             // The groups it changed let ⌥U's undo reach rows that were never loaded.
             const except = Array.isArray(body.except)
               ? body.except.filter((h): h is string => typeof h === "string")
               : [];
-            return Response.json({ ok: true, groups: await inbox.readAll(except) });
-          } else if (body.action === "seen") await inbox.clearUnseen();
+            return Response.json({ ok: true, groups: await inbox.writing(() => inbox.readAll(except)) });
+          } else if (body.action === "seen") await inbox.clearUnseen(); // the bell count only: rows and read state stay
           else return Response.json({ error: "Invalid request" }, { status: 400 });
           return Response.json({ ok: true });
         } catch (e) {
