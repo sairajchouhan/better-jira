@@ -48,12 +48,14 @@ import {
   clearFilters as clearInboxFilters,
   deleteAll,
   deleteRow,
+  bulkApplies,
   hasSelectedRow,
   markAllRead,
   moveRow,
   openRow,
   openSnooze,
   priorityInbox,
+  selectedRow,
   showTab,
   toggleRead,
   undoInbox,
@@ -76,10 +78,21 @@ type Shortcut = {
   when?: (s: State, issue: Issue | undefined) => boolean;
   /** The ⌘K row's name when it depends on state, e.g. "Unfavorite issue"; fixed ⌘K names are command-names.ts's. */
   label?: () => string;
+  /** Acts on the selected notification: ⌘K lists it in the notification's own group under its title (Linear's `OD`). */
+  notification?: boolean;
   /** Kept out of ⌘K, as Linear's `hideInCommandMenu`: the key works, the command isn't listed. */
   hideInCommandMenu?: boolean;
   /** Faint text after the ⌘K row's name, read as the list renders (Linear's action `detail`). */
   detail?: () => string | undefined;
+};
+/** U's ⌘K name (`dEn`): "Mark as unread" on a read notification, else "Mark as read". */
+export const markReadName = (row: { unread: boolean } | undefined) => (row?.unread === false ? "Mark as unread" : "Mark as read");
+/** What each bulk inbox command needs to act on (`bulkApplies`). */
+const INBOX_BULK: Partial<Record<string, Parameters<typeof bulkApplies>[0]>> = {
+  "inbox-read-all": "unread",
+  "inbox-delete-read": "read",
+  "inbox-delete-all": "all",
+  "inbox-delete-completed": "completed",
 };
 /** The issue a menu item runs a shortcut on (`runShortcut(id, key)`); a right-click menu's issue never becomes the selection. */
 let acting: string | null = null;
@@ -402,28 +415,33 @@ export const shortcuts: Shortcut[] = [
     hotkey: ["G", "I"],
     run: () => navigate({ inbox: true, selected: null, panel: false }),
   },
+  // Linear's notification actions (`jEn` in startup-root.CnUSfl4j.js), in its order. The selected notification's own (`notification`)
+  // are its ⌘K title group (`OD`): Mark as read / unread, Snooze, Delete; the rest are the Notifications group (`kD`). Each is listed
+  // only while it would act (its `applicable`). Enablement is computed on store changes and per key, and the inbox's rows live
+  // outside the store: `when` reads them then.
   ...(
     [
-      ["inbox-read", "Mark as read / unread", "U", () => toggleRead()],
-      ["inbox-read-all", "Mark all notifications as read", "Alt+U", () => void markAllRead()],
-      ["inbox-delete", "Delete notification", "E", () => deleteRow()],
-      ["inbox-backspace", "Delete notification", "Backspace", () => deleteRow()],
-      [
-        "inbox-delete-read",
-        "Delete all read notifications",
-        "Shift+Backspace",
-        () => deleteAll("read"),
-      ],
-      ["inbox-snooze", "Snooze notification…", "H", () => hasSelectedRow() && openSnooze({ invoked: "keyboard" })],
+      ["inbox-read", "Mark as read / unread", "U", () => toggleRead(), true],
+      ["inbox-read-all", "Mark all notifications as read", "Alt+U", () => void markAllRead(), false],
+      ["inbox-snooze", "Snooze notification…", "H", () => hasSelectedRow() && openSnooze({ invoked: "keyboard" }), true],
+      // `$Tn` binds ⌫; E runs it too, kept out of ⌘K (Inbox.Dwc57oAi.js `It`, `hideInCommandMenu`).
+      ["inbox-delete", "Delete notification", "E", () => deleteRow(), true],
+      ["inbox-backspace", "Delete notification", "Backspace", () => deleteRow(), true],
+      ["inbox-delete-read", "Delete all read notifications", "Shift+Backspace", () => deleteAll("read"), false],
+      // `YJ` and `qJ` have no key; reviews, the rest of `qJ`'s name, are out of scope (.raj/linear-differences.md).
+      ["inbox-delete-all", "Delete all notifications", undefined, () => deleteAll("all"), false],
+      ["inbox-delete-completed", "Delete read notifications for completed issues", undefined, () => deleteAll("completed"), false],
     ] as const
-  ).map(([id, name, hotkey, run]): Shortcut => ({
+  ).map(([id, name, hotkey, run, notification]): Shortcut => ({
     id,
     name,
     hotkey,
     group: "Inbox",
     run,
-    // Enablement is computed on store changes, and the inbox selection lives outside the store: row actions check it when they run.
-    when: (s) => s.inbox,
+    notification,
+    hideInCommandMenu: id === "inbox-delete",
+    when: (s) => s.inbox && (notification ? hasSelectedRow() : bulkApplies(INBOX_BULK[id] ?? "all")),
+    label: id === "inbox-read" ? () => markReadName(selectedRow()) : undefined,
   })),
   {
     id: "inbox-undo",

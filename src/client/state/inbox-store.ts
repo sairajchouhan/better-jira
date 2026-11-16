@@ -24,6 +24,7 @@ import {
   type InboxView,
   type Local,
   type ShownView,
+  unreadCount,
   withoutFilter,
   needsWholeFeed,
   LOADING_ORDER,
@@ -698,6 +699,24 @@ export function createInboxStore(ports: InboxPorts) {
     return () => cancel();
   }
   const hasSelectedRow = () => !!selectedRow();
+  /** Whether a bulk action has anything to act on, as Linear's (startup-root.CnUSfl4j.js) lists it in ⌘K only then: Mark all
+   *  as read (`gEn`) while anything in Jira's feed is unread, less deletes and snoozes (the badge's count); Delete all (`REn`)
+   *  while any row shows; Delete all read (`IEn`) while a read row shows; Delete … for completed issues (`PEn`) while a row of a
+   *  done, canceled or duplicate issue shows that isn't snoozed, read or not. */
+  function bulkApplies(which: "unread" | "all" | "read" | "completed") {
+    if (which === "unread") {
+      const data = queryClient.getQueryData<InfiniteData<Feed, string>>(["inbox", "all"]);
+      return unreadCount(data?.pages[0]?.unread, itemsOf(data), localState(), get().clock) > 0;
+    }
+    const now = get().clock;
+    return shownRows().some((r) =>
+      which === "read"
+        ? !r.unread
+        : which === "completed"
+          ? !((localState()[r.head]?.snoozed ?? 0) > now) && closed(r)
+          : true,
+    );
+  }
   /** Linear's ⌥1 and ⌥2: the priority inbox's tabs. */
   const showTab = (tab: InboxView["tab"]) => changeView({ tab });
   const priorityInbox = () => viewState().priorityInbox;
@@ -768,6 +787,7 @@ export function createInboxStore(ports: InboxPorts) {
     tidyLocal,
     loadAll,
     hasSelectedRow,
+    bulkApplies,
     showTab,
     priorityInbox,
     undoInbox,

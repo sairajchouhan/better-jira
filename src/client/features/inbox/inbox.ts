@@ -167,6 +167,8 @@ export const {
   snoozeRow,
   unsnoozeRow,
   hasSelectedRow,
+  bulkApplies,
+  selectedRow,
   showTab,
   priorityInbox,
 } = inbox;

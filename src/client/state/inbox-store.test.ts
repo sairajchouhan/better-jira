@@ -683,3 +683,24 @@ test("D12: Oldest first waits for every page, then puts the oldest notification 
   expect(order().loading).toBeUndefined();
   expect(order().rows[0]!.id).toBe("old");
 });
+
+test("⌘K lists each bulk inbox action only while it would act, as Linear's applicable (gEn, REn, IEn, PEn)", () => {
+  const a = setup();
+  // Three unread rows of open issues: Mark all as read and Delete all apply; Delete all read and completed don't.
+  expect(["unread", "all", "read", "completed"].map((w) => a.store.bulkApplies(w as "all"))).toEqual([true, true, false, false]);
+  // A done issue's row counts for completed while still unread, as Linear's PEn lists it (includeUnreadNotifications).
+  a.items[0]!.status = "Done";
+  expect(a.store.bulkApplies("completed")).toBe(true);
+  a.items[1]!.unread = false;
+  expect(a.store.bulkApplies("read")).toBe(true);
+  // Nothing unread left in Jira's feed or here: Mark all as read is gone.
+  for (const r of a.items) r.unread = false;
+  expect(a.store.bulkApplies("unread")).toBe(false);
+  // A snoozed done row is not one Linear's completed deletes (`eEn`: !snoozedUntilAt).
+  a.store.snoozeRow(Date.now() + 60_000, a.items[0]);
+  expect(a.store.bulkApplies("completed")).toBe(false);
+  // Every row deleted: nothing for Delete all.
+  for (const r of a.items) a.store.deleteRow(r);
+  expect(a.store.bulkApplies("all")).toBe(false);
+  toasts.dismissAll();
+});

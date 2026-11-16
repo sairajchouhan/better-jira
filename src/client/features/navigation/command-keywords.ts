@@ -41,6 +41,9 @@ export const COMMAND_KEYWORDS: Readonly<Record<string, string>> = {
   // Notifications.
   "inbox-snooze": "snooze reminder sleep",
   "inbox-delete-read": "clear",
+  // YJ and qJ (`keywords: "clear"`).
+  "inbox-delete-all": "clear",
+  "inbox-delete-completed": "clear",
   // Issues.
   new: "new ticket task make",
   due: "deadline due",
