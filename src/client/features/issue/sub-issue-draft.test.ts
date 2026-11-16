@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import { type Board, type Issue } from "@/shared/issue-model";
-import { nextSubIssueProperties, subIssueDefaults, subIssueStatus } from "./sub-issue-draft";
+import { emptySubIssueDraft, nextSubIssueProperties, reopenedSubIssueDraft, subIssueDefaults, subIssueStatus } from "./sub-issue-draft";
+import { normalizeDocument } from "@/shared/document";
 import { ME } from "@/client/state/store";
 
 test("R3-create-D10: a new inline sub-issue starts at its parent's priority, as Linear's Issue.create does", () => {
@@ -75,4 +76,25 @@ test("C16: with Auto-assign to self on, a sub-issue nothing assigns starts with 
   expect(subIssueDefaults(parent, board, [], off).assignee).toBeNull();
   const child = { key: "P-2", boards: [1], parent: "P-1", assignee: ann } as Issue;
   expect(subIssueDefaults({ ...parent, assignee: ann }, board, [child], on).assignee).toEqual(ann);
+});
+
+test("BJ-235: a sub-issue composer reopened after a create starts from the issue made last, as Linear's sub-issues section", () => {
+  const defaults = { parent: "P-1", status: "todo", priority: "High", assignee: null, labels: [] };
+  const previous = { ...defaults, status: "doing", priority: "Urgent", assignee: { id: "ann", name: "Ann" }, labels: ["ui"] };
+  // The empty composer left after ⌘⇧↵ holds the defaults; reopening it (after a collapse) takes the issue made last.
+  const empty = emptySubIssueDraft(defaults);
+  expect(reopenedSubIssueDraft(empty, previous, defaults).properties).toEqual({
+    ...defaults,
+    status: "doing",
+    priority: "Urgent",
+    assignee: { id: "ann", name: "Ann" },
+    labels: ["ui"],
+  });
+  // Nothing made yet, or Escape / Discard dropped it: the defaults.
+  expect(reopenedSubIssueDraft(empty, undefined, defaults)).toBe(empty);
+  // A draft with a title or description comes back as it was left.
+  const titled = { ...empty, title: "Half typed" };
+  expect(reopenedSubIssueDraft(titled, previous, defaults)).toBe(titled);
+  const described = { ...empty, description: normalizeDocument("Notes") };
+  expect(reopenedSubIssueDraft(described, previous, defaults)).toBe(described);
 });

@@ -4,10 +4,10 @@ import { useHotkey } from "@tanstack/react-hotkeys";
 import { get, set } from "@/client/state/store";
 import { actions } from "@/client/state/issue-actions";
 import { addLocalFiles, restoreLocalFiles } from "@/client/state/local-database";
-import { discardLateMedia, documentHasMedia, lateMediaDiscarded, normalizeDocument, type AdfDocument } from "@/shared/document";
+import { discardLateMedia, lateMediaDiscarded, normalizeDocument, type AdfDocument } from "@/shared/document";
 import { rankBetween } from "@/shared/view-model";
 import { childrenByParent } from "./sub-issue-model";
-import { emptySubIssueDraft, nextSubIssueProperties, readSubIssueDraft, saveSubIssueDraft, newSubIssueDraft, subIssueDraftKey, type SubIssueDraft } from "./sub-issue-draft";
+import { emptySubIssueDraft, nextSubIssueProperties, readSubIssueDraft, reopenedSubIssueDraft, saveSubIssueDraft, newSubIssueDraft, subIssueDraftFilled, subIssueDraftKey, type SubIssueDraft } from "./sub-issue-draft";
 
 /** Owns draft persistence, file restoration, late uploads, and submission for one keyed issue. */
 export function useSubIssueComposer(issue: Issue, board: Board, namespace: string, setCollapsed: (value: boolean) => void) {
@@ -97,10 +97,19 @@ export function useSubIssueComposer(issue: Issue, board: Board, namespace: strin
   }, []);
   const form = useRef<HTMLDivElement>(null),
     titleInput = useRef<HTMLInputElement>(null);
+  // The issue this composer made last, while the section stays mounted (Linear's `previousIssue`): a composer reopened after
+  // the section was collapsed starts from it; Escape and Discard drop it (`reopenedSubIssueDraft`, BJ-235).
+  const previous = useRef<IssueDraft | undefined>(undefined);
   const start = () => {
+    if (!creating) update(reopenedSubIssueDraft(pending.current, previous.current, initial()));
     setCollapsed(false);
     setCreating(true);
     requestAnimationFrame(() => titleInput.current?.focus());
+  };
+  // Linear's section toggle (`se`): collapsing closes the composer, keeping its draft and the issue made last.
+  const toggleSection = (open: boolean) => {
+    setCollapsed(!open);
+    if (!open) setCreating(false);
   };
   const close = () => {
     setCreating(false);
@@ -114,23 +123,15 @@ export function useSubIssueComposer(issue: Issue, board: Board, namespace: strin
   };
   const discard = () => {
     discardLateMedia(scope);
+    previous.current = undefined;
     setConfirming(false);
     update(emptySubIssueDraft(initial()));
     setEditor((n) => n + 1);
     close();
   };
   // Like Linear: a draft with content asks before it is thrown away; an empty one just closes.
-  const filled = () => {
-    const { title, description, files } = pending.current;
-    return (
-      !!title.trim() ||
-      files.length > 0 ||
-      JSON.stringify(description).includes('"text"') ||
-      documentHasMedia(description)
-    );
-  };
   const cancel = () => {
-    if (filled()) setConfirming(true);
+    if (subIssueDraftFilled(pending.current)) setConfirming(true);
     else discard();
   };
   // Escape first leaves the field for the composer itself, then cancels from there.
@@ -159,6 +160,7 @@ export function useSubIssueComposer(issue: Issue, board: Board, namespace: strin
       true,
     );
     if (!key) return;
+    previous.current = draft;
     update({
       title: "",
       description: normalizeDocument(""),
@@ -201,7 +203,7 @@ export function useSubIssueComposer(issue: Issue, board: Board, namespace: strin
   });
 
   return { state: { title, description, files, draft, editor, creating, confirming },
-    actions: { update, setProperties, addFiles, onLateMedia, start, discard, cancel, submit, setConfirming },
+    actions: { update, setProperties, addFiles, onLateMedia, start, toggleSection, discard, cancel, submit, setConfirming },
     // The editor's late-media scope; the composer applies its rules itself.
     meta: { form, titleInput, scope, onClickCapture } };
 }

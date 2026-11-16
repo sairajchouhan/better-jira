@@ -107,6 +107,23 @@ export const nextSubIssueProperties = (created: IssueDraft, defaults: IssueDraft
         assignee: created.assignee,
         labels: created.labels,
       };
+/** Whether the draft holds anything typed or attached, so closing it asks first and reopening keeps it. */
+export const subIssueDraftFilled = ({ title, description, files }: SubIssueDraft) =>
+  !!title.trim() || files.length > 0 || JSON.stringify(description).includes('"text"') || documentHasMedia(description);
+/**
+ * The draft a closed sub-issue composer reopens with (BJ-235). Linear's sub-issues section keeps the issue its composer made
+ * last (IssueDetailsPaneSidebar `[re,C]=useState()`, set by `onCreate:e=>{C(e),…}` on ⌘↵ and ⌘⇧↵ alike) and mounts every new
+ * composer from it (`ym`: `useState(()=>Cm(t.team,o,t,r))`); only Escape or Discard drops it (`oe=()=>{…,C(void 0)}`), while
+ * collapsing the section closes the composer and keeps it. A draft with content comes back as it was (Linear's `localDraft`).
+ */
+export const reopenedSubIssueDraft = (
+  draft: SubIssueDraft,
+  previous: IssueDraft | undefined,
+  defaults: IssueDraft,
+): SubIssueDraft =>
+  !previous || subIssueDraftFilled(draft)
+    ? draft
+    : { ...draft, properties: nextSubIssueProperties(previous, defaults, false) };
 export const emptySubIssueDraft = (properties: IssueDraft): SubIssueDraft => ({
   title: "",
   description: normalizeDocument(""),

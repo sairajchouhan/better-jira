@@ -216,7 +216,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
   const board = useStore((s) => issueBoard(issue, s))!;
   const {
     state: { title, description, files, draft, editor, creating, confirming },
-    actions: { update, setProperties, addFiles, onLateMedia, start, discard, cancel, submit, setConfirming },
+    actions: { update, setProperties, addFiles, onLateMedia, start, toggleSection, discard, cancel, submit, setConfirming },
     meta: { form, titleInput, scope, onClickCapture },
   } = useSubIssueComposer(issue, board, namespace, setCollapsed);
   const status = (child: Issue) => statusOf(boards, child);
@@ -347,7 +347,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
       aria-label="Sub-issues"
       className="mt-[14px] text-[13px]"
     >
-      <SectionDisclosure expanded={!collapsed} onExpandedChange={(open) => setCollapsed(!open)}>
+      <SectionDisclosure expanded={!collapsed} onExpandedChange={toggleSection}>
         {!!model.total && (
           <div className="-ml-1.5 mb-2 flex items-center gap-1.5 pr-2">
             <SectionDisclosure.Trigger label="Sub-issues" />
