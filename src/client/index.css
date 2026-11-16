@@ -113,6 +113,7 @@
   --menu: var(--card);
   --menu-line: lch(91.9% 0 282);
   --menu-divider: lch(91.9% 0 282); /* bgBorderFaintThin */
+  --card-divider: lch(97.3% 0 282); /* a hover card's property line: the menu theme's bgBorderFaint (Linear `Vk`) */
   --menu-sel: lch(95% 0 282);
   --menu-shadow:
     lch(0 0 0 / 0.02) 0 6px 18px, lch(0 0 0 / 0.04) 0 3px 9px, lch(0 0 0 / 0.04) 0 1px 1px;
@@ -202,6 +203,7 @@
     --menu: lch(12.72% 0.85 272);
     --menu-line: lch(21.36% 1.93 272);
     --menu-divider: lch(20.28% 1.93 272);
+    --card-divider: lch(17.04% 1.93 272);
     --menu-sel: lch(20.82% 1.3 272);
     --menu-shadow:
       lch(0 0 0 / 0.125) 0 3px 8px, lch(0 0 0 / 0.125) 0 2px 5px, lch(0 0 0 / 0.125) 0 1px 1px;

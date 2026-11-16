@@ -4,6 +4,7 @@ import {
   useLayoutEffect,
   useRef,
   useState,
+  type ComponentProps,
   type CSSProperties,
   type ReactNode,
   type RefObject,
@@ -44,21 +45,28 @@ export function HoverCard({
   label,
   display = "inline-flex",
   delay = TOOLTIP_TIMING.card.delay,
+  isDisabled = false,
   children,
 }: {
   /** The card body, mounted only while the card is open. */
   content: ReactNode;
-  placement?: Extract<Placement, "top" | "top-start" | "left">;
+  /** `right` is the sidebar's (`h$` passes `position: "right"` to its `wZ`): beside the row, centred on it. */
+  placement?: Extract<Placement, "top" | "top-start" | "left" | "right">;
   label?: string;
-  display?: "inline-flex" | "inline";
+  /** `block` is a full-width row's trigger (the sidebar's `_$.tooltipBlock`): the row keeps its whole width. */
+  display?: "inline-flex" | "inline" | "block";
   /** Linear's `transitionDelay`: how long the pointer rests before the card opens (550ms unless the trigger says otherwise; an issue
    *  sidebar's pull request row says 150). */
   delay?: number;
+  /** No card while this holds (a favorite row while any favorite is dragged, `d5n`), and an open one closes. */
+  isDisabled?: boolean;
   children: ReactNode;
 }) {
   return (
     <Tooltip.Root timing={{ ...TOOLTIP_TIMING.card, delay }}>
-      <HoverCardTrigger display={display}>{children}</HoverCardTrigger>
+      <HoverCardTrigger display={display} isDisabled={isDisabled}>
+        {children}
+      </HoverCardTrigger>
       <HoverCardSurface placement={placement} label={label}>
         <HoverCardZone label={label}>{content}</HoverCardZone>
       </HoverCardSurface>
@@ -143,11 +151,30 @@ const CARD_TABBABLE = 'a[href], button:not(:disabled), input:not(:disabled), [ta
  *  whose card sits at the end of the page). Focus handed back, as the card or a menu the trigger opened closes, doesn't open it
  *  again. Only what happens in the trigger's own DOM counts: a menu it opened is portalled out, and its events still bubble here
  *  through React (its focus reopened the card). */
-function HoverCardTrigger({ display, children }: { display: "inline-flex" | "inline"; children: ReactNode }) {
+const TRIGGER_DISPLAY = { "inline-flex": "inline-flex min-w-0 max-w-full", inline: "inline", block: "flex w-full min-w-0" } as const;
+
+type TriggerEvent = { currentTarget: Pick<Element, "contains">; target: EventTarget | null };
+/** Whether a pointer or focus event on the trigger is its own (not from a portal'd child), so it opens or closes the card. None
+ *  is while the card is disabled (a favorite row while a favorite is dragged). */
+export const ownsEvent = (isDisabled: boolean, event: TriggerEvent) =>
+  !isDisabled && event.target instanceof Node && event.currentTarget.contains(event.target);
+
+function HoverCardTrigger({
+  display,
+  isDisabled,
+  children,
+}: {
+  display: keyof typeof TRIGGER_DISPLAY;
+  isDisabled: boolean;
+  children: ReactNode;
+}) {
   const { isOpen, surfaceRef, triggerRef, actions } = useTooltip();
   const restoring = useRef(false);
-  const own = (event: { currentTarget: Element; target: EventTarget | null }) =>
-    event.target instanceof Node && event.currentTarget.contains(event.target);
+  const own = (event: TriggerEvent) => ownsEvent(isDisabled, event);
+  const close = useEffectEvent(() => actions.close());
+  useEffect(() => {
+    if (isDisabled) close();
+  }, [isDisabled]);
   useEffect(() => {
     const trigger = triggerRef.current;
     if (!trigger) return;
@@ -165,7 +192,7 @@ function HoverCardTrigger({ display, children }: { display: "inline-flex" | "inl
   return (
     <span
       ref={triggerRef as RefObject<HTMLSpanElement | null>}
-      className={display === "inline" ? "inline" : "inline-flex min-w-0 max-w-full"}
+      className={TRIGGER_DISPLAY[display]}
       data-hover-card-trigger=""
       onPointerEnter={(event) => own(event) && event.pointerType !== "touch" && actions.enter()}
       onPointerMove={(event) => own(event) && event.pointerType !== "touch" && actions.move()}
@@ -195,8 +222,8 @@ function HoverCardTrigger({ display, children }: { display: "inline-flex" | "inl
   );
 }
 
-/** Linear's `Vwe` wrapper: the card's whole box with a transparent `Pwe` (4px) pad on its main axis (`Gwe`, index.css), so it meets
- *  its trigger. Leaving it closes the card unless the pointer went back to the trigger, or went nowhere just after a press inside.
+/** Linear's `Vwe` wrapper: the card's whole box with a transparent 8px pad on its main axis (`Gwe`, `TOOLTIP.cardPad`, index.css),
+ *  so it meets its trigger. Leaving it closes the card unless the pointer went back to the trigger, or went nowhere just after a press inside.
  *  Escape from inside it closes only the card. */
 function HoverCardZone({ label, children }: { label?: string; children: ReactNode }) {
   const { surfaceRef, triggerRef, actions } = useTooltip();
@@ -223,7 +250,7 @@ function HoverCardZone({ label, children }: { label?: string; children: ReactNod
     >
       <div
         data-hover-card={label}
-        className="w-max min-w-[220px] max-w-[380px] rounded-lg border border-[var(--menu-line)] bg-[var(--menu)] px-2 py-[5px] text-xs text-[var(--menu-fg)] shadow-[var(--menu-shadow)]"
+        className="w-max min-w-[220px] max-w-[520px] rounded-lg border border-[var(--menu-line)] bg-[var(--menu)] px-2 py-[5px] text-xs text-[var(--menu-fg)] shadow-[var(--menu-shadow)]"
       >
         {children}
       </div>
@@ -248,6 +275,33 @@ function SafeArea() {
     return () => clearTimeout(timer);
   }, [surfaceRef, triggerRef]);
   return style && <div aria-hidden className="hover-card-safe-area" style={style} onPointerLeave={() => setStyle(null)} />;
+}
+
+/** Linear's `TA`, the body of an issue, project or document card inside the surface's 5px 8px padding: a 6px-padded column, 6px
+ *  apart, at least 220px and at most 380px wide (`Bdt.popoverContentContainer`). The surface itself is at most 520px (`T_`). */
+export function CardBody({ className = "", ...props }: ComponentProps<"div">) {
+  return <div className={`flex min-w-[220px] max-w-[380px] flex-col gap-1.5 p-1.5 ${className}`} {...props} />;
+}
+
+/** Linear's `Vk` (`separated`, `legacySeparation`): a card's property row under a 1px bgBorder line, 10px below it and 4px below
+ *  what comes before; wrapping, 16px apart across and 8px down (`gap: 16, wrapGap: 8`). Gone when empty (`:empty`). */
+export function CardProperties({ className = "", ...props }: ComponentProps<"div">) {
+  return (
+    <div
+      className={`mt-1 flex flex-wrap items-center gap-x-4 gap-y-2 border-t border-(--card-divider) pt-2.5 empty:hidden ${className}`}
+      {...props}
+    />
+  );
+}
+
+/** One property in a card's row (`metadataItem`): its 16px icon, then its name in mini (12px) labelBase, 6px apart. */
+export function CardProperty({ icon, children, title }: { icon: ReactNode; children: ReactNode; title?: string }) {
+  return (
+    <span className="flex min-w-0 items-center gap-1.5 text-xs text-fg" title={title} data-tip-plain="">
+      <span className="flex size-4 shrink-0 items-center justify-center">{icon}</span>
+      <span className="truncate">{children}</span>
+    </span>
+  );
 }
 
 /** Linear's `Ak` list in a card: the first `max`, then "Show N more" for the rest; never "Show 1 more" (`canHide`: two or more). */
