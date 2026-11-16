@@ -95,7 +95,7 @@ test("an epic's progress is its done share in whole percent out of every issue u
   expect([...order].sort((a, b) => a - b)).toEqual(order);
 });
 
-test("the view favorite's card shows the view's own filters as read-only chips: no button, no remove, tooltip appearance", () => {
+test("the view favorite's card shows the view's own filters as read-only chips: no button, no remove, tooltip appearance", async () => {
   const html = render(<FavoriteCard kind="view" thing={{ view: view(rules) }} />);
   expect(html).toContain('data-view-hover="v1"');
   expect(html).toContain("Triage");
@@ -104,6 +104,13 @@ test("the view favorite's card shows the view's own filters as read-only chips: 
   expect(html).toContain("data-read-only");
   expect(html).not.toContain("<button");
   expect(html).not.toMatch(/aria-label="Remove/);
+  // Outside the filter bar the chips still take the chip tokens, at the chip's own 12px (Linear's micro rounds up to 12px live),
+  // and draw no value icons.
+  const css = await Bun.file(new URL("../../components/filter-block.css", import.meta.url)).text();
+  const tooltip = css.match(/\.ui-filter-blocks\[data-appearance="tooltip"\] \{([^}]*)\}/)?.[1] ?? "";
+  for (const token of ["--chip-border", "--chip-bg", "--chip-divider"]) expect(tooltip).toContain(token);
+  expect(css).toMatch(/\[data-appearance="tooltip"\] \.ui-filter-icons \{\s*display: none;/);
+  expect(css).not.toMatch(/data-appearance="tooltip"[^{]*\{[^}]*font-size: 11px/);
   // A view filtering nothing shows no chip row (`Y8n` returns null).
   expect(render(<FavoriteCard kind="view" thing={{ view: view({ id: "root", join: "and", children: [] }) }} />)).not.toContain("data-appearance");
 });

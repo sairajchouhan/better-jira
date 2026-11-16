@@ -128,11 +128,22 @@
   .ui-filter-block[data-read-only] {
     cursor: default;
   }
-  /* `appearance: "tooltip"` (FilterBlockStyles `sectionTooltip`, `buttonTooltip`): micro text, and a section may shrink. */
+  /* `appearance: "tooltip"` (FilterBlockStyles `sectionTooltip`, `buttonTooltip`; a view card's filters, `Y8n`): the bar's chip
+     look on the card's own surface, so it takes the same tokens outside a bar. Its micro text is Linear's
+     `round(up, .6875rem, 2px)`, 12px live, as the chip already is; a section may shrink. Live, the card's chips draw no value
+     icons. */
+  .ui-filter-blocks[data-appearance="tooltip"] {
+    --chip-border: var(--border-alpha-thin);
+    --chip-bg: var(--btn);
+    --chip-hover: var(--control-secondary-hover);
+    --chip-divider: var(--border-solid-thin);
+  }
   .ui-filter-blocks[data-appearance="tooltip"] .ui-filter-segment,
   .ui-filter-blocks[data-appearance="tooltip"] .ui-filter-block {
     min-width: 0;
-    font-size: 11px;
+  }
+  .ui-filter-blocks[data-appearance="tooltip"] .ui-filter-icons {
+    display: none;
   }
   .ui-filter-actions {
     display: flex;

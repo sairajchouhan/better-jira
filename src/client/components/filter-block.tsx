@@ -104,7 +104,7 @@ export function valueIcons(icons: ReactNode[], show: "each" | "single" = "each")
 export const FilterBar = Object.assign(FilterBarRoot, {
   /** The blocks and the trailing "+" add button, wrapping. */
   Blocks: ({ appearance, children }: { appearance?: "tooltip"; children: ReactNode }) => (
-    // Linear's `appearance: "tooltip"` (a view card's filters, `Y8n`): micro (11px) sections that may shrink to nothing.
+    // Linear's `appearance: "tooltip"` (a view card's filters, `Y8n`): the bar's chips on the card, sections that may shrink.
     <div className="ui-filter-blocks" data-appearance={appearance}>
       {children}
     </div>
