@@ -27,13 +27,14 @@ test("BJ-244: ⌘K names the targeted issue's field commands as Linear's command
   ]);
 });
 
-test("BJ-244: relation, parent and copy commands take Linear's ⌘K wording; the shortcuts panel keeps the registry name", () => {
+test("BJ-244: parent, link, rename and copy commands take Linear's ⌘K wording; the shortcuts panel keeps the registry name", () => {
   const target = issue({ parent: "ABC-1" });
-  expect(nameOf("blocked", target)).toBe("Mark ABC-7 as blocked by…");
-  expect(nameOf("duplicate", target)).toBe("Mark ABC-7 as duplicate of…");
   expect(nameOf("parent-set", target)).toBe("Change parent issue…");
   expect(nameOf("parent-set", issue())).toBe("Set parent issue…");
+  expect(nameOf("link", target)).toBe("Add link…");
+  expect(nameOf("rename", target)).toBe("Rename issue…");
   expect(nameOf("copy-id", target)).toBe("Copy issue ID");
+  expect(nameOf("copy-branch", target)).toBe("Copy git branch name");
   expect(nameOf("copy-link", target)).toBe("Copy title as link");
   expect(nameOf("team-open")).toBe("Open space…");
   expect(nameOf("favorite-open")).toBe("Open favorite…");

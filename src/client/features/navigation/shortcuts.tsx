@@ -623,7 +623,7 @@ export const shortcuts: Shortcut[] = [
     id: "favorite",
     name: "Mark as favorite",
     label: () =>
-      get().favorites.includes(selected()?.key ?? "") ? "Unfavorite issue" : "Mark as favorite",
+      get().favorites.includes(selected()?.key ?? "") ? "Unfavorite issue" : "Favorite issue",
     group: "Issues",
     hotkey: "Alt+F",
     when: (s) => !viewOf(s) || !boardVisible(s),

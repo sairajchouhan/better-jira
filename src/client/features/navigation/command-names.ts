@@ -17,16 +17,14 @@ export const COMMAND_NAMES: Readonly<Record<string, string>> = {
   "favorite-open": "Open favorite…",
   "team-open": "Open space…",
   "view-open": "Open view…",
-  // yG's `Rename ${modelName}`, the issue description focus, `Change subscribers…`.
-  rename: "Rename issue",
+  // The issue's Rename, description focus and subscribers, as live ⌘K lists them.
+  rename: "Rename issue…",
   description: "Focus issue description",
   subscribers: "Change subscribers…",
-  // ctrl L and ⌘⇧O.
-  link: "Add a link…",
-  "sub-issue": "Add sub-issue…",
-  // zmt, ⌘⇧. and uM (whose name has no contextual branch).
+  // ctrl L, as live ⌘K lists it.
+  link: "Add link…",
+  // zmt and uM (whose name has no contextual branch).
   "copy-id": "Copy issue ID",
-  "copy-branch": "Copy branch name",
   "copy-link": "Copy title as link",
   // ⇧F.
   "filter-last": "Clear last filter",
@@ -41,8 +39,8 @@ export const COMMAND_ALT_NAMES: Readonly<Record<string, string>> = {
 
 type Lookup = (key: string) => Issue | undefined;
 
-/** ⌘K's name for an issue command whose Linear name reads the targeted issue: set or change, and the relation actions'
- *  identifier. Undefined for a command whose name doesn't depend on the issue. */
+/** ⌘K's name for an issue command whose Linear name reads the targeted issue: set or change. Undefined for a command whose
+ *  name doesn't depend on the issue. */
 export function issueCommandName(id: string, issue: Issue | undefined, lookup: Lookup): string | undefined {
   switch (id) {
     case "assign":
@@ -68,15 +66,6 @@ export function issueCommandName(id: string, issue: Issue | undefined, lookup: L
     // LightboxEditorProvider `ii`: `Change parent issue…` once it has one.
     case "parent-set":
       return issue?.parent ? "Change parent issue…" : "Set parent issue…";
-    // The M chords name the targeted issue: `Mark ${identifier} as blocked by…`.
-    case "blocked":
-      return issue ? `Mark ${issue.key} as blocked by…` : "Mark as blocked by…";
-    case "blocking":
-      return issue ? `Mark ${issue.key} as blocking…` : "Mark as blocking…";
-    case "related":
-      return issue ? `Mark ${issue.key} as related to…` : "Mark issue as related to…";
-    case "duplicate":
-      return issue ? `Mark ${issue.key} as duplicate of…` : "Mark issue as duplicate of…";
   }
   return undefined;
 }
