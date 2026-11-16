@@ -58,3 +58,8 @@ test("tooltips, hover cards and the edge tooltip take Linear's `Rwe` and `B_` ti
   // The issue sidebar's pull request row: `transitionDelay: 150`.
   expect(PULL_REQUEST_ROW_CARD_DELAY).toBe(150);
 });
+
+test("parseTip: a plain title (data-tip-plain) is text as it stands, so a name ending in (…) is not drawn as caps", () => {
+  expect(parseTip("Ops (EU)", true)).toEqual([{ text: "Ops (EU)", keys: [], keysFirst: false }]);
+  expect(parseTip("Ops (EU)")[0]!.keys).toEqual([["EU"]]);
+});

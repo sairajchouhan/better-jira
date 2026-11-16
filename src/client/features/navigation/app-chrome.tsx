@@ -97,6 +97,10 @@ export const SIDEBAR_TIPS = {
   search: sidebarTip("Search", hotkeyOf("search")),
 };
 
+/** A space row's tooltip, as Linear's team Home row (`n0` with `r4`): the space's name, then Ctrl ⇧ N for the first nine
+ *  (`keyboardShortcut` `{key: n + 1, ctrl, shift}` while n < 9; our `team-N`); past nine, the name alone. */
+export const spaceTip = (name: string, index: number) => sidebarTip(name, hotkeyOf(`team-${index + 1}`));
+
 export function Sidebar({ boards }: { boards: Board[] }) {
   const views = useSavedViews();
   const hidden = useStore((s) => s.sidebarHidden);
@@ -194,9 +198,14 @@ export function Sidebar({ boards }: { boards: Board[] }) {
             onAdd={() => ui.send({ type: "overlay.open", overlay: "add-board" })}
           />
           <SectionDisclosure.Panel>
-          {boards.map((b) => {
+          {boards.map((b, index) => {
             const item = (
-              <SidebarLink key={b.id} row={{ place: { to: "board", board: b.id } }} to={{ board: b.id, selected: null, panel: false }}>
+              <SidebarLink
+                key={b.id}
+                row={{ place: { to: "board", board: b.id } }}
+                to={{ board: b.id, selected: null, panel: false }}
+                {...spaceTip(b.name, index)}
+              >
                 <span className="grid size-4 shrink-0 place-items-center rounded-[4px] bg-sel text-[9px] font-semibold text-fg-2">
                   {initialOf(b.name)}
                 </span>

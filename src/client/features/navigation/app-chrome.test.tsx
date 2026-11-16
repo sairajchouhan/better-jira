@@ -1,7 +1,7 @@
 import { afterEach, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { commit, get } from "@/client/state/store";
-import { PeekCloseZone, SIDEBAR_PEEK, SIDEBAR_TIPS } from "./app-chrome";
+import { PeekCloseZone, SIDEBAR_PEEK, SIDEBAR_TIPS, spaceTip } from "./app-chrome";
 import { sidebarTip } from "./sidebar-link";
 import { SidebarToggle } from "./breadcrumbs";
 
@@ -62,4 +62,13 @@ test("sidebar rule: no row draws its shortcut inline; Inbox, My issues and Searc
   expect(inbox).toContain("data-inbox-badge");
   expect(nav).toMatch(/place: \{ to: "my-issues" \}[^>]*\{\.\.\.SIDEBAR_TIPS\.myIssues\}/);
   expect(nav).toMatch(/runShortcut\("search"\)\} \{\.\.\.SIDEBAR_TIPS\.search\}/);
+});
+
+test("a space row's tooltip is Linear's team Home row: its name and Ctrl ⇧ N for the first nine, the name alone after (`r4`)", async () => {
+  expect(spaceTip("Mine", 0)).toEqual({ title: "Mine (Ctrl ⇧ 1)", "data-tip": "right" });
+  expect(spaceTip("Ops (EU)", 8)).toEqual({ title: "Ops (EU) (Ctrl ⇧ 9)", "data-tip": "right" });
+  expect(spaceTip("Ops (EU)", 9)).toEqual({ title: "Ops (EU)", "data-tip": "right", "data-tip-plain": "" });
+  const nav = await sidebarSource();
+  const spaces = nav.slice(nav.indexOf("boards.map("), nav.indexOf("</SidebarLink>", nav.indexOf("boards.map(")));
+  expect(spaces).toContain("{...spaceTip(b.name, index)}");
 });

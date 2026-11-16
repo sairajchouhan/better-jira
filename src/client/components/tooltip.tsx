@@ -41,10 +41,12 @@ export const tipCaps = (keys: string): string[][] =>
     .filter((chord) => chord.length > 0);
 
 /** One tooltip line: its text and its shortcut's chords. A title's lines are split on "\n"; "text (keys)" draws the caps after the
- *  text, "(keys) text" before it, as Linear's `N_` does with its default shortcutPosition "start" ("T to collapse group"). */
+ *  text, "(keys) text" before it, as Linear's `N_` does with its default shortcutPosition "start" ("T to collapse group"). A
+ *  `plain` title has no keys: every line is text as it stands. */
 export type TipLine = { text: string; keys: string[][]; keysFirst: boolean };
-export function parseTip(raw: string): TipLine[] {
+export function parseTip(raw: string, plain = false): TipLine[] {
   return raw.split("\n").map((line) => {
+    if (plain) return { text: line, keys: [], keysFirst: false };
     const first = /^\(([^()]+)\)\s+(.*)$/.exec(line);
     if (first) return { text: first[2]!, keys: tipCaps(first[1]!), keysFirst: true };
     const last = /^(.*?)\s*\(([^()]+)\)$/.exec(line);
@@ -354,7 +356,8 @@ function followTitles(setTarget: (target: Target | null) => void) {
 /** One titled element's tooltip: a Root mounted while the element is the target (its unmount hides it and starts the warm window,
  *  in which the next title opens at once). */
 function TitleTooltip({ target }: { target: Target }) {
-  const lines = parseTip(target.title);
+  // A `data-tip-plain` title has no shortcut, so a name ending in "(…)" stays text.
+  const lines = parseTip(target.title, target.element.hasAttribute("data-tip-plain"));
   return (
     <Tooltip.Root timing={TOOLTIP_TIMING.plain}>
       <TitleTrigger target={target} />

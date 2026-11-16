@@ -33,8 +33,12 @@ export const sidebarRowClass = (active: boolean, className = "") =>
  * The one rule for a sidebar row's shortcut: never drawn in the row, at rest or on hover; a row that has one shows it in Linear's row
  * tooltip to its right, the action's name then its caps ("Go to inbox G then I"). Linear's SidebarLink (`h$`) wraps itself in `wZ`
  * with `position: "right"` and `shortcutAction`, whose title is the action's name (`bDt`), e.g. `f_r` "Go to inbox" for Inbox.
+ * A row without one shows its name alone, marked plain so a name ending in "(…)" isn't drawn as caps.
  */
-export const sidebarTip = (name: string, keys: Keys) => ({ title: shortcutTitle(name, keys), "data-tip": "right" });
+export const sidebarTip = (name: string, keys: Keys) =>
+  keys.length
+    ? { title: shortcutTitle(name, keys), "data-tip": "right" }
+    : { title: name, "data-tip": "right", "data-tip-plain": "" };
 
 type RowProps = { row: SidebarRow } & Omit<ComponentProps<"a">, "aria-current">;
 
