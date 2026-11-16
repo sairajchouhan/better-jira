@@ -14,8 +14,8 @@ import { SectionDisclosure } from "@/client/components/section-disclosure";
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
 import { Fragment, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSubIssueComposer } from "./use-sub-issue-composer";
-import { Button as AriaButton, DropIndicator, GridList, GridListItem, useDragAndDrop } from "react-aria-components";
-import { passRowKeysToShortcuts } from "@/client/components/virtual-grid-list";
+import { DropIndicator, GridList, GridListItem, useDragAndDrop } from "react-aria-components";
+import { DragButton, passRowKeysToShortcuts, refocusRowAfterCancel } from "@/client/components/virtual-grid-list";
 import { useStoredState } from "@/client/state/stored-state";
 import { FieldMenuButton } from "@/client/components/pill-select";
 import { DisplayProperties, SelectRow, Toggle, ViewOptions } from "@/client/components/display-options";
@@ -249,8 +249,9 @@ export function SubIssues({ issue }: { issue: Issue }) {
     onDragStart: (event) => {
       dragging.current = String([...event.keys][0]);
     },
-    onDragEnd: () => {
+    onDragEnd: (event) => {
       dragging.current = null;
+      refocusRowAfterCancel(event);
     },
     getDropOperation: (target) => {
       if (target.type !== "item" || !dragging.current) return "cancel";
@@ -728,7 +729,7 @@ function SubIssueRow({
         });
       }}
     >
-      {draggable && <AriaButton slot="drag" className="sr-only" />}
+      {draggable && <DragButton />}
       {Array.from({ length: depth }, (_, level) => {
         level++;
         const left = level * 24 + 21.5,

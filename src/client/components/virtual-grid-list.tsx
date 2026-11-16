@@ -186,6 +186,24 @@ export function dragOf(
   return { moving: keys.filter((key) => selection.has(key) || set.has(key)), clearsSelection: false };
 }
 const NO_KEYS: ReadonlySet<string> = new Set();
+/**
+ * The row to focus after a drag was cancelled: React Aria's keyboard drag (Enter on the row's drag button) puts focus back on that
+ * button once it ends (DragManager `cancel()`, after `onDragEnd`), where Enter would pick the card up again. Linear has no drag
+ * button: after Escape mid-drag its card keeps focus and Enter opens it (live Linear, 16 Nov 2026, RAJ-68), so focus goes back to
+ * the row (BJ-369). Null when focus is anywhere else.
+ */
+export const rowAfterCancel = <E extends Pick<Element, "closest" | "matches">>(active: E | null | undefined) =>
+  active?.matches("[data-drag-button]") ? active.closest<HTMLElement>("[role=row]") : null;
+
+/** For a React Aria list drag's `onDragEnd`: a cancelled drag hands focus from the row's drag button back to the row. */
+export function refocusRowAfterCancel(event: { dropOperation: string }) {
+  if (event.dropOperation === "cancel") queueMicrotask(() => rowAfterCancel(document.activeElement)?.focus());
+}
+
+/** A draggable row's drag button: React Aria's, visually hidden, for screen readers and its keyboard drag. Pair it with
+ *  `refocusRowAfterCancel`. */
+export const DragButton = () => <Button slot="drag" data-drag-button className="sr-only" />;
+
 /** What a drag of `moving` carries: each row's key under the lists' own type, which an in-app drop reads, and its link. */
 export const listDragItems = (drop: Pick<ListDrop, "type" | "link">, moving: string[]) =>
   moving.map((key) => dragItem(drop.type, key, drop.link(key)));
@@ -490,10 +508,11 @@ export function VirtualGridList<T>({
         if (plan.clearsSelection) drop!.clearSelection();
       });
     },
-    onDragEnd: () => {
+    onDragEnd: (event) => {
       cancelAnimationFrame(startFrame.current);
       setDragged(new Set());
       document.documentElement.style.removeProperty(GAP_VAR);
+      refocusRowAfterCancel(event);
     },
     onDrop: async (event) => {
       const moving = await Promise.all(
@@ -597,7 +616,7 @@ const Row = memo(function Row<T>({ id, item, text, className, draggable, chosen,
         />
       )}
     >
-      {draggable && <Button slot="drag" className="sr-only" />}
+      {draggable && <DragButton />}
       {content(item)}
     </GridListItem>
   );

@@ -13,6 +13,7 @@ import {
   mountedIndices,
   ownsKey,
   rangeFor,
+  rowAfterCancel,
   windowOf,
   type ListDrop,
   listDragItems,
@@ -252,4 +253,23 @@ test("a dragged row carries its link for drops outside the app and its key under
       "text/html": `<a href="https://x.test/browse/${key}">https://x.test/browse/${key}</a>`,
     })),
   );
+});
+
+test("BJ-369: a cancelled keyboard drag hands focus from the drag button back to its row, so Enter opens the card", async () => {
+  const row = { focus: () => {} };
+  const element = (...matches: string[]) =>
+    ({ matches: (s: string) => matches.includes(s), closest: (s: string) => (s === "[role=row]" ? row : null) }) as unknown as Element;
+  expect(rowAfterCancel(element("[data-drag-button]"))).toBe(row as never);
+  // Focus anywhere else (the row itself, a badge, nothing) stays where it is.
+  expect(rowAfterCancel(element())).toBeNull();
+  expect(rowAfterCancel(null)).toBeNull();
+  // Board cards and sub-issue rows share the one drag button and refocus only on a cancel, never after a drop.
+  const list = await Bun.file(new URL("./virtual-grid-list.tsx", import.meta.url)).text();
+  expect(list).toContain('export const DragButton = () => <Button slot="drag" data-drag-button className="sr-only" />;');
+  expect(list).toContain('if (event.dropOperation === "cancel") queueMicrotask(() => rowAfterCancel(document.activeElement)?.focus());');
+  expect(list).toMatch(/onDragEnd: \(event\) => \{[^}]*refocusRowAfterCancel\(event\);/);
+  const subIssues = await Bun.file(new URL("../features/issue/sub-issues.tsx", import.meta.url)).text();
+  expect(subIssues).toMatch(/onDragEnd: \(event\) => \{[^}]*refocusRowAfterCancel\(event\);/);
+  expect(subIssues).toContain("{draggable && <DragButton />}");
+  expect(subIssues).not.toContain('slot="drag"');
 });
