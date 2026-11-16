@@ -124,3 +124,11 @@ test("the space favorite's card names the space and its open epics, or says it h
   const empty = renderToStaticMarkup(<RouterContextProvider router={router}><FavoriteCard kind="team" thing={{ board }} /></RouterContextProvider>);
   expect(empty).toContain("No epics");
 });
+
+test("every sidebar favorite row goes through the one card wrapper, inside its menu so the × and right-click still work, and no card opens while a favorite is dragged", async () => {
+  const rows = await Bun.file(new URL("../views/views-navigation.tsx", import.meta.url)).text();
+  expect(rows).toMatch(/<ContextMenu label="Favorite options" entries=\{.*?\}><FavoriteHoverCard thing=\{\{ view, issue, board, document \}\} label=\{label\}>\{link\}<\/FavoriteHoverCard><\/ContextMenu>/);
+  const wrapper = await Bun.file(new URL("./favorite-hover-card.tsx", import.meta.url)).text();
+  expect(wrapper).toContain("const dragging = useSortableDragging();");
+  expect(wrapper).toMatch(/<HoverCard[^>]*\bisDisabled=\{dragging\}/);
+});
