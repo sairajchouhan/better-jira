@@ -44,6 +44,18 @@ test("Hidden columns shows beside swimlanes too, and the bottom strip is the lis
   expect(view).toContain('{d.layout === "list" && hidden.length > 0 && (');
 });
 
+test("the last column keeps Linear's 8px from Hidden columns, as from its neighbour and the board's end", () => {
+  // Linear's columns' container carries the trailing 8px (4px padding plus the 340px background's 4px inset in its 348px
+  // slot) and its scroller has none: live, the last background sits 8px from the hidden card (28px beside swimlanes) and
+  // 8px from the board's end when nothing is hidden. Without it, the hidden rows butt against the last column.
+  const scroller = /<div ref=\{boardScroller\}[^>]*className="([^"]+)"/.exec(view)?.[1]?.split(" ") ?? [];
+  expect(scroller).toContain("pl-2");
+  expect(scroller.some((c) => /^(px|pr|p)-/.test(c))).toBe(false);
+  const wrapper = /<div className=\{d\.rows === "none" \? "([^"]+)" : "([^"]+)"\}>/.exec(scrollerBody(view));
+  expect(wrapper?.[1]?.split(" ")).toContain("pr-2");
+  expect(wrapper?.[2]?.split(" ")).toContain("pr-2");
+});
+
 test("Hidden columns sticks to the top only, 350px with 12px on its right, 20px from swimlanes", async () => {
   const { HiddenColumns } = await import("./board-view");
   const draw = (swimlanes: boolean) =>
@@ -61,9 +73,8 @@ test("Hidden columns sticks to the top only, 350px with 12px on its right, 20px 
   const classes = (html: string) => /<aside[^>]*class="([^"]+)"/.exec(html)?.[1]?.split(" ").filter(Boolean) ?? [];
   const plain = classes(draw(false));
   expect(plain).toEqual(expect.arrayContaining(["sticky", "top-0", "h-full", "w-[350px]", "pr-3", "shrink-0", "overflow-y-auto"]));
-  // Its right edge meets the scroller's (live Linear), across the scroller's 8px padding.
-  expect(plain).toContain("-mr-2");
-  expect(/<div ref=\{boardScroller\}[^>]*className="[^"]*\bpx-2\b/.test(view)).toBe(true);
+  // Its right edge meets the scroller's (live Linear), which has no right padding to reach across.
+  expect(plain).not.toContain("-mr-2");
   // Never pinned to a side: no left or right offset.
   expect(plain.some((c) => /^-?(right|left|inset-x|inset)-/.test(c))).toBe(false);
   expect(plain).not.toContain("ml-5");

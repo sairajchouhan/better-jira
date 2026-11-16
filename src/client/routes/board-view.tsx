@@ -232,11 +232,13 @@ export const BoardView = memo(function BoardView({
                 (BJ-388). Linear's board columns are 348px apart (CustomerCountPopover `et`: qe=348) with a 340px background
                 (columnBackgroundWidth calc(100% - 8px)), so 8px between columns (BJ-386). It is a flex row spaced between, so
                 Hidden columns, its last child, sits after the last column and scrolls sideways with them, at the right edge only
-                while the columns fit. */}
-            <div ref={boardScroller} data-scroll-restoration-id={`board-${board.id}`} className="flex min-h-0 min-w-0 flex-1 justify-between overflow-auto overscroll-none scroll-py-[90px] px-2 pt-1">
+                while the columns fit. Like Linear's, the scroller has no padding of its own: the columns' container carries 8px on
+                each side (4px padding plus each 340px background's 4px inset in its 348px slot), so the last column keeps the
+                same 8px from Hidden columns (28px beside swimlanes) as from its neighbour, and from the board's end. */}
+            <div ref={boardScroller} data-scroll-restoration-id={`board-${board.id}`} className="flex min-h-0 min-w-0 flex-1 justify-between overflow-auto overscroll-none scroll-py-[90px] pl-2 pt-1">
               {/* Without swimlanes the columns fill the board's height; swimlanes grow past it, so the sticky header row keeps
                   its containing block as tall as the lanes. */}
-              <div className={d.rows === "none" ? "h-full shrink-0" : "shrink-0 self-start"}>
+              <div className={d.rows === "none" ? "h-full shrink-0 pr-2" : "shrink-0 self-start pr-2"}>
                 {d.rows !== "none" && (
                   <div className="sticky top-0 z-10 flex w-max gap-2 bg-panel">
                     {show.map((col) => (
@@ -371,8 +373,8 @@ export const BoardView = memo(function BoardView({
 
 /** Linear's "Hidden columns" list (IssueList `$l`, boardColumnWrapper): the board scroller's last child, 350px with 12px on
  *  its right, sticky to the top only, so it keeps the board's height while lanes scroll and moves sideways with the
- *  columns; 20px from them beside swimlanes. Its right edge meets the scroller's (live), so it reaches into the scroller's
- *  8px padding. A 50px header sticks over its own scrolled rows; 37px rows 10px apart. */
+ *  columns; 8px after the last column's background (the columns' trailing 8px), 28px beside swimlanes. Its right edge meets
+ *  the scroller's (live), which has no right padding. A 50px header sticks over its own scrolled rows; 37px rows 10px apart. */
 export function HiddenColumns({
   columns,
   by,
@@ -394,7 +396,7 @@ export function HiddenColumns({
     <aside
       aria-label="Hidden columns"
       data-board-hidden-columns
-      className={`sticky top-0 -mr-2 flex h-full w-[350px] shrink-0 flex-col overflow-y-auto pr-3 ${swimlanes ? "ml-5" : ""}`}
+      className={`sticky top-0 flex h-full w-[350px] shrink-0 flex-col overflow-y-auto pr-3 ${swimlanes ? "ml-5" : ""}`}
     >
       <div className="sticky top-0 z-10 flex h-[50px] w-full shrink-0 items-center bg-panel">
         {/* Not Button: the disclosure draws an 18px triangle, which a small Button would shrink to its 14px icon. */}
