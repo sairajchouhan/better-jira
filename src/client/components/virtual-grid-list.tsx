@@ -75,6 +75,14 @@ export function ownsKey(target: Pick<Element, "closest">) {
 export const isShortcutKey = (event: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey">) =>
   NAVIGATION.has(event.key) || ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "a");
 
+/**
+ * Whether the focused element is a row (or a control in one) that hands this key to the app's shortcuts (`passRowKeysToShortcuts`).
+ * The hotkey manager's own input check walks up from focus and finds React Aria's `role=grid`, which owns the arrows (⇧ too), so
+ * the shortcuts must let such a key through themselves (BJ-374: ⇧→ "Go to linked pull request" and ↑/↓/←/→ on a focused card).
+ */
+export const rowHandsKey = (event: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey">, focused: Pick<Element, "closest"> | null | undefined) =>
+  !!focused && isShortcutKey(event) && ownsKey(focused);
+
 /** Hands a key to the document's shortcut listeners, which React Aria's handlers would stop it reaching. */
 function passToShortcuts(event: KeyboardEvent) {
   event.stopPropagation();

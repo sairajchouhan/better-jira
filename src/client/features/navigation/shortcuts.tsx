@@ -60,6 +60,7 @@ import {
 } from "@/client/features/inbox/inbox";
 import { copyText } from "@/client/lib/clipboard";
 import { keyStepped, pointerLeads } from "@/client/components/pointer-intent";
+import { rowHandsKey } from "@/client/components/virtual-grid-list";
 
 type State = ReturnType<typeof get>;
 type Shortcut = {
@@ -1068,6 +1069,17 @@ export function hotkeyEnabled(entry: Shortcut, s: State, issue: Issue | undefine
     shortcutApplies(entry, s, issue)
   );
 }
+/** Whether a key skips the shortcut while a control has focus (TanStack's `ignoreInputs`). ⌘K, ⌘/, ⌘⇧O and ⌘⌥P run from text
+ *  fields too. A key a focused list row hands to the shortcuts (`rowHandsKey`: the arrows, ⇧→ for "Go to linked pull request")
+ *  is never skipped for the React Aria grid around the row, which TanStack takes as owning the arrows (BJ-374). */
+export function ignoreInputsFor(
+  entry: Pick<Shortcut, "id">,
+  event?: Pick<KeyboardEvent, "key" | "metaKey" | "ctrlKey">,
+  focused?: Pick<Element, "closest"> | null,
+) {
+  if (event && rowHandsKey(event, focused)) return false;
+  return !["shortcuts", "commands", "sub-issue", "copy-prompt"].includes(entry.id);
+}
 /** Linear binds G then each of these keys (`keyboardShortcut:{key:["g", …]}` in startup-root.CnUSfl4j.js: Preferences, projects,
  *  views, Loops, cycles…), and its resolver tries the whole sequence before the last key alone. The ones we have no command
  *  for are reserved as inert chords, so G then S/P/L/U/T/V never falls through to that key's own shortcut
@@ -1127,12 +1139,7 @@ export function useLinearHotkeys() {
           },
           {
             enabled: hotkeyEnabled(entry, get(), target()),
-            ignoreInputs: !(
-              entry.id === "shortcuts" ||
-              entry.id === "commands" ||
-              entry.id === "sub-issue" ||
-              entry.id === "copy-prompt"
-            ),
+            ignoreInputs: ignoreInputsFor(entry),
             ignoreDefaultPrevented: true,
             afterDelegatedHandlers: true,
             meta: { name: entry.name, group: entry.group } as { name: string },
@@ -1148,10 +1155,12 @@ export function useLinearHotkeys() {
           },
         ),
       }));
-    const sync = () => {
+    const sync = (event: KeyboardEvent) => {
       const s = get(),
-        issue = target();
-      for (const { entry, handle } of bound) handle.setOptions({ enabled: hotkeyEnabled(entry, s, issue) });
+        issue = target(),
+        focused = document.activeElement;
+      for (const { entry, handle } of bound)
+        handle.setOptions({ enabled: hotkeyEnabled(entry, s, issue), ignoreInputs: ignoreInputsFor(entry, event, focused) });
     };
     // Capture on window runs before every document listener, the hotkey manager's included.
     window.addEventListener("keydown", sync, true);

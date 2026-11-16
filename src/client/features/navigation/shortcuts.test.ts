@@ -200,3 +200,25 @@ test("BJ-382: j/k steps mark the keys as leading, and the sub-issue section's ho
   const subIssues = await Bun.file(new URL("../issue/sub-issues.tsx", import.meta.url)).text();
   expect(subIssues).toContain('pointerLeads() ? "[data-sub-issue]:hover, [data-sub-issue]:focus-within" : "[data-sub-issue]:focus-within"');
 });
+
+test("BJ-374: arrows a focused card hands over (⇧→ Go to linked pull request, ↑/↓/←/→) reach the shortcuts past React Aria's grid", async () => {
+  const { ignoreInputsFor } = await import("./shortcuts");
+  // A stand-in element: `closest` answers from the selectors it sits inside.
+  const inside = (...matches: string[]) => ({ closest: (selector: string) => (matches.includes(selector) ? {} : null) }) as unknown as Element;
+  const row = inside("[role=row][data-key]");
+  const field = inside("[role=row][data-key]", 'input, textarea, [contenteditable="true"], [role=dialog], [role=menu], [role=listbox]');
+  const key = (key: string, mods: Partial<KeyboardEvent> = {}) => ({ key, metaKey: false, ctrlKey: false, ...mods }) as KeyboardEvent;
+  const pr = { id: "go-pull-requests" };
+  expect(ignoreInputsFor(pr)).toBe(true);
+  expect(ignoreInputsFor(pr, key("ArrowRight", { shiftKey: true }), row)).toBe(false);
+  expect(ignoreInputsFor({ id: "down" }, key("ArrowDown"), row)).toBe(false);
+  // A field, menu or listbox inside the row keeps its arrows; a letter or a key off any row keeps the default.
+  expect(ignoreInputsFor(pr, key("ArrowRight", { shiftKey: true }), field)).toBe(true);
+  expect(ignoreInputsFor({ id: "status" }, key("s"), row)).toBe(true);
+  expect(ignoreInputsFor({ id: "down" }, key("ArrowDown"), inside())).toBe(true);
+  expect(ignoreInputsFor({ id: "down" }, key("ArrowDown"), null)).toBe(true);
+  // ⌘K and ⌘/ still run from text fields.
+  expect(ignoreInputsFor({ id: "commands" })).toBe(false);
+  const source = await Bun.file(new URL("./shortcuts.tsx", import.meta.url)).text();
+  expect(source).toContain("handle.setOptions({ enabled: hotkeyEnabled(entry, s, issue), ignoreInputs: ignoreInputsFor(entry, event, focused) });");
+});
