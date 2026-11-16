@@ -53,3 +53,25 @@ test("BJ-360: a page entered by its keyword (\"t \") comes back to an empty root
   const opened = openPage({ q: "t ", page: null }, { kind: "open", page: "boards" });
   expect(leavePage(opened)).toEqual({ q: "", page: null, returnTo: undefined });
 });
+
+import { commandWording, paletteEntries } from "./palette";
+import { shortcuts } from "./shortcuts";
+
+test("BJ-244: ⌘K leaves out Dismiss all toasts (Linear's hideInCommandMenu) and lists the other commands that apply", () => {
+  const app = paletteEntries(shortcuts, () => true, false).map((s) => s.id);
+  expect(app).not.toContain("dismiss-toast");
+  expect(app).toContain("shortcuts");
+  expect(app.every((id) => !shortcuts.find((s) => s.id === id)?.issue)).toBe(true);
+  const onIssue = paletteEntries(shortcuts, () => true, true).map((s) => s.id);
+  expect(onIssue).toContain("copy-id");
+  expect(onIssue).not.toContain("shortcuts");
+  expect(paletteEntries(shortcuts, (s) => s.id !== "copy-id", true).map((s) => s.id)).not.toContain("copy-id");
+});
+
+test("BJ-379: ⌘K's Copy rows carry Linear's ⌥ names, read from the command each row is built from", () => {
+  const wording = (id: string) => commandWording(shortcuts.find((s) => s.id === id)!, issue, () => undefined);
+  expect(wording("copy-id")).toEqual({ name: "Copy issue ID", altName: "Copy issue ID as link" });
+  expect(wording("copy-link")).toEqual({ name: "Copy title as link", altName: "Copy title without ID as link" });
+  expect(wording("copy-title").altName).toBe("Copy issue title without ID");
+  expect(wording("rename")).toEqual({ name: "Rename issue…", altName: undefined });
+});

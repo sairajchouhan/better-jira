@@ -802,6 +802,16 @@ function OpenPage({ page, back }: { page: PalettePage; back: () => void }) {
     </PaletteBody>
   );
 }
+type Registered = (typeof shortcuts)[number];
+/** The registry commands ⌘K lists: the targeted issue's (`issue`) or the app's, that apply now, without those Linear keeps out of
+ *  its command menu (`hideInCommandMenu`, as Dismiss all toasts). */
+export const paletteEntries = (entries: readonly Registered[], applies: (entry: Registered) => boolean, issue: boolean) =>
+  entries.filter((s) => Boolean(s.issue) === issue && !s.hideInCommandMenu && applies(s));
+/** A registry command's ⌘K wording: its name for the targeted issue, and the one it takes while ⌥ is held (Copy issue ID as link). */
+export const commandWording = (entry: Registered, issue: Issue | undefined, lookup: (key: string) => Issue | undefined) => ({
+  name: paletteName(entry, issue, lookup),
+  altName: COMMAND_ALT_NAMES[entry.id],
+});
 function RootPalette({ initialPage }: { initialPage?: PalettePage }) {
   const issues = useStore((s) => s.issues);
   const boards = useStore((s) => s.boards);
@@ -842,8 +852,7 @@ function RootPalette({ initialPage }: { initialPage?: PalettePage }) {
 
   const command = (entry: (typeof shortcuts)[number]): Cmd => {
     const cmd: Cmd = {
-      name: paletteName(entry, scoped, (key) => issues.get(key)),
-      altName: COMMAND_ALT_NAMES[entry.id],
+      ...commandWording(entry, scoped, (key) => issues.get(key)),
       keywords: COMMAND_KEYWORDS[entry.id],
       keys: hotkeyOf(entry.id),
       detail: entry.detail?.(),
@@ -863,16 +872,15 @@ function RootPalette({ initialPage }: { initialPage?: PalettePage }) {
   };
   // Only commands that would do something now, as Linear lists them.
   const issueCmds: Cmd[] = scoped
-    ? shortcuts.filter((s) => s.issue && !s.hideInCommandMenu && applies(s)).map(command)
+    ? paletteEntries(shortcuts, applies, true).map(command)
     : [];
   // The app's commands under Linear's group for each, with nothing filed twice under one name.
   const byGroup = new Map<PaletteGroup, Cmd[]>();
   const file = (group: PaletteGroup, cmd: Cmd) => byGroup.set(group, [...(byGroup.get(group) ?? []), cmd]);
+  const appCommands = new Set(paletteEntries(shortcuts, applies, false));
   for (const [i, s] of shortcuts.entries())
     if (
-      !s.issue &&
-      !s.hideInCommandMenu &&
-      applies(s) &&
+      appCommands.has(s) &&
       s.id !== "commands" &&
       !(activeView && LISTED_BY_VIEW_GROUP.has(s.id)) &&
       shortcuts.findIndex((other) => other.name === s.name) === i
