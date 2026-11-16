@@ -31,6 +31,7 @@ import { focusNode, useCommand } from "@/client/features/navigation/commands";
 import { shortcutTitle } from "@/client/components/keycap";
 import { get, isWatching, useStore, issueBoardId } from "@/client/state/store";
 import { preloadOnHover, ui } from "@/client/features/navigation/app-navigation";
+import { historyWarmer, nextIssue } from "@/client/features/issue/history-warm";
 import { SidebarToggle } from "@/client/features/navigation/breadcrumbs";
 import { useRouterState } from "@tanstack/react-router";
 import { toggleFavorite } from "@/client/features/navigation/favorites";
@@ -817,6 +818,12 @@ export function InboxList() {
     return () => observer.disconnect();
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Reobserve the load sentinel after a page appends rows.
   }, [hasNextPage, isFetchingNextPage, pages, fetchNextPage]);
+  // The selected notification's issue opens in the pane, which reads its history; j moves to the next row's, so that one's
+  // history is read ahead, once the selection rests.
+  const nextKey = useStore((s) => nextIssue(rows, selected, (key) => s.issues.has(key)));
+  useEffect(() => {
+    if (nextKey) historyWarmer.warmSoon(nextKey);
+  }, [nextKey]);
   // Linear's filtered empty state (Inbox `Bt`): what the filters and the find hide, and a way to clear them.
   const hidden = base.length - rows.length,
     empty = emptyInbox(hidden, v.unreadOnly);

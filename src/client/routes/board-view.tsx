@@ -38,6 +38,7 @@ import { DueIcon, Icon, LabelDot, PriorityIcon, StatusIcon, TypeDot } from "@/cl
 import { ME, get, set, timed, useStore, statusOf, issueBoardId } from "@/client/state/store";
 import { actions, beginCreateInView } from "@/client/state/issue-actions";
 import { loadFull } from "@/client/state/server-data";
+import { historyWarmer } from "@/client/features/issue/history-warm";
 import { navigate, preloadOnHover, ui } from "@/client/features/navigation/app-navigation";
 import { followPeek, togglePeek } from "@/client/features/views/view-peek-state";
 import { movedPointer } from "@/client/components/pointer-intent";
@@ -149,6 +150,9 @@ export const BoardView = memo(function BoardView({
   useEffect(() => {
     if (!active || !selected) return;
     if (!get().fullErrors.get(selected)) loadFull(selected);
+    // The j/k selection is the issue likely to open next: its history too, once the keys stop (only the selection's, not its
+    // neighbours': each is a Jira changelog read).
+    historyWarmer.warmSoon(selected);
     const flat = order.flat();
     const i = flat.findIndex((x) => x.key === selected);
     if (i >= 0)

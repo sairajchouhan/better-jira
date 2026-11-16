@@ -17,6 +17,7 @@ import { onSidebarHiddenChange, savedBoard, savedOpenIn, savedSidebarHidden } fr
 import { keptIssue, loadFull } from "@/client/state/server-data";
 import { smartLink } from "@/shared/smart-link";
 import { createAppRouter, locationOf, preloadIssueScreens, routeURL } from "@/client/routes/tree";
+import { historyWarmer } from "@/client/features/issue/history-warm";
 import { createHoverIntent, type Point } from "./hover-intent";
 
 type UiKey = keyof UiContext;
@@ -49,7 +50,11 @@ const findView = (segment: string) => viewForRoute(get().savedViews, segment);
 /** The router. Tests (no DOM) run it on a memory history. */
 export const router = createAppRouter(typeof document === "undefined" ? createMemoryHistory() : createBrowserHistory(), {
   show,
-  preload: (key) => Promise.all([loadFull(key), preloadIssueScreens()]),
+  // The history follows the details, outside what the preload waits for: a hover never waits on Jira's changelog.
+  preload: (key) => {
+    void historyWarmer.warm(key);
+    return Promise.all([loadFull(key), preloadIssueScreens()]);
+  },
   issue: (key) => get().issues.get(currentKey(key)),
   keep: async (key) => !!(await keptIssue(key)),
   // Wrapped: jira-sync can still be loading when this module runs (app-notifications imports both).
