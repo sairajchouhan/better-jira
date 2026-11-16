@@ -205,12 +205,17 @@ test("BJ-409: no favorite card opens while anything is dragged (`zN()`), an issu
   expect(wrapper).toContain("dragging = useAnyDrag();");
 });
 
-test("BJ-408: each favorite row shows the item's own icon (Linear's `z1`): an issue's status, an epic's icon, a view's, a space's and a document's, never ☆", async () => {
+test("BJ-408: each favorite row shows the item's own icon (Linear's `z1`): an issue its type, a view's, a space's and a document's, never ☆", async () => {
   commit({ issues: new Map(all.map((i) => [i.key, i])), boards: [board], board: 7 });
   const icon = (thing: Parameters<typeof favoriteCardKind>[0]) => renderToStaticMarkup(<FavoriteIcon {...thing} />);
-  expect(icon({ issue: all[4]! })).toMatch(/^<svg width="14" height="14" viewBox="0 0 14 14"/);
-  expect(icon({ issue: epic })).toContain('data-favorite-icon="epic"');
-  expect(icon({ issue: epic })).toContain('width="16"');
+  // Every issue, an epic included, shows its Jira type (the user's choice over Linear's status and project icons): the type's
+  // TypeDot in a 16px box, never the layers icon or the status ring (no svg).
+  const typeIcon = (type: string, color: string) =>
+    new RegExp(`^<span aria-hidden="true" class="grid size-4 shrink-0 place-items-center" data-favorite-icon="type"><span title="${type}"[^>]*background:${color}`);
+  expect(icon({ issue: epic })).toMatch(typeIcon("Epic", "#bb87fc"));
+  expect(icon({ issue: issue("Z-7", { type: "Spike" }) })).toMatch(typeIcon("Spike", "#f2994a"));
+  expect(icon({ issue: all[4]! })).toMatch(typeIcon("Task", "#4ea7fc"));
+  for (const i of [epic, issue("Z-7", { type: "Spike" }), all[4]!]) expect(icon({ issue: i })).not.toContain("<svg");
   expect(icon({ view: view(rules) })).toContain('style="color:var(--view-gray)"');
   expect(icon({ board })).toContain("width:14px");
   expect(icon({ board })).toContain(">S</span>");
@@ -226,6 +231,8 @@ test("BJ-412: a document's card (`cpt`): its icon and title, then its issue and 
   expect(html).toContain('data-document-glyph="list"');
   expect(html).toContain("Rollout plan");
   expect(html).toMatch(/data-document-parent=""[^]*Z-5 title/);
+  // The card's issue line keeps the issue's status (14px ring), not the favorite rows' type icon.
+  expect(html).toMatch(/data-document-parent=""[^>]*><svg width="14" height="14" viewBox="0 0 14 14"/);
   expect(html).toMatch(/data-document-edited=""[^]*Last edited Nov 2 by Ben Ito/);
   expect(html).toContain("border-(--card-divider)");
   // No editor known: no "by"; an untitled document reads "New document".

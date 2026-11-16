@@ -7,7 +7,7 @@
 import { Fragment, type ReactNode } from "react";
 import { Avatar } from "@/client/components/avatar";
 import { CardBody, CardProperties, CardProperty, HoverCard } from "@/client/components/hover-card";
-import { DueIcon, Icon, PriorityIcon, ProgressRing, StatusIcon } from "@/client/components/icons";
+import { DueIcon, Icon, PriorityIcon, ProgressRing, StatusIcon, TypeDot } from "@/client/components/icons";
 import { EntityIdentifier } from "@/client/components/entity-identifier";
 import { SpaceIcon } from "@/client/components/space-icon";
 import { useSortableDragging } from "@/client/components/sortable";
@@ -52,22 +52,21 @@ export function favoriteCardKind({ view, issue, board, document }: FavoriteThing
 export const favoriteCardAnchor = (kind: FavoriteCardKind) => (kind === "team" ? "label" : "row");
 
 /**
- * Linear's favorite row icon (the favorite's mapping, `z1` and the team mapping in startup-root): an issue's status (14px, `WA`),
- * an epic's project icon (16px, `DD`), a view's own icon (`rk`), a space's icon (14px, `ik`) and a document's own icon (`ej`).
+ * A favorite row's icon (Linear's favorite mapping, `z1` and the team mapping in startup-root): a view's own icon (`rk`), a space's
+ * icon (14px, `ik`) and a document's own icon (`ej`). An issue, an epic included, shows its Jira issue type, the TypeDot its rows
+ * and crumbs show, centred in a 16px box like the view and document icons. Linear shows an issue's status (`WA`) and a project's
+ * icon (`DD`); the user's choice: every issue is an issue with a type (.raj/linear-differences.md).
  */
 export function FavoriteIcon({ view, issue, board, document }: FavoriteThing) {
   if (view) return <SavedViewIcon view={view} />;
   if (document) return <DocumentGlyph resource={document.resource} />;
   if (board) return <SpaceIcon name={board.name} size={14} />;
   if (!issue) return null;
-  if (isEpic(issue))
-    return (
-      <span className="flex shrink-0 text-fg-2" data-favorite-icon="epic">
-        <Icon name="layers" size={16} />
-      </span>
-    );
-  const status = statusOf(issue);
-  return status ? <StatusIcon status={status} /> : null;
+  return (
+    <span aria-hidden="true" className="grid size-4 shrink-0 place-items-center" data-favorite-icon="type">
+      <TypeDot type={issue.type} />
+    </span>
+  );
 }
 
 type FavoriteCardTriggerProps = { thing: FavoriteThing; label: string; children: ReactNode };
@@ -287,7 +286,8 @@ function TeamCard({ board }: { board: Board }) {
  */
 function DocumentCard({ document: { issue, resource } }: { document: { issue: Issue; resource: IssueResource } }) {
   const board = useStore((s) => boardFor(issue, s.board)),
-    editor = documentEditor(resource);
+    editor = documentEditor(resource),
+    status = statusOf(issue);
   return (
     <CardBody data-document-hover={resource.id}>
       <div className="flex min-w-0 items-center gap-1.5">
@@ -302,7 +302,14 @@ function DocumentCard({ document: { issue, resource } }: { document: { issue: Is
       <CardProperties>
         <div className="flex min-w-0 flex-col gap-2">
           <IssueKeyLink issueKey={issue.key} className="flex min-w-0 items-center gap-1.5 text-xs text-fg hover:underline" data-document-parent="">
-            <FavoriteIcon issue={issue} />
+            {/* Its issue's project icon for an epic, else its status; the favorite rows' type icon stops at the rows. */}
+            {isEpic(issue) ? (
+              <span className="flex shrink-0 text-fg-2">
+                <Icon name="layers" size={16} />
+              </span>
+            ) : (
+              status && <StatusIcon status={status} />
+            )}
             <span className="truncate">{issue.summary}</span>
           </IssueKeyLink>
           {resource.updated ? (
