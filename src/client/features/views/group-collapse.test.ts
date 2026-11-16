@@ -27,3 +27,10 @@ test("T and ⌥T act on the groups the list shows, never the board's unfiltered 
   expect(collapseTarget(shown, "B", true)).toEqual({ ids: ["Todo", "Done"] });
   expect(collapseTarget([], null, true)).toEqual({ ids: [] });
 });
+
+test("the T and ⌥T shortcuts feed collapseTarget the list's shown groups from boardView (BJ-278)", async () => {
+  const src = await Bun.file(new URL("../navigation/shortcuts.tsx", import.meta.url)).text();
+  const body = /function collapse\(all = false\) \{([\s\S]*?)\n\}/.exec(src)?.[1] ?? "";
+  expect(body).toContain("boardView(s, ME.id)");
+  expect(body).toContain("collapseTarget(groupVisibility(view.columns, view.prefs).show, s.selected, all)");
+});
