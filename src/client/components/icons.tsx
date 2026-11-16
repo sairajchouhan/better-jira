@@ -177,7 +177,6 @@ const PATHS = {
   inbox:
     "M2 9.5 3.6 3.6A1.5 1.5 0 0 1 5 2.5h6a1.5 1.5 0 0 1 1.4 1.1L14 9.5v3a1 1 0 0 1-1 1H3a1 1 0 0 1-1-1zM2 9.5h3.5l1 1.5h3l1-1.5H14",
   at: "M10.5 8a2.5 2.5 0 1 1-5 0a2.5 2.5 0 1 1 5 0M10.5 8v1a2 2 0 0 0 4 0V8a6.5 6.5 0 1 0-2.5 5.1",
-  calendar: "M3 3h10v11H3zM5 1v4M11 1v4M3 7h10",
   user: "M5 5a3 3 0 1 0 6 0a3 3 0 1 0-6 0M2 14c0-5 12-5 12 0",
   label: "M2 3h6l6 5-6 6-6-5zM5 6h.1",
   layers: "m1 5 7-4 7 4-7 4zM2 9l6 4 6-4",
@@ -205,6 +204,9 @@ const PATHS = {
 };
 // Filled glyphs copied from Linear's live SVGs (evenodd fill, not stroke).
 const FILLED = {
+  // Linear's calendar icon (`zk` variant "regular"): a rounded page with its top band, read off the live document card.
+  calendar:
+    "M11 1C13.2091 1 15 2.79086 15 5V11C15 13.2091 13.2091 15 11 15H5C2.79086 15 1 13.2091 1 11V5C1 2.79086 2.79086 1 5 1H11ZM13.5 6H2.5V11C2.5 12.3807 3.61929 13.5 5 13.5H11C12.3807 13.5 13.5 12.3807 13.5 11V6Z",
   // Linear's calendar icon, `zk` variant "overdue": the page with a cross in its corner.
   "calendar-overdue":
     "M11 1C13.2091 1 15 2.79086 15 5V6.25C15 6.66421 14.6642 7 14.25 7C13.8358 7 13.5 6.66421 13.5 6.25V6H2.5V11C2.5 12.3807 3.61929 13.5 5 13.5H6.25C6.66421 13.5 7 13.8358 7 14.25C7 14.6642 6.66421 15 6.25 15H5C2.79086 15 1 13.2091 1 11V5C1 2.79086 2.79086 1 5 1H11ZM9.53033 8.46967L11.5 10.4393L13.4697 8.46967C13.7626 8.17678 14.2374 8.17678 14.5303 8.46967C14.8232 8.76256 14.8232 9.23744 14.5303 9.53033L12.5607 11.5L14.5303 13.4697C14.8232 13.7626 14.8232 14.2374 14.5303 14.5303C14.2374 14.8232 13.7626 14.8232 13.4697 14.5303L11.5 12.5607L9.53033 14.5303C9.23744 14.8232 8.76256 14.8232 8.46967 14.5303C8.17678 14.2374 8.17678 13.7626 8.46967 13.4697L10.4393 11.5L8.46967 9.53033C8.17678 9.23744 8.17678 8.76256 8.46967 8.46967C8.76256 8.17678 9.23744 8.17678 9.53033 8.46967Z",
@@ -319,7 +321,7 @@ export const Icon = ({ name, size = 14 }: { name: IconName; size?: number }) =>
 
 /** Linear's due date icon (`sA` + `Ilt`): orangeBase when due within a week, redBase on the day and after it (with the
  *  overdue glyph), the plain calendar otherwise. */
-export function DueIcon({ due, resolved, now }: { due: string; resolved?: string | null; now?: Date }) {
+export function DueIcon({ due, resolved, now }: { due: string | null | undefined; resolved?: string | null; now?: Date }) {
   // oxlint-disable-next-line react/purity -- today is read at render, like the relative due label beside it.
   const qualifier = dueQualifier(due, now ?? new Date(), resolved);
   const color = { dueSoon: "var(--orange-base)", dueToday: "var(--red-base)", overdue: "var(--red-base)" }[
