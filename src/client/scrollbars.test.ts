@@ -58,17 +58,14 @@ test("the ::-webkit-scrollbar thumb only applies where scrollbar-width is missin
   expect(base.replace(fallback, "")).not.toContain("::-webkit-scrollbar");
 });
 
-test("the probe box is 50px wide, always scrolling, and its content overflows it", () => {
+test("the probe box is Linear's: 0 tall, 50px wide, always scrolling, its child empty", () => {
   const probe = block(css, ".scrollbar-probe {");
+  expect(probe).toContain("height: 0;");
   expect(probe).toContain("width: 50px");
   expect(probe).toContain("overflow-y: scroll");
-  expect(probe).toContain("visibility: hidden");
-  expect(probe).toContain("pointer-events: none");
-  // Chrome only gives a box a classic scrollbar on a live macOS switch to "Always" when it overflows: an empty 0-tall probe
-  // (Linear's) kept measuring 0, so the class never came and every scroller drew the native bar on its grey track.
-  const px = (rule: string) => Number(/height: (\d+)px/.exec(rule)?.[1] ?? 0);
-  expect(px(probe)).toBeGreaterThan(0);
-  expect(px(block(css, ".scrollbar-probe > div"))).toBeGreaterThan(px(probe));
+  // TTe's probe is just those three; its child div has no rule of its own.
+  expect(probe).not.toContain("visibility");
+  expect(css).not.toMatch(/\.scrollbar-probe\s*>/);
 });
 
 test("the inbox list and the list layout keep a stable gutter through one shared class", async () => {

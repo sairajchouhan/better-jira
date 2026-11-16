@@ -15,8 +15,7 @@
 /** Linear's body class for scrollbars that take up space. */
 export const OBTRUSIVE = "layoutScrollbarObtrusive";
 
-/** The probe's class (index.css: Linear's `sx-qtp20y sx-1pju0fl sx-1rife3k`, 50px wide, overflow-y scroll; ours is 30px tall
- * with a 40px child, so Chrome updates it when macOS switches to always-shown scrollbars in an open tab). */
+/** The probe's class (index.css: Linear's `sx-qtp20y sx-1pju0fl sx-1rife3k`, height 0, width 50px, overflow-y scroll). */
 export const PROBE = "scrollbar-probe";
 
 type Box = Pick<HTMLElement, "offsetWidth">;
