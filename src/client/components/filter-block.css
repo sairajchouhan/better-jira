@@ -124,6 +124,16 @@
     max-width: 14px;
     margin-right: -3.5px;
   }
+  /* Linear's read-only block (`tooltipSectionReadOnly`, `openSectionReadOnly`): plain text, the default cursor, no hover. */
+  .ui-filter-block[data-read-only] {
+    cursor: default;
+  }
+  /* `appearance: "tooltip"` (FilterBlockStyles `sectionTooltip`, `buttonTooltip`): micro text, and a section may shrink. */
+  .ui-filter-blocks[data-appearance="tooltip"] .ui-filter-segment,
+  .ui-filter-blocks[data-appearance="tooltip"] .ui-filter-block {
+    min-width: 0;
+    font-size: 11px;
+  }
   .ui-filter-actions {
     display: flex;
     align-items: center;

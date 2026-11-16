@@ -397,15 +397,16 @@ const SINGLE_ICON: Field[] = ["priority", "projectPriority", "project", "milesto
 function RuleChip({
   rule: c,
   board,
-  open,
+  open = null,
   onEdit,
   remove,
 }: {
   rule: Rule;
   board: Board;
-  open: "operator" | "value" | null;
-  onEdit: (segment: "operator" | "value", anchor: HTMLElement, openedBy: OpenedBy) => void;
-  remove: () => void;
+  open?: "operator" | "value" | null;
+  /** Without these the chip is read-only (a view card's filters). */
+  onEdit?: (segment: "operator" | "value", anchor: HTMLElement, openedBy: OpenedBy) => void;
+  remove?: () => void;
 }) {
   const all = useChoiceLabels(c.field, board);
   const name = FIELDS.find(([f]) => f === c.field)?.[1] ?? c.field;
@@ -422,7 +423,7 @@ function RuleChip({
       <FilterBlock.Operator
         label={`${c.field} operator`}
         expanded={open === "operator"}
-        onOpen={(anchor, by) => onEdit("operator", anchor, by)}
+        onOpen={onEdit && ((anchor, by) => onEdit("operator", anchor, by))}
       >
         {c.op === "within" ? "in the last" : c.op === "next" ? "in the next" : operatorLabel(c.field, c.op, c.values.length)}
       </FilterBlock.Operator>
@@ -435,13 +436,35 @@ function RuleChip({
             picked.map((p) => p.choice?.icon),
             SINGLE_ICON.includes(c.field) ? "single" : "each",
           )}
-          onOpen={(anchor, by) => onEdit("value", anchor, by)}
+          onOpen={onEdit && ((anchor, by) => onEdit("value", anchor, by))}
         >
           {picked.length > 1 ? `${picked.length} ${plural(name.toLowerCase())}` : picked[0] ? labelOf(picked[0]) : ""}
         </FilterBlock.Value>
       )}
       <FilterBlock.Remove label={`Remove ${c.field} filter`} />
     </FilterBlock>
+  );
+}
+
+/**
+ * A saved view's own filters, read-only (Linear's view card `Y8n`: the view's filter panel with `readOnly` and `appearance:
+ * "tooltip"`): every rule as its chip without menus or ×, a group as its summary. Nothing when the view filters nothing.
+ */
+export function ViewFilterChips({ filters, board }: { filters: FilterGroup; board: Board }) {
+  const chips = filters.children.filter((c) => !("children" in c) || filterCount(c));
+  if (!chips.length) return null;
+  return (
+    <FilterBar.Blocks appearance="tooltip">
+      {chips.map((c) =>
+        "children" in c ? (
+          <FilterBlock key={c.id}>
+            <FilterBlock.Value>{`${c.join.toUpperCase()} group · ${filterCount(c)} rule${filterCount(c) === 1 ? "" : "s"}`}</FilterBlock.Value>
+          </FilterBlock>
+        ) : (
+          <RuleChip key={c.id} rule={c} board={board} />
+        ),
+      )}
+    </FilterBar.Blocks>
   );
 }
 

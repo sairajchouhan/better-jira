@@ -35,22 +35,25 @@ function FilterBarRoot({ label, className = "", children }: { label: string; cla
 export type OpenedBy = "pointer" | "keyboard";
 export const openedBy = (event: MouseEvent) => (event.detail > 0 ? "pointer" : "keyboard") as OpenedBy;
 
+/** The block's remove, or null when the block is read-only. */
 const RemoveContext = createContext<(() => void) | null>(null);
 
-/** Linear's FilterBlock: one applied filter as joined segments. Backspace or Delete on a focused segment removes it. */
+/** Linear's FilterBlock: one applied filter as joined segments. Backspace or Delete on a focused segment removes it.
+ *  Without `onRemove` it is read-only (Linear's `readOnly`, a view card's filters): its segments are text, not buttons, and it has
+ *  no ×. */
 function FilterBlockRoot({
   onRemove,
   children,
   ...props
-}: { onRemove: () => void; children: ReactNode } & Omit<ComponentProps<"div">, "className" | "onKeyDown">) {
+}: { onRemove?: () => void; children: ReactNode } & Omit<ComponentProps<"div">, "className" | "onKeyDown">) {
   const removeOnKey = (event: KeyboardEvent) => {
-    if (event.key !== "Backspace" && event.key !== "Delete") return;
+    if (!onRemove || (event.key !== "Backspace" && event.key !== "Delete")) return;
     event.preventDefault();
     onRemove();
   };
   return (
-    <RemoveContext value={onRemove}>
-      <div className="ui-filter-block" onKeyDown={removeOnKey} {...props}>
+    <RemoveContext value={onRemove ?? null}>
+      <div className="ui-filter-block" data-read-only={onRemove ? undefined : ""} onKeyDown={removeOnKey} {...props}>
         {children}
       </div>
     </RemoveContext>
@@ -62,12 +65,20 @@ type SegmentButton = {
   label?: string;
   /** Whether this segment's menu is open. */
   expanded?: boolean;
-  onOpen: (anchor: HTMLElement, by: OpenedBy) => void;
+  /** Opens the segment's menu; a read-only block's segment has none and is text. */
+  onOpen?: (anchor: HTMLElement, by: OpenedBy) => void;
   title?: string;
   children: ReactNode;
 };
 
 function Segment({ label, expanded, onOpen, title, className, children }: SegmentButton & { className: string }) {
+  const readOnly = use(RemoveContext) === null;
+  if (readOnly || !onOpen)
+    return (
+      <span className={`ui-filter-segment ${className}`} title={title}>
+        {children}
+      </span>
+    );
   return (
     <button
       type="button"
@@ -92,7 +103,12 @@ export function valueIcons(icons: ReactNode[], show: "each" | "single" = "each")
 
 export const FilterBar = Object.assign(FilterBarRoot, {
   /** The blocks and the trailing "+" add button, wrapping. */
-  Blocks: ({ children }: { children: ReactNode }) => <div className="ui-filter-blocks">{children}</div>,
+  Blocks: ({ appearance, children }: { appearance?: "tooltip"; children: ReactNode }) => (
+    // Linear's `appearance: "tooltip"` (a view card's filters, `Y8n`): micro (11px) sections that may shrink to nothing.
+    <div className="ui-filter-blocks" data-appearance={appearance}>
+      {children}
+    </div>
+  ),
   /** The panel's `side`: Clear and Save, past a 20px gap. */
   Actions: ({ children }: { children: ReactNode }) => <div className="ui-filter-actions">{children}</div>,
 });
@@ -123,7 +139,8 @@ export const FilterBlock = Object.assign(FilterBlockRoot, {
   ),
   /** The trailing ×: removes the block. */
   Remove: ({ label }: { label: string }) => {
-    const remove = use(RemoveContext)!;
+    const remove = use(RemoveContext);
+    if (!remove) return null;
     return (
       <button type="button" className="ui-filter-segment ui-filter-remove" aria-label={label} onClick={remove}>
         <Icon name="x" size={12} />
