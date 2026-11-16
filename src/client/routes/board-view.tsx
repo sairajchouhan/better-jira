@@ -187,9 +187,10 @@ export const BoardView = memo(function BoardView({
       <div className="relative flex min-w-0 min-h-0 flex-1 flex-col" data-layout={d.layout}>
         {!visible.length && results}
         {d.layout === "list" ? (
-          <div data-scroll-restoration-id={`board-${board.id}`} className="ui-scroll-stable flex-1 overflow-auto py-1">
-            {/* Groups stack with no margin between them (BJ-241). Linear's list header (36px) keeps 2px below it (ListCell's
-                header row `marginBottom: e.marginBottom ?? 2`) and each group ends on a 2px padding, collapsed or not (live). */}
+          <div data-scroll-restoration-id={`board-${board.id}`} className="ui-scroll-stable flex-1 overflow-auto pb-2">
+            {/* Groups stack with no margin between them (BJ-241). Linear's list header (36px), group or sub-group, keeps 2px below
+                it (ListCell's header row `marginBottom: e.marginBottom ?? 2`), and each group and sub-group ends on a 2px padding,
+                collapsed or not. The scroller pads 0 above the first header and 8px below the last row (live). */}
             {show.map((c, ci) => (
               <section key={c.id} className="pb-0.5">
                 <GroupHeading
@@ -203,11 +204,11 @@ export const BoardView = memo(function BoardView({
                 />
                 {!collapsed.includes(c.id) &&
                   layout.sections[ci]!.map((r) => (
-                      <div key={r.id}>
+                      <div key={r.id} className={d.rows !== "none" ? "pb-0.5" : undefined}>
                         {/* Linear's sub-group divider is listHeaderHeight tall too (IssueList `heightPerLevel` [36, 36, 44]) and,
                             with `stickyHeaderLevels: 1`, scrolls with its rows: only the group header sticks. */}
                         {d.rows !== "none" && (
-                          <div data-list-subgroup={r.name} className="flex h-9 items-center border-b border-line bg-col px-8 text-[12px] text-fg-3">
+                          <div data-list-subgroup={r.name} className="mb-0.5 flex h-9 items-center border-b border-line bg-col px-8 text-[12px] text-fg-3">
                             {r.name} <span className="ml-2">{r.issues.length}</span>
                           </div>
                         )}

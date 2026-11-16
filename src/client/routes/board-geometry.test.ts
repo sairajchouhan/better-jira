@@ -33,3 +33,13 @@ test("BJ-241: list groups stack with no margin, each a 36px header, 2px under it
   expect(heading).toEqual(expect.arrayContaining(["h-9", "mb-0.5"]));
   expect(heading.some((c) => /^m[ty]?-(?!0\.5)/.test(c))).toBe(false);
 });
+
+test("BJ-241: a sub-group keeps 2px under its header and after its rows; the list pads 0 above and 8px below, as Linear's", () => {
+  // Live Linear sub-grouped by priority: each sub-group header (36px) has marginBottom 2 and each sub-group ends 2px later.
+  const subgroup = /<div data-list-subgroup=\{r\.name\} className="([^"]+)"/.exec(view)?.[1]?.split(" ") ?? [];
+  expect(subgroup).toEqual(expect.arrayContaining(["h-9", "mb-0.5"]));
+  expect(view).toContain('<div key={r.id} className={d.rows !== "none" ? "pb-0.5" : undefined}>');
+  // The list scroller: padding-top 0, padding-bottom 8px (live --x-paddingTop / --x-paddingBottom).
+  const list = /<div data-scroll-restoration-id=\{`board-\$\{board\.id\}`\} className="([^"]+)">/.exec(view)?.[1]?.split(" ") ?? [];
+  expect(list).toEqual(["flex-1", "overflow-auto", "pb-2"]);
+});
