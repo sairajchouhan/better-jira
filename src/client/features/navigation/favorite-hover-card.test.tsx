@@ -8,7 +8,8 @@ import { defaultPreferences, type FilterGroup } from "@/shared/view-model";
 import { commit, get } from "@/client/state/store";
 import { TOOLTIP_TIMING } from "@/client/components/tooltip-rules";
 import { router } from "./app-navigation";
-import { epicProgress, FavoriteCard, favoriteCardKind, FavoriteHoverCard } from "./favorite-hover-card";
+import type { IssueResource } from "@/shared/issue-resource";
+import { epicProgress, favoriteCardAnchor, FavoriteCard, favoriteCardKind, FavoriteHoverCard, FavoriteIcon, fittingNames } from "./favorite-hover-card";
 
 const before = get();
 afterEach(() => commit({ issues: before.issues, boards: before.boards, board: before.board }));
@@ -51,25 +52,47 @@ const render = (node: ReactNode) => {
   return renderToStaticMarkup(<RouterContextProvider router={router}>{node}</RouterContextProvider>);
 };
 
-test("each favorite opens its kind's card: an issue the issue card, an epic the project card, a view the view card, a space the team card", () => {
+const doc = (patch: Partial<IssueResource> = {}): IssueResource => ({
+  id: "d1", kind: "document", title: "Rollout plan", updated: "2026-11-02T10:00:00Z", editedBy: { id: "u2", name: "Ben Ito" }, ...patch,
+});
+
+test("each favorite opens its kind's card: an issue the issue card, an epic the project card, a view the view card, a space the team card, a document the document card", () => {
   expect(favoriteCardKind({ issue: issue("Z-2") })).toBe("issue");
   expect(favoriteCardKind({ issue: epic })).toBe("project");
   expect(favoriteCardKind({ view: view(rules) })).toBe("view");
   expect(favoriteCardKind({ board })).toBe("team");
-  // Linear's document card (`cpt`) isn't built: a document favorite is its row alone.
-  expect(favoriteCardKind({ document: {} })).toBeNull();
-  expect(renderToStaticMarkup(<FavoriteHoverCard thing={{ document: {} }} label="Doc"><a href="/d">Doc</a></FavoriteHoverCard>)).toBe('<a href="/d">Doc</a>');
+  expect(favoriteCardKind({ document: { issue: all[4]!, resource: doc() } })).toBe("document");
+  expect(favoriteCardKind({})).toBeNull();
+  expect(renderToStaticMarkup(<FavoriteHoverCard.Row thing={{}} label="Gone"><a href="/d">Gone</a></FavoriteHoverCard.Row>)).toBe('<a href="/d">Gone</a>');
 });
 
 test("a favorite's card opens after Linear's interactive card delay (550ms, `Rwe`), to the right of the row (`h$` → `wZ` position right)", async () => {
   expect(TOOLTIP_TIMING.card.delay).toBe(550);
   const source = await Bun.file(new URL("./favorite-hover-card.tsx", import.meta.url)).text();
-  expect(source).toMatch(/<HoverCard placement="right" display="block"/);
+  expect(source).toMatch(/<HoverCard\s+placement="right"\s+display=\{at === "row" \? "block" : "fill"\}/);
   // No delay of its own: every favorite kind takes the card default.
   expect(source).not.toMatch(/<HoverCard[^>]*\bdelay=/);
   // The trigger is the full-width row (`_$.tooltipBlock`), so the row keeps its whole width.
-  const html = renderToStaticMarkup(<FavoriteHoverCard thing={{ board }} label="Space"><a href="/b">Space</a></FavoriteHoverCard>);
+  const html = renderToStaticMarkup(<FavoriteHoverCard.Row thing={{ issue: all[4]! }} label="Z-5"><a href="/i">Z-5</a></FavoriteHoverCard.Row>);
   expect(html).toMatch(/^<span class="flex w-full min-w-0" data-hover-card-trigger="">/);
+});
+
+test("BJ-410: a space's card sits beside its label (`m5n`'s toggle button), every other kind's beside the whole row (`d5n` → `h$`)", () => {
+  expect(favoriteCardAnchor("team")).toBe("label");
+  for (const kind of ["issue", "project", "view", "document"] as const) expect(favoriteCardAnchor(kind)).toBe("row");
+  // A space: the row passes through, the label (icon and name, growing up to the ×, with the row's gap) is the trigger.
+  const row = (thing: Parameters<typeof favoriteCardKind>[0]) =>
+    renderToStaticMarkup(
+      <FavoriteHoverCard.Row thing={thing} label="x">
+        <a href="/r">
+          <FavoriteHoverCard.Label thing={thing} label="x"><i />name</FavoriteHoverCard.Label>
+          <b>×</b>
+        </a>
+      </FavoriteHoverCard.Row>,
+    );
+  expect(row({ board })).toBe('<a href="/r"><span class="flex min-w-0 flex-1 items-center gap-[inherit]" data-hover-card-trigger=""><i></i>name</span><b>×</b></a>');
+  // Any other kind: the row is the trigger and the label is plain.
+  expect(row({ issue: all[4]! })).toBe('<span class="flex w-full min-w-0" data-hover-card-trigger=""><a href="/r"><i></i>name<b>×</b></a></span>');
 });
 
 test("the issue favorite's card: key with the assignee across, the title, then status, epic and priority under Linear's property line", () => {
@@ -115,6 +138,25 @@ test("the view favorite's card shows the view's own filters as read-only chips: 
   expect(render(<FavoriteCard kind="view" thing={{ view: view({ id: "root", join: "and", children: [] }) }} />)).not.toContain("data-appearance");
 });
 
+test("BJ-413: a card row names as many epics as Linear's 42-character budget holds (`fct`, two more per comma), always at least one", () => {
+  expect(fittingNames([])).toBe(0);
+  expect(fittingNames(["x".repeat(60), "short"])).toBe(1);
+  // 20 + 2 + 20 = 42 fits; one more character doesn't.
+  expect(fittingNames(["a".repeat(20), "b".repeat(20), "c"])).toBe(2);
+  expect(fittingNames(["a".repeat(20), "b".repeat(17), "c"])).toBe(3);
+  expect(fittingNames(["a".repeat(20), "b".repeat(21)])).toBe(1);
+  expect(fittingNames(["Ab", "Cd", "Ef", "Gh", "Ij"])).toBe(5);
+  // Rendered: comma separated in one truncating line, then "+N" with the rest in its title.
+  const names = ["Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot", "Golf"];
+  const epics = names.map((name, n) => issue(`E-${n + 10}`, { type: "Epic", summary: name }));
+  commit({ issues: new Map(epics.map((e) => [e.key, e])), boards: [board], board: 7 });
+  const html = renderToStaticMarkup(<RouterContextProvider router={router}><FavoriteCard kind="team" thing={{ board }} /></RouterContextProvider>);
+  // "Alpha, Bravo, Charlie, Delta, Echo" is 34 characters; ", Foxtrot" would make 43.
+  expect(html).toContain('data-team-epics="5"');
+  expect(html).toMatch(/Alpha<\/a>, <a[^>]*>Bravo/);
+  expect(html).toMatch(/title="Foxtrot\nGolf"[^>]*>\+(<!-- -->)?2</);
+});
+
 test("the space favorite's card names the space and its open epics, or says it has none", () => {
   const html = render(<FavoriteCard kind="team" thing={{ board }} />);
   expect(html).toContain('data-team-hover="7"');
@@ -127,8 +169,82 @@ test("the space favorite's card names the space and its open epics, or says it h
 
 test("every sidebar favorite row goes through the one card wrapper, inside its menu so the × and right-click still work, and no card opens while a favorite is dragged", async () => {
   const rows = await Bun.file(new URL("../views/views-navigation.tsx", import.meta.url)).text();
-  expect(rows).toMatch(/<ContextMenu label="Favorite options" entries=\{.*?\}><FavoriteHoverCard thing=\{\{ view, issue, board, document \}\} label=\{label\}>\{link\}<\/FavoriteHoverCard><\/ContextMenu>/);
+  expect(rows).toMatch(/<ContextMenu label="Favorite options" entries=\{.*?\}><FavoriteHoverCard\.Row thing=\{thing\} label=\{label\}>\{link\}<\/FavoriteHoverCard\.Row><\/ContextMenu>/);
+  expect(rows).toMatch(/<FavoriteHoverCard\.Label thing=\{thing\} label=\{label\}><FavoriteIcon \{\.\.\.thing\} \/>.*?<\/FavoriteHoverCard\.Label><RemoveFavoriteButton id=\{id\} \/>/);
   const wrapper = await Bun.file(new URL("./favorite-hover-card.tsx", import.meta.url)).text();
-  expect(wrapper).toContain("const dragging = useSortableDragging();");
-  expect(wrapper).toMatch(/<HoverCard[^>]*\bisDisabled=\{dragging\}/);
+  expect(wrapper).toContain("const sorting = useSortableDragging(),");
+  expect(wrapper).toMatch(/<HoverCard[^>]*\bisDisabled=\{sorting \|\| dragging\}/s);
+});
+
+test("BJ-409: no favorite card opens while anything is dragged (`zN()`), an issue on its way across the sidebar as much as a favorite", async () => {
+  const { isDragging, subscribeToDrags } = await import("@/client/components/drag-state");
+  const before = globalThis.document;
+  const target = new EventTarget();
+  globalThis.document = target as unknown as Document;
+  try {
+    const stop = subscribeToDrags(() => {});
+    expect(isDragging()).toBe(false);
+    target.dispatchEvent(new Event("dragstart"));
+    expect(isDragging()).toBe(true);
+    target.dispatchEvent(new Event("dragend"));
+    expect(isDragging()).toBe(false);
+    // A drop, or the next press after a drag whose row unmounted, ends it too.
+    target.dispatchEvent(new Event("dragstart"));
+    target.dispatchEvent(new Event("drop"));
+    expect(isDragging()).toBe(false);
+    target.dispatchEvent(new Event("dragstart"));
+    target.dispatchEvent(new Event("pointerdown"));
+    expect(isDragging()).toBe(false);
+    target.dispatchEvent(new Event("dragstart"));
+    stop();
+    expect(isDragging()).toBe(false);
+  } finally {
+    globalThis.document = before;
+  }
+  const wrapper = await Bun.file(new URL("./favorite-hover-card.tsx", import.meta.url)).text();
+  expect(wrapper).toContain("dragging = useAnyDrag();");
+});
+
+test("BJ-408: each favorite row shows the item's own icon (Linear's `z1`): an issue's status, an epic's icon, a view's, a space's and a document's, never ☆", async () => {
+  commit({ issues: new Map(all.map((i) => [i.key, i])), boards: [board], board: 7 });
+  const icon = (thing: Parameters<typeof favoriteCardKind>[0]) => renderToStaticMarkup(<FavoriteIcon {...thing} />);
+  expect(icon({ issue: all[4]! })).toMatch(/^<svg width="14" height="14" viewBox="0 0 14 14"/);
+  expect(icon({ issue: epic })).toContain('data-favorite-icon="epic"');
+  expect(icon({ issue: epic })).toContain('width="16"');
+  expect(icon({ view: view(rules) })).toContain('style="color:var(--view-gray)"');
+  expect(icon({ board })).toContain("width:14px");
+  expect(icon({ board })).toContain(">S</span>");
+  expect(icon({ document: { issue: all[4]!, resource: doc({ icon: { name: "star", color: "#4cb782" } }) } })).toMatch(/data-document-glyph="star"/);
+  expect(icon({ document: { issue: all[4]!, resource: doc({ icon: { name: "emoji:🚀", color: "#4cb782" } }) } })).toContain(">🚀</span>");
+  const rows = await Bun.file(new URL("../views/views-navigation.tsx", import.meta.url)).text();
+  expect(rows).not.toContain("☆");
+});
+
+test("BJ-412: a document's card (`cpt`): its icon and title, then its issue and 'Last edited {date} by {editor}', and no summary", () => {
+  const html = render(<FavoriteCard kind="document" thing={{ document: { issue: all[4]!, resource: doc({ icon: { name: "list", color: "#5e6ad2" } }) } }} />);
+  expect(html).toContain('data-document-hover="d1"');
+  expect(html).toContain('data-document-glyph="list"');
+  expect(html).toContain("Rollout plan");
+  expect(html).toMatch(/data-document-parent=""[^]*Z-5 title/);
+  expect(html).toMatch(/data-document-edited=""[^]*Last edited Nov 2 by Ben Ito/);
+  expect(html).toContain("border-(--card-divider)");
+  // No editor known: no "by"; an untitled document reads "New document".
+  const bare = render(<FavoriteCard kind="document" thing={{ document: { issue: all[4]!, resource: doc({ title: "", editedBy: undefined }) } }} />);
+  expect(bare).toContain("New document");
+  expect(bare).not.toContain(" by ");
+  expect(bare).toMatch(/Last edited Nov 2</);
+});
+
+test("the epic card's target date is Linear's (\"Jan 1st, '20\", `kA` → `Zp.format` with shortYear), the calendar plain once the epic is done", () => {
+  const html = render(<FavoriteCard kind="project" thing={{ issue: epic }} />);
+  expect(html).toMatch(/title="Target date"[^]*?data-due="overdue"[^]*?Jan 1st, &#x27;20/);
+  const done = render(<FavoriteCard kind="project" thing={{ issue: { ...epic, status: "done", resolved: "2026-11-01T10:00:00Z" } }} />);
+  expect(done).toMatch(/title="Target date"[^]*?data-due="none"/);
+});
+
+test("BJ-411: a progress ring on a card, menu or dialog draws its track in that surface's bgBorder (Linear's `Nk` reads its theme's)", async () => {
+  const css = await Bun.file(new URL("../../components/control-tokens.css", import.meta.url)).text();
+  expect(css).toMatch(/\[data-elevation\] \{[^}]*--progress-track: var\(--bg-border\);/);
+  const hoverCard = await Bun.file(new URL("../../components/hover-card.tsx", import.meta.url)).text();
+  expect(hoverCard).toMatch(/data-hover-card=\{label\}\s+\{\.\.\.elevation\.props\}/);
 });

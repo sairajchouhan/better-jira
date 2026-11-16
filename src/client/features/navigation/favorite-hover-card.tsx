@@ -2,19 +2,21 @@
  * Linear's favorite hover cards (startup-root `d5n` → `X8n`, `Z8n`; a team's `m5n` → `vpt`): resting on a sidebar favorite opens a
  * preview of what it opens, to the right of the sidebar and centred on the row, after the card delay (550ms, `Rwe`), through the
  * one hover card every card uses. An issue opens Linear's issue card, an epic (Linear's project) the project card, a view the view
- * card and a space (Linear's team) the team card.
+ * card, a space (Linear's team) the team card and a document the document card (`cpt`).
  */
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { Avatar } from "@/client/components/avatar";
 import { CardBody, CardProperties, CardProperty, HoverCard } from "@/client/components/hover-card";
 import { DueIcon, Icon, PriorityIcon, ProgressRing, StatusIcon } from "@/client/components/icons";
 import { EntityIdentifier } from "@/client/components/entity-identifier";
 import { SpaceIcon } from "@/client/components/space-icon";
 import { useSortableDragging } from "@/client/components/sortable";
-import { shortDate } from "@/client/lib/due-date";
+import { useAnyDrag } from "@/client/components/drag-state";
+import { ordinalDate, shortDate } from "@/client/lib/due-date";
 import { statusOf, useStore } from "@/client/state/store";
 import { subIssueCount, type SubIssueCount } from "@/client/features/issue/sub-issue-model";
 import { IssueCard } from "@/client/features/issue/issue-hover-card";
+import { DocumentGlyph, documentEditor } from "@/client/features/issue/document-glyph";
 import { SavedViewIcon } from "@/client/features/views/saved-view-icon";
 import type { SavedView } from "@/client/features/views/saved-views";
 import { ViewFilterChips } from "@/client/features/views/view-controls";
@@ -23,41 +25,87 @@ import { statusById } from "@/shared/board-catalog";
 import { isEpic } from "@/shared/epics";
 import { compareText } from "@/shared/compare";
 import type { Board, Issue } from "@/shared/issue-model";
+import type { IssueResource } from "@/shared/issue-resource";
 import { AppLink, IssueKeyLink } from "./app-link";
 
-/** What a sidebar favorite stands for, as its row resolved it. */
-export type FavoriteThing = { view?: SavedView; issue?: Issue; board?: Board; document?: unknown };
-export type FavoriteCardKind = "issue" | "project" | "view" | "team";
+/** What a sidebar favorite stands for, as its row resolved it: a document is the issue it belongs to and its resource. */
+export type FavoriteThing = { view?: SavedView; issue?: Issue; board?: Board; document?: { issue: Issue; resource: IssueResource } };
+export type FavoriteCardKind = "issue" | "project" | "view" | "team" | "document";
 
 /**
  * Which card a favorite opens (`Z8n`, and `m5n` for a team): an issue its issue card, an epic (our Linear project) the project
- * card, a view the view card, a space (our Linear team) the team card. A document opens none here: Linear's document card (`cpt`)
- * is not built.
+ * card, a view the view card, a space (our Linear team) the team card, a document the document card (`cpt`).
  */
-export function favoriteCardKind({ view, issue, board }: FavoriteThing): FavoriteCardKind | null {
+export function favoriteCardKind({ view, issue, board, document }: FavoriteThing): FavoriteCardKind | null {
   if (issue) return isEpic(issue) ? "project" : "issue";
   if (view) return "view";
   if (board) return "team";
+  if (document) return "document";
   return null;
 }
 
-/** The one wrapper every favorite row's card goes through: the shared hover card to the right of the row, as wide as the row, with
- *  no card while any favorite is dragged (`d5n`: `!isDragged && zN() == null`). A favorite with no card is its row alone. */
-export function FavoriteHoverCard({ thing, label, children }: { thing: FavoriteThing; label: string; children: ReactNode }) {
-  const dragging = useSortableDragging();
+/**
+ * What a favorite's card sits beside. Every kind but a team wraps its whole row in the card's trigger (`d5n` → `h$`), so its card
+ * starts past the row's right edge; a team favorite is a folder whose card is on its toggle button (`m5n`: `$` around the icon
+ * and name, `teamToggleButton` growing up to the ×), so its card starts where the label ends, short of the × and the row's padding.
+ */
+export const favoriteCardAnchor = (kind: FavoriteCardKind) => (kind === "team" ? "label" : "row");
+
+/**
+ * Linear's favorite row icon (the favorite's mapping, `z1` and the team mapping in startup-root): an issue's status (14px, `WA`),
+ * an epic's project icon (16px, `DD`), a view's own icon (`rk`), a space's icon (14px, `ik`) and a document's own icon (`ej`).
+ */
+export function FavoriteIcon({ view, issue, board, document }: FavoriteThing) {
+  if (view) return <SavedViewIcon view={view} />;
+  if (document) return <DocumentGlyph resource={document.resource} />;
+  if (board) return <SpaceIcon name={board.name} size={14} />;
+  if (!issue) return null;
+  if (isEpic(issue))
+    return (
+      <span className="flex shrink-0 text-fg-2" data-favorite-icon="epic">
+        <Icon name="layers" size={16} />
+      </span>
+    );
+  const status = statusOf(issue);
+  return status ? <StatusIcon status={status} /> : null;
+}
+
+type FavoriteCardTriggerProps = { thing: FavoriteThing; label: string; children: ReactNode };
+
+/** The one trigger every favorite's card goes through: the shared hover card to the right of its anchor, with no card while
+ *  anything is dragged (`d5n`: `!isDragged && zN() == null`), whether a favorite or an issue on its way across the sidebar.
+ *  It wraps `at` only when that is the kind's anchor (`favoriteCardAnchor`); otherwise, and for a favorite with no card, it is
+ *  its children alone. */
+function FavoriteCardTrigger({ at, thing, label, children }: FavoriteCardTriggerProps & { at: "row" | "label" }) {
+  const sorting = useSortableDragging(),
+    dragging = useAnyDrag();
   const kind = favoriteCardKind(thing);
-  if (!kind) return children;
+  if (!kind || favoriteCardAnchor(kind) !== at) return children;
   return (
-    <HoverCard placement="right" display="block" label={label} isDisabled={dragging} content={<FavoriteCard kind={kind} thing={thing} />}>
+    <HoverCard
+      placement="right"
+      display={at === "row" ? "block" : "fill"}
+      label={label}
+      isDisabled={sorting || dragging}
+      content={<FavoriteCard kind={kind} thing={thing} />}
+    >
       {children}
     </HoverCard>
   );
 }
 
+/** A favorite row's card, placed on its anchor: `Row` around the row's link, `Label` around its icon and name inside it. Each
+ *  favorite renders both and exactly one of them opens its card. */
+export const FavoriteHoverCard = {
+  Row: (props: FavoriteCardTriggerProps) => <FavoriteCardTrigger at="row" {...props} />,
+  Label: (props: FavoriteCardTriggerProps) => <FavoriteCardTrigger at="label" {...props} />,
+};
+
 export function FavoriteCard({ kind, thing }: { kind: FavoriteCardKind; thing: FavoriteThing }) {
   if (kind === "issue") return <IssueCard relation={{ key: thing.issue!.key, kind: "related" }} issue={thing.issue} />;
   if (kind === "project") return <ProjectCard epic={thing.issue!} />;
   if (kind === "view") return <ViewCard view={thing.view!} />;
+  if (kind === "document") return <DocumentCard document={thing.document!} />;
   return <TeamCard board={thing.board!} />;
 }
 
@@ -72,7 +120,8 @@ export function epicProgress(count: SubIssueCount | undefined) {
 /**
  * Linear's project card (`kA` in `TA`) for an epic: its key (mini, labelMuted), its icon and name (smallPlus, two lines at most),
  * its description (mini, labelMuted, two lines), then under the property line, 16px apart, `kA`'s order: status, team (its space),
- * lead (its assignee), priority, target date (its due date, red once overdue) and progress. Jira holds no milestones inside an epic
+ * lead (its assignee), priority, target date (its due date in Linear's "Aug 1st, '25", the calendar red once overdue and plain once
+ * the epic is done, `sA` with `dueDate: completedAt ? undefined : targetDate`) and progress. Jira holds no milestones inside an epic
  * (`activeMilestone`), feature flags or estimates, so those don't show.
  */
 function ProjectCard({ epic }: { epic: Issue }) {
@@ -114,8 +163,8 @@ function ProjectCard({ epic }: { epic: Issue }) {
           </CardProperty>
         ) : null}
         {epic.due ? (
-          <CardProperty icon={<DueIcon due={epic.due} resolved={epic.resolved} />} title="Target date">
-            {shortDate(epic.due)}
+          <CardProperty icon={<DueIcon due={epic.resolved ? null : epic.due} />} title="Target date">
+            {ordinalDate(epic.due)}
           </CardProperty>
         ) : null}
         <span className="flex items-center text-xs" data-epic-progress={progress.percent}>
@@ -156,8 +205,24 @@ function ViewCard({ view }: { view: SavedView }) {
   );
 }
 
-/** How many of a space's projects the team card names before "+N" (Linear's `cct` fits as many as its row holds). */
-const TEAM_CARD_PROJECTS = 3;
+/** Linear's `sct`: how many characters of names a team card's row spells out before "+N" (`fct`). */
+export const CARD_NAMES_BUDGET = 42;
+
+/**
+ * Linear's `fct`: how many of `names` a card row spells out, comma separated, before "+N". It adds each name's length and two for
+ * every ", " and stops at the first name that would take the row past `budget` characters, but always shows the first.
+ */
+export function fittingNames(names: readonly string[], budget = CARD_NAMES_BUDGET) {
+  let length = 0,
+    count = 0;
+  for (const [index, name] of names.entries()) {
+    const next = length + (index > 0 ? 2 : 0) + name.length;
+    if (next > budget && count > 0) break;
+    length = next;
+    count++;
+  }
+  return count;
+}
 
 /**
  * Linear's team card (`vpt`, 296px) for a space: its icon (18px) and name (small, labelTitle), a line, then the Projects row (the
@@ -169,7 +234,8 @@ function TeamCard({ board }: { board: Board }) {
   const open = [...epics.values()]
     .filter((issue) => isEpic(issue) && onBoard(issue, board.id) && statusById(board, issue.status)?.category !== "done")
     .sort((a, b) => compareText(a.summary, b.summary));
-  const shown = open.length > TEAM_CARD_PROJECTS ? open.slice(0, TEAM_CARD_PROJECTS - 1) : open;
+  const shown = open.slice(0, fittingNames(open.map((epic) => epic.summary))),
+    rest = open.slice(shown.length);
   return (
     <div className="flex w-[296px] flex-col gap-2.5" data-team-hover={board.id}>
       <div className="flex min-w-0 items-center gap-1.5 pt-1 pr-1.5 pl-1">
@@ -185,13 +251,24 @@ function TeamCard({ board }: { board: Board }) {
             <Icon name="layers" size={16} />
           </span>
           {open.length ? (
-            <span className="flex min-w-0 flex-wrap items-center gap-x-2 gap-y-1 text-xs font-medium text-fg">
-              {shown.map((epic) => (
-                <IssueKeyLink key={epic.key} issueKey={epic.key} className="max-w-[200px] truncate hover:underline">
-                  {epic.summary}
-                </IssueKeyLink>
-              ))}
-              {open.length > shown.length ? <span className="text-fg-3">+{open.length - shown.length}</span> : null}
+            // `cct`: the names in one line (miniPlus, labelBase, no wrap, truncated), comma separated, then "+N" in labelMuted.
+            <span className="mt-0.5 flex min-w-0 items-center gap-1.5 text-xs font-medium">
+              <span className="min-w-0 truncate whitespace-nowrap text-fg" data-team-epics={shown.length}>
+                {shown.map((epic, index) => (
+                  <Fragment key={epic.key}>
+                    {index > 0 ? ", " : null}
+                    <IssueKeyLink issueKey={epic.key} className="hover:underline">
+                      {epic.summary}
+                    </IssueKeyLink>
+                  </Fragment>
+                ))}
+              </span>
+              {rest.length ? (
+                // Linear's "+N" opens a list of the rest (`lct`); a card can't open over this card here, so its title lists them.
+                <span className="shrink-0 whitespace-nowrap text-fg-3" title={rest.map((epic) => epic.summary).join("\n")} data-tip-over-card="" data-tip-plain="">
+                  +{rest.length}
+                </span>
+              ) : null}
             </span>
           ) : (
             <span className="mt-0.5 text-xs font-medium text-fg-3">No epics</span>
@@ -199,5 +276,48 @@ function TeamCard({ board }: { board: Board }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Linear's document card (`cpt` in `TA`): the document's own icon (16px) and its title (smallPlus, labelTitle, linked), then under
+ * the property line a column 8px apart (`lpt`): the issue it belongs to (its icon and title, mini labelBase, linked), and "Last
+ * edited {date} by {editor}" (miniPlus labelBase, after labelFaint's calendar glyph) with the date as Linear's `ei` writes it.
+ * Linear's generated summary has no Jira counterpart, so it doesn't show; nor does "by …" when no editor is known.
+ */
+function DocumentCard({ document: { issue, resource } }: { document: { issue: Issue; resource: IssueResource } }) {
+  const board = useStore((s) => boardFor(issue, s.board)),
+    editor = documentEditor(resource);
+  return (
+    <CardBody data-document-hover={resource.id}>
+      <div className="flex min-w-0 items-center gap-1.5">
+        <DocumentGlyph resource={resource} />
+        <AppLink
+          to={{ board, selected: issue.key, panel: true, document: resource.id }}
+          className="truncate text-[13px] font-medium text-fg hover:underline"
+        >
+          {resource.title || "New document"}
+        </AppLink>
+      </div>
+      <CardProperties>
+        <div className="flex min-w-0 flex-col gap-2">
+          <IssueKeyLink issueKey={issue.key} className="flex min-w-0 items-center gap-1.5 text-xs text-fg hover:underline" data-document-parent="">
+            <FavoriteIcon issue={issue} />
+            <span className="truncate">{issue.summary}</span>
+          </IssueKeyLink>
+          {resource.updated ? (
+            <span className="flex min-w-0 items-center gap-1.5 text-xs font-medium text-fg" data-document-edited="">
+              <span className="flex shrink-0 text-fg-4">
+                <Icon name="calendar" size={16} />
+              </span>
+              <span className="truncate">
+                Last edited {shortDate(resource.updated)}
+                {editor ? ` by ${editor.name}` : null}
+              </span>
+            </span>
+          ) : null}
+        </div>
+      </CardProperties>
+    </CardBody>
   );
 }

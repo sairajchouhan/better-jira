@@ -22,7 +22,7 @@ import { CountBadge } from "@/client/components/count-badge";
 import { viewSummaries, type ResultFeedback } from "./views-navigation-model";
 import { boardFor } from "@/shared/board-membership";
 
-import { FavoriteHoverCard } from "@/client/features/navigation/favorite-hover-card";
+import { FavoriteHoverCard, FavoriteIcon } from "@/client/features/navigation/favorite-hover-card";
 import { SavedViewIcon } from "./saved-view-icon";
 export { SavedViewIcon };
 export function ViewFavorites({ expanded, onToggle }: { expanded: boolean; onToggle: () => void }) {
@@ -34,7 +34,11 @@ export function ViewFavorites({ expanded, onToggle }: { expanded: boolean; onTog
     const issue = issues.get(id), board = id.startsWith("board:") ? boards.find(b => b.id === Number(id.split(":")[1])) : undefined;
     if (!view && !document && !issue && !board) return [];
 
-    const content = <>{view ? <SavedViewIcon view={view} /> : document ? <Icon name="file" /> : <span className="text-fg-3">☆</span>}<span className="min-w-0 flex-1 truncate">{view?.name ?? (document ? document.resource.title || "New document" : issue ? `${issue.key} ${issue.summary}` : board?.name)}</span><RemoveFavoriteButton id={id} /></>;
+    const thing = { view, issue, board, document };
+    // Resting on the row opens its card (Linear's `h$` around `d5n`; a team's on its toggle button, `m5n`): one wrapper for every
+    // kind, so all share the delay, the placement and the dismissal.
+    const label = view?.name ?? (issue ? issue.key : board?.name ?? (document ? document.resource.title || "New document" : ""));
+    const content = <><FavoriteHoverCard.Label thing={thing} label={label}><FavoriteIcon {...thing} /><span className="min-w-0 flex-1 truncate">{view?.name ?? (document ? document.resource.title || "New document" : issue ? `${issue.key} ${issue.summary}` : board?.name)}</span></FavoriteHoverCard.Label><RemoveFavoriteButton id={id} /></>;
     // Each row is the sidebar's one link, marked by the shared rule: active only when the screen came from this favorite.
     const row = { place: favoritePlace(id), favorite: id };
     // The row drags by its surface (BJ-75), so the link itself is never the browser's own drag of its URL.
@@ -45,10 +49,7 @@ export function ViewFavorites({ expanded, onToggle }: { expanded: boolean; onTog
       : <SidebarLink row={row} to={document ? { board: boardFor(document.issue, current), selected: document.issue.key, panel: true, document: document.resource.id } : issue ? { board: boardFor(issue, current), selected: issue.key, panel: true } : { board: board!.id, panel: false, selected: null }} {...props}>{content}</SidebarLink>;
     // Linear's favorite row (`d5n`) has one menu for every kind of favorite: Copy URL, Open in new tab, ┄ Remove favorite.
     const url = () => board ? boardURL(board) : placeURL(view ? { to: "view", id: view.id } : document ? { to: "issue", key: document.issue.key, document: document.resource.id } : { to: "issue", key: issue!.key });
-    // Resting on the row opens its card (Linear's `h$` around `d5n`): one wrapper for every kind, so all share the delay, the
-    // placement and the dismissal.
-    const label = view?.name ?? (issue ? issue.key : board?.name ?? "");
-    return [{ id, row: <ContextMenu label="Favorite options" entries={() => favoriteEntries(id, url)}><FavoriteHoverCard thing={{ view, issue, board, document }} label={label}>{link}</FavoriteHoverCard></ContextMenu> }];
+    return [{ id, row: <ContextMenu label="Favorite options" entries={() => favoriteEntries(id, url)}><FavoriteHoverCard.Row thing={thing} label={label}>{link}</FavoriteHoverCard.Row></ContextMenu> }];
   });
   // Linear's favourites reorder as a dnd-kit sortable dragged by the whole row (startup-root `LN`): a drop takes the slot of
   // the row it lands on.
