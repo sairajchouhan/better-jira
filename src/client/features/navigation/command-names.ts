@@ -10,7 +10,7 @@ export const COMMAND_NAMES: Readonly<Record<string, string>> = {
   // `?` (mAt) and ⌘/ (`SHOW_KEYBOARD_SHORTCUTS_HELP_CENTER`).
   help: "Help",
   shortcuts: "Open Keyboard Shortcuts Cheat Sheet",
-  // The Open … pages (O then I, D, U, F, T, V).
+  // The Open … pages (O then I, D, U, F, S, V).
   "open-issue": "Open issue…",
   "open-document": "Open document…",
   "open-user": "Open user…",

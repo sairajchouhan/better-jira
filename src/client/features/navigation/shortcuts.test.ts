@@ -29,6 +29,9 @@ test("Linear's observed bindings replace invented single-letter shortcuts", () =
   for (const invented of ["B", "D", "E", "H", "M", "N"])
     expect(shortcuts.some((s) => s.hotkey === invented && s.group !== "Inbox")).toBe(false);
   expect(keys.inbox).toEqual(["G", "I"]);
+  // The space picker is O then S (space), not Linear's O then T (team).
+  expect(keys["team-open"]).toEqual(["O", "S"]);
+  expect(shortcuts.some((s) => JSON.stringify(s.hotkey) === '["O","T"]')).toBe(false);
   expect([keys["inbox-read"], keys["inbox-delete"], keys["inbox-snooze"]]).toEqual(["U", "E", "H"]);
   expect(editorBindings.find((b) => b.id === "strike")?.hotkey).toBe("Mod+Shift+X");
 });

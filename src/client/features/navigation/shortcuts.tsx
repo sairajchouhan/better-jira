@@ -512,7 +512,8 @@ export const shortcuts: Shortcut[] = [
     id: "team-open",
     name: "Open space",
     group: "Navigation",
-    hotkey: ["O", "T"],
+    // Linear's Open team is O then T; ours is O then S, for space (.raj/linear-differences.md).
+    hotkey: ["O", "S"],
     run: overlay("boards"),
   },
   { id: "board-add", name: "Add space", group: "Navigation", run: overlay("add-board") },
