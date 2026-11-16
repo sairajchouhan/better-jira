@@ -34,22 +34,31 @@ export function keptIssues({
 }
 
 /**
- * Keeps every child Jira gives an issue through its `parent` field, whatever the types and wherever the child lives: Linear's
- * Sub-issues list a parent's children from any team (`issue.children`). A board's sync brings only the children its filter holds,
- * so a child in another project or on no configured board (an epic's work items in a sibling project) is read here when its parent
- * opens, kept on no board as `keptIssues` keeps a linked one, and saved again when Jira changed it. A sub-task has no children, so
- * it is never asked. Resolves whether anything was saved; asks made while one search is out share it.
+ * Keeps every child Jira gives an issue through its `parent` field, whatever the types and wherever the child lives. A board's
+ * sync brings only the children its filter holds, so a child in another project or on no configured board (an epic's work items
+ * in a sibling project) is read here when its parent opens, kept on no board as `keptIssues` keeps a linked one, and saved again
+ * when Jira changed it. A child kept on no board that Jira no longer lists under the parent (moved or deleted) is read again, or
+ * dropped when Jira has it no more, so it leaves the parent's Sub-issues. A sub-task has no children, so it is never asked.
+ * Resolves whether anything changed; asks made while one search is out share it.
  */
 export function keptChildren({
   search,
   updated,
   save,
+  keptUnder,
+  read,
+  remove,
 }: {
   /** Jira's `parent = <key>` search, every page, with the mirror's fields. */
   search: (key: string) => Promise<any[]>;
   /** The mirror's `updated` for a key, "" when it lacks it. */
   updated: (key: string) => string;
   save: (raw: any) => void;
+  /** The keys the mirror keeps on no board with `key` as their parent. */
+  keptUnder: (key: string) => string[];
+  /** One issue from Jira with the mirror's fields; rejects with `status` 404 when it is gone. */
+  read: (key: string) => Promise<any>;
+  remove: (key: string) => void;
 }) {
   const reading = new Map<string, Promise<boolean>>();
   return (key: string, level?: number): Promise<boolean> => {
@@ -57,15 +66,23 @@ export function keptChildren({
     let pending = reading.get(key);
     if (!pending) {
       pending = search(key)
-        .then((children) => {
-          let saved = false;
+        .then(async (children) => {
+          let changed = false;
           for (const child of children) {
             const held = updated(child.key);
             if (held && held >= (child.fields?.updated ?? "")) continue;
             save(child);
-            saved = true;
+            changed = true;
           }
-          return saved;
+          const listed = new Set(children.map((c) => c.key as string));
+          for (const left of keptUnder(key).filter((k) => !listed.has(k))) {
+            await read(left).then(save, (error: unknown) => {
+              if ((error as { status?: number } | null)?.status !== 404) throw error;
+              remove(left);
+            });
+            changed = true;
+          }
+          return changed;
         })
         .finally(() => reading.delete(key));
       reading.set(key, pending);

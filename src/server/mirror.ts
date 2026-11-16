@@ -665,6 +665,16 @@ const children = keptChildren({
   },
   updated: (key) => store.updated(key),
   save: saveContent,
+  keptUnder: (key) =>
+    db
+      .query<{ key: string }, [string]>(
+        `SELECT key FROM issues i WHERE json_extract(slim,'$.parent') = ?
+           AND NOT EXISTS (SELECT 1 FROM issue_boards m WHERE m.key = i.key)`,
+      )
+      .all(key)
+      .map((r) => r.key),
+  read: (key) => jira(`/rest/api/3/issue/${encodeURIComponent(key)}?fields=${projection.fields}`),
+  remove: (key) => store.remove(key),
 });
 /** The issue's details; one the mirror lacks is read and kept first (`kept`). Undefined when Jira has no such issue. Its
  *  children no board holds are read alongside, and open tabs hear when one arrives. */

@@ -43,6 +43,9 @@ test("every issue is an issue: a parent's children in another project or on no b
     },
     updated: (key) => saved.get(key)?.fields.updated ?? "",
     save: (raw) => saved.set(raw.key, raw),
+    keptUnder: () => [],
+    read: async () => ({}),
+    remove: () => {},
   });
   // A level-0 parent (a Spike, a Story…) is asked like an epic; the cross-project child is kept, the held one not saved again.
   expect(await children("TEAM-1", 0)).toBe(true);
@@ -51,4 +54,26 @@ test("every issue is an issue: a parent's children in another project or on no b
   // A sub-task has no children: Jira is not asked.
   expect(await children("TEAM-3", -1)).toBe(false);
   expect(searched).toEqual(["TEAM-1", "TEAM-1"]);
+});
+
+test("a child kept on no board that Jira moved away or deleted leaves its old parent's Sub-issues", async () => {
+  const saved = new Map<string, any>([
+    ["OTHER-1", { key: "OTHER-1", fields: { parent: { key: "TEAM-1" }, updated: "1" } }],
+    ["OTHER-2", { key: "OTHER-2", fields: { parent: { key: "TEAM-1" }, updated: "1" } }],
+  ]);
+  const children = keptChildren({
+    search: async () => [],
+    updated: (key) => saved.get(key)?.fields.updated ?? "",
+    save: (raw) => saved.set(raw.key, raw),
+    keptUnder: (key) => [...saved.values()].filter((i) => i.fields.parent?.key === key).map((i) => i.key),
+    read: async (key) => {
+      if (key === "OTHER-2") throw Object.assign(new Error("Jira 404"), { status: 404 });
+      return { key, fields: { parent: { key: "TEAM-9" }, updated: "2" } };
+    },
+    remove: (key) => saved.delete(key),
+  });
+  expect(await children("TEAM-1", 1)).toBe(true);
+  expect(saved.get("OTHER-1").fields.parent.key).toBe("TEAM-9");
+  expect(saved.has("OTHER-2")).toBe(false);
+  expect(await children("TEAM-1", 1)).toBe(false);
 });
