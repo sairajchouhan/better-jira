@@ -25,3 +25,10 @@ test("BJ-338: a tab that keeps edits local still takes the issues Jira adds, but
   }).issues;
   expect([...merged!.keys()].sort()).toEqual(["TEAM-1", "TEAM-3"]);
 });
+
+test("a pull request number the mirror stops sending leaves the issue, so the badge never shows an old pull request's number", () => {
+  set({ writable: false, issues: new Map([["TEAM-1", { ...issue([1]), prCount: 1, prStatus: "open", prNumber: "#2965" } as Issue]]) });
+  // A second pull request linked: Jira's state moved and no number for two.
+  const two = mergeProperties({ "TEAM-1": { ...issue([1]), prCount: 2 } }).issues!.get("TEAM-1")!;
+  expect([two.prCount, two.prStatus, two.prNumber]).toEqual([2, undefined, undefined]);
+});

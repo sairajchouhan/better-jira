@@ -154,6 +154,8 @@ export function withJiraLinks(
  * Lays one property poll under the local edits. Returns the issues to show (undefined: nothing changed), issues Jira
  * deleted, and issues whose cached full record went stale (marked for a reload).
  */
+/** The pull request count, state and number the mirror projects onto each issue (server mirror.ts `slimOf`). */
+const PULL_REQUEST_FIELDS = ["prCount", "prStatus", "prNumber"] as const;
 export function mergeProperties(entries: Record<string, any>) {
   const state = get();
   const issues = new Map(state.issues);
@@ -188,6 +190,9 @@ export function mergeProperties(entries: Record<string, any>) {
       if (fullFields.get(key)?.size) lastProperties.delete(key);
       else stale.push(key);
     }
+    // The row is the mirror's whole projection: a pull request field it no longer sends (none, several, or a number not read for
+    // the new count) is gone, not kept from the last poll, or a badge would show the old pull request's number.
+    for (const field of PULL_REQUEST_FIELDS) if (!(field in extra)) extra[field] = undefined;
     const local = localFields.get(key) ?? new Set();
     for (const field of local) delete extra[field];
     if (local.has("status")) {
