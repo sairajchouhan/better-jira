@@ -25,6 +25,8 @@ import {
   type Local,
   type ShownView,
   withoutFilter,
+  needsWholeFeed,
+  LOADING_ORDER,
 } from "@/shared/inbox-model";
 
 export type Feed = InboxFeed & { writable: boolean };
@@ -58,6 +60,11 @@ export type InboxPorts = {
 /** Linear's `MarkNotificationAsRead` `A` (2026-11-14): the open notification is marked read 300 ms after it shows, so rows
  *  that J/K or the mouse pass through stay unread. Showing another notification, or none, before then cancels it. */
 export const READ_DELAY = 300;
+/** The most pages the inbox loads to show or delete the whole feed: about 1,000 notifications (ponytail). */
+export const MAX_PAGES = 20;
+/** Whether `data` holds as much of the feed as the inbox ever loads at once: every page, or `MAX_PAGES`. */
+export const wholeFeed = (data: InfiniteData<Feed, string> | undefined) =>
+  !!data && (data.pages.length >= MAX_PAGES || !(data.pages.at(-1)?.more && data.pages.at(-1)?.cursor));
 /** The longest wait `setTimeout` keeps (2^31 − 1 ms); a longer one fires at once. */
 const MAX_WAIT = 2 ** 31 - 1;
 const timeout = (fn: () => void, ms: number) => {
@@ -305,7 +312,11 @@ export function createInboxStore(ports: InboxPorts) {
     const inputs = [data, own, v, now, keep, issues],
       last = lastOrder;
     if (last?.inputs.every((x, i) => x === inputs[i])) return last.order;
-    let order = inboxOrder(liveTitles(itemsOf(data), issues), own, v, now, keep, facets);
+    // Linear sorts every notification it holds (`fe`); Jira pages newest first, so any other order waits for every page (D12).
+    let order =
+      needsWholeFeed(v) && !wholeFeed(data)
+        ? LOADING_ORDER
+        : inboxOrder(liveTitles(itemsOf(data), issues), own, v, now, keep, facets);
     const onlyMirror =
       !!last && inputs.slice(0, 5).every((x, i) => x === last.inputs[i]);
     if (onlyMirror && sameInboxOrder(last!.order, order)) order = last!.order;
@@ -581,12 +592,12 @@ export function createInboxStore(ports: InboxPorts) {
   }
   const closed = (item: InboxItem) =>
     ["Completed", "Canceled", "Duplicate"].includes(facets(item).statusType);
-  /** Loads the feed's older pages, as Linear holds every notification in memory. Ponytail: 20 pages (about 1,000
-   *  notifications) at most; anything older stays unloaded. */
+  /** Loads the feed's older pages, as Linear holds every notification in memory. Ponytail: `MAX_PAGES` pages at most;
+   *  anything older stays unloaded. */
   async function loadAll(category: Category) {
     const observer = feed(category);
     let result = observer.getCurrentResult();
-    for (let i = 0; i < 20 && result.hasNextPage && !result.isError; i++)
+    while (!wholeFeed(result.data) && result.hasNextPage && !result.isError)
       result = await observer.fetchNextPage({ cancelRefetch: false });
     return result;
   }
@@ -750,6 +761,7 @@ export function createInboxStore(ports: InboxPorts) {
     wakeSnoozed,
     wakeAt,
     tidyLocal,
+    loadAll,
     hasSelectedRow,
     showTab,
     priorityInbox,

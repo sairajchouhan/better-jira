@@ -661,7 +661,15 @@ export function focusGroups(
   return groups;
 }
 
-export type InboxOrder = { base: InboxItem[]; groups: InboxGroup[]; rows: InboxItem[] };
+export type InboxOrder = {
+  base: InboxItem[];
+  groups: InboxGroup[];
+  rows: InboxItem[];
+  /** Set while the order waits for the rest of the feed (`needsWholeFeed`): the list shows its loading state. */
+  loading?: boolean;
+};
+/** The order while older pages load: nothing yet, as a partial set sorted any way but Jira's would be wrong. */
+export const LOADING_ORDER: InboxOrder = { base: [], groups: [], rows: [], loading: true };
 /** The list as shown: `rows` in on-screen order (the keys' order too), in their `groups`; `base` is the rows before filters and
  *  find, for the filter menu's counts and the count the filters hide. */
 export function inboxOrder(
@@ -683,6 +691,7 @@ const sameRows = (a: InboxItem[], b: InboxItem[]) =>
   a.length === b.length && a.every((r, i) => r.id === b[i]!.id && r.unread === b[i]!.unread && r.title === b[i]!.title);
 /** Whether two orders show the same rows in the same groups. */
 export const sameInboxOrder = (a: InboxOrder, b: InboxOrder) =>
+  !a.loading === !b.loading &&
   sameRows(a.base, b.base) &&
   a.groups.length === b.groups.length &&
   a.groups.every((g, i) => g.label === b.groups[i]!.label && sameRows(g.rows, b.groups[i]!.rows));
@@ -696,6 +705,11 @@ export const emptyInbox = (hidden: number, unreadOnly: boolean) =>
     : unreadOnly
       ? ({ title: "No unreads", action: "show-all" } as const)
       : ({ title: "No notifications" } as const);
+/** Whether the view's order needs the whole feed: Linear sorts every notification it holds (`fe`, Focus groups `Qe`), while
+ *  Jira pages newest first, so any other order (oldest first, priority, unread first, Focus) is wrong until every page is in
+ *  (QA round 4, D12). */
+export const needsWholeFeed = (view: Pick<InboxView, "ordering" | "unreadFirst" | "grouping">) =>
+  view.ordering !== "newest" || view.unreadFirst || view.grouping === "focus";
 /** Whether any inbox property filter has selected values. */
 export const hasFilters = (view: InboxView) =>
   Object.values(view.filters).some((values) => values?.length);

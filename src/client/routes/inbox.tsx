@@ -16,7 +16,7 @@ import { FindField } from "@/client/components/find-field";
 import { Tabs } from "@/client/components/tabs";
 import { Text } from "@/client/components/text";
 import { Icon, PriorityIcon, StatusIcon, TypeDot, type IconName } from "@/client/components/icons";
-import { FILTER_FIELDS, filterOperator, withOperator, withoutFilter, describe, emptyInbox, groupSummary, rowLabel, feedCategory, hasFilters, missingIssueNote, shortAgo, type FilterField, type InboxItem, type InboxView, snoozeMarks, type SnoozeMarks } from "@/shared/inbox-model";
+import { FILTER_FIELDS, filterOperator, withOperator, withoutFilter, describe, emptyInbox, groupSummary, rowLabel, feedCategory, hasFilters, missingIssueNote, needsWholeFeed, shortAgo, type FilterField, type InboxItem, type InboxView, snoozeMarks, type SnoozeMarks } from "@/shared/inbox-model";
 import { CommentCard, InboxGroupUpdates } from "@/client/features/inbox/inbox-group";
 import { TIME_PLACEHOLDER, TimeOptionRows } from "@/client/features/time-options/time-option-rows";
 import { snoozedFor } from "@/shared/time-options";
@@ -737,7 +737,8 @@ function InboxFind({ ref, place }: { ref: Ref<HTMLInputElement>; place: "tabs" |
 /** The list pane: Linear's 416px column with its own 44px header. Older pages load as the end of the list scrolls into view. */
 export function InboxList() {
   const v = useView();
-  const feed = useFeed(feedCategory(useShownView()));
+  const category = feedCategory(useShownView());
+  const feed = useFeed(category);
   const {
     data,
     error,
@@ -753,7 +754,7 @@ export function InboxList() {
   const own = useLocal();
   const items = itemsOf(data);
   // Filters and grouping read mirrored issues: a store change re-renders the list only when its rows change.
-  const { base, groups, rows } = useInboxOrder();
+  const { base, groups, rows, loading } = useInboxOrder();
   const [menu, setMenu] = useState<{
     item: InboxItem;
     point: { x: number; y: number };
@@ -777,6 +778,12 @@ export function InboxList() {
     if (unseen) void clearUnseen();
   }, [unseen]);
   const pages = data?.pages.length ?? 0;
+  // An order other than Jira's sorts the whole feed, so its pages all load first (D12).
+  const whole = needsWholeFeed(v);
+  useEffect(() => {
+    if (whole) void inbox.loadAll(category);
+    // A Retry after a failed page brings back no new page: the drain starts again once the error clears.
+  }, [whole, category, pages, error]);
   // A reload keeps the open issue, or a row outside the mirror, in the URL: select its row again, so U, E and H act on it.
   const rowParam = useSearch({ strict: false, select: (search) => (search as Record<string, string | undefined>)[ROW_PARAM] });
   const issueKey = useStore((s) => (s.inbox ? s.selected : null)),
@@ -794,8 +801,8 @@ export function InboxList() {
     if (row) {
       inbox.restoreSelection(row.id);
     }
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Re-select the issue when its mirror row becomes available.
-  }, [issueKey, rowId, known]);
+    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Re-select the issue when its mirror row becomes available, or when an order that waits for the whole feed shows its rows.
+  }, [issueKey, rowId, known, loading]);
   useEffect(() => {
     if (!end.current || !hasNextPage || isFetchingNextPage) return;
     // A fresh observer reports at once, so a short or fully filtered page keeps loading while the end stays in view.
@@ -936,7 +943,7 @@ export function InboxList() {
                 </Button>
               }
             />
-          ) : isPending || isFetchingNextPage ? (
+          ) : isPending || isFetchingNextPage || loading ? (
             <LoadingState className="h-full">
               Loading notifications…
             </LoadingState>

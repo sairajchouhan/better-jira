@@ -54,3 +54,11 @@ test("D14: the right-clicked row keeps Linear's hover background while its menu 
   expect(open).toContain("data-menu:bg-(--row-hover)");
   expect(closed).not.toContain("data-menu=");
 });
+
+test("D12: the list drains the feed for a whole-feed order, again after a Retry, and re-selects a reloaded row once rows show", async () => {
+  const list = await Bun.file(new URL("./inbox.tsx", import.meta.url)).text();
+  expect(list).toContain("if (whole) void inbox.loadAll(category);");
+  expect(list).toContain("}, [whole, category, pages, error]);");
+  expect(list).toContain("}, [issueKey, rowId, known, loading]);");
+  expect(list).toContain("isPending || isFetchingNextPage || loading ?");
+});

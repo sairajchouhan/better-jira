@@ -653,3 +653,23 @@ test("D13: in the priority inbox, Delete all read takes the open tab's read rows
   expect(asked[0]!.description).toBe("This will delete all read notifications in the Priority inbox.");
   expect(Object.keys(a.store.localState())).toEqual(["head-1"]);
 });
+
+test("D12: Oldest first waits for every page, then puts the oldest notification of the whole feed first (Linear fe)", async () => {
+  const a = setup(false);
+  const older = { ...row("old"), time: "2026-01-01T00:00:00Z" };
+  a.ports.queryClient.setQueryData(["inbox", "all"], {
+    pages: [{ items: a.items, more: true, cursor: "next", writable: false, unseen: 0 }],
+    pageParams: [""],
+  });
+  a.ports.fetchPage = async () => ({ items: [older], more: false, writable: false, unseen: 0 });
+  const order = () =>
+    a.store.orderOf(a.ports.queryClient.getQueryData(["inbox", "all"]), {}, a.store.shownView(), Date.now(), null);
+  // Newest first is Jira's own order: the loaded page shows as it is.
+  expect(order().rows.map((r) => r.id)).toEqual(["1", "2", "3"]);
+  a.store.changeView({ ordering: "oldest" });
+  // Oldest first over one page would put a row that isn't the oldest on top: nothing shows until the feed is whole.
+  expect(order()).toMatchObject({ rows: [], loading: true });
+  await a.store.loadAll("all");
+  expect(order().loading).toBeUndefined();
+  expect(order().rows[0]!.id).toBe("old");
+});
