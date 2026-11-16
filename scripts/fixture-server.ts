@@ -227,6 +227,10 @@ let clientFailures = 0,
   historyDelay = 0,
   /** BJ-16: TEST-2's description and a comment carry a smart link of every kind work Jira has. */
   smartLinks = false,
+  /** Pull request badges: TEST-1 has two, TEST-2 and TEST-4 one with the number the mirror carries (`prNumber`), TEST-3 one the
+   *  mirror hasn't read the number for; its list answers after `pullRequestDelay` ms. */
+  pullRequests = false,
+  pullRequestDelay = 0,
   /** The site's priority, label and user catalog (/api/options), beyond the values the issues hold. */
   catalog: { priorities: string[]; labels: string[]; users: string[] } = { priorities: [], labels: [], users: [] };
 /** TEST-1's links as the mirror projects them: made-up keys and text in the shape work Jira sends. */
@@ -311,9 +315,22 @@ const fixturePullRequests: Record<string, unknown[]> = {
     { url: "https://github.com/example/app/pull/12", title: "Fix the fixture sync", number: "#12", status: "open", repo: "example/app", author: "Alex", updated: "2026-11-10T10:00:00Z" },
     { url: "https://github.com/example/app/pull/9", title: "Add the fixture board", number: "#9", status: "merged", repo: "example/app", author: "Sam", updated: "2026-11-01T10:00:00Z" },
   ],
+  "TEST-3": [
+    { url: "https://github.com/example/app/pull/3121", title: "Read the fixture number late", number: "#3121", status: "open", repo: "example/app", author: "Sam", updated: "2026-11-12T10:00:00Z" },
+  ],
+  "TEST-4": [
+    { url: "https://github.com/example/app/pull/2965", title: "Widen the fixture badge", number: "#2965", status: "open", repo: "example/app", author: "Alex", updated: "2026-11-11T10:00:00Z" },
+  ],
   "TEST-2": [
     { url: "https://github.com/example/app/pull/7", title: "Tidy fixture labels", number: "#7", status: "open", repo: "example/app", author: "Alex", branch: "alex/tidy-labels", target: "main", tool: "GitHub", updated: "2026-11-02T10:00:00Z" },
   ],
+};
+/** The pull request count, state and number the mirror projects for the issues above (`pullRequests`). */
+const fixturePullRequestFields: Record<string, object> = {
+  "TEST-1": { prCount: 2, prStatus: "open" },
+  "TEST-2": { prCount: 1, prStatus: "open", prNumber: "#7" },
+  "TEST-3": { prCount: 1, prStatus: "open" },
+  "TEST-4": { prCount: 1, prStatus: "open", prNumber: "#2965" },
 };
 const pair = (a: string, b: string) => [a, b].sort().join(" ");
 // Jira's createmeta types for TEST, with their hierarchy levels.
@@ -382,6 +399,7 @@ const listed = () =>
     ...(parents.has(issue.key)
       ? { parent: parents.get(issue.key) ?? undefined, parentLevel: parents.get(issue.key) ? 1 : undefined }
       : {}),
+    ...(pullRequests ? fixturePullRequestFields[issue.key] : {}),
     ...edited.get(issue.key),
     comments: threadedComments ? thread.length : mediaInComment || (smartLinks && issue.key === "TEST-2") ? 1 : 0, // the mirror list counts the same Jira comments the detail returns
   }));
@@ -1014,6 +1032,8 @@ async function handle(req: Request) {
     history = settings.history ?? {};
     historyDelay = settings.historyDelay ?? 0;
     smartLinks = settings.smartLinks ?? false;
+    pullRequests = settings.pullRequests ?? false;
+    pullRequestDelay = settings.pullRequestDelay ?? 0;
     catalog = {
       priorities: settings.catalog?.priorities ?? [],
       labels: settings.catalog?.labels ?? [],
@@ -1180,6 +1200,7 @@ async function handle(req: Request) {
       ? new Response(fixtureFile("media-image.png"), { headers: { "Content-Type": "image/png" } })
       : new Response(null, { status: 404 });
   } else if (path.match(/^\/api\/issues\/[^/]+\/pull-requests$/)) {
+    if (pullRequestDelay) await Bun.sleep(pullRequestDelay);
     body = fixturePullRequests[decodeURIComponent(path.split("/").at(-2)!)] ?? [];
   } else if (path.match(/^\/api\/issues\/[^/]+\/history$/)) {
     if (historyDelay) await Bun.sleep(historyDelay);
