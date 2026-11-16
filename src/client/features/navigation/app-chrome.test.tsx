@@ -1,7 +1,8 @@
 import { afterEach, expect, test } from "bun:test";
 import { renderToStaticMarkup } from "react-dom/server";
 import { commit, get } from "@/client/state/store";
-import { PeekCloseZone, SIDEBAR_PEEK } from "./app-chrome";
+import { PeekCloseZone, SIDEBAR_PEEK, SIDEBAR_TIPS } from "./app-chrome";
+import { sidebarTip } from "./sidebar-link";
 import { SidebarToggle } from "./breadcrumbs";
 
 afterEach(() => commit({ sidebarHidden: false, sidebarPeek: false }));
@@ -36,3 +37,29 @@ test("R3-F3: the pointer on the page outside the header's leading 128px closes t
   }
 });
 
+
+// Linear's sidebar rows (`h$`) draw no shortcut in the row; a row with one shows it in a tooltip to its right (`wZ` position right),
+// the action's name then its caps. The Sidebar needs a router and a browser to render, so its source is read for the rows' wiring.
+const sidebarSource = async () => {
+  const chrome = await Bun.file(new URL("./app-chrome.tsx", import.meta.url)).text();
+  return chrome.slice(chrome.indexOf("export function Sidebar("), chrome.indexOf('id="help-menu"'));
+};
+
+test("sidebar rule: a row's shortcut is a tooltip to its right, the action's name then its caps (Linear `h$` → `wZ`)", () => {
+  expect(sidebarTip("Go to inbox", ["G", "I"])).toEqual({ title: "Go to inbox (G then I)", "data-tip": "right" });
+  expect(SIDEBAR_TIPS).toEqual({
+    inbox: { title: "Go to inbox (G then I)", "data-tip": "right" },
+    myIssues: { title: "Go to my issues (G then M)", "data-tip": "right" },
+    search: { title: "Search (/)", "data-tip": "right" },
+  });
+});
+
+test("sidebar rule: no row draws its shortcut inline; Inbox, My issues and Search carry the tooltip, Inbox keeps its count", async () => {
+  const nav = await sidebarSource();
+  expect(nav).not.toContain("<Shortcut");
+  const inbox = nav.slice(nav.indexOf('place: { to: "inbox" }'), nav.indexOf("</SidebarLink>"));
+  expect(inbox).toContain("{...SIDEBAR_TIPS.inbox}");
+  expect(inbox).toContain("data-inbox-badge");
+  expect(nav).toMatch(/place: \{ to: "my-issues" \}[^>]*\{\.\.\.SIDEBAR_TIPS\.myIssues\}/);
+  expect(nav).toMatch(/runShortcut\("search"\)\} \{\.\.\.SIDEBAR_TIPS\.search\}/);
+});

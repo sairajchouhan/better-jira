@@ -1,12 +1,12 @@
 import { type Board } from "@/shared/issue-model";
 import { BoardBreadcrumbs, PageHeader } from "./breadcrumbs";
-import { SidebarLink, SidebarViewLink, sidebarRowClass } from "./sidebar-link";
+import { SidebarLink, SidebarViewLink, sidebarRowClass, sidebarTip } from "./sidebar-link";
 import { FavoriteButton } from "./favorite-button";
 import { useActiveView, useSavedViews, createViewDraft } from "@/client/features/views/saved-views";
 import { useViewSettings } from "@/client/features/views/view-settings";
 import { openViewEditor, ViewMenu, ViewContextMenu, ViewEditorPage } from "@/client/features/views/view-editor";
 import { ViewFavorites, SavedViewIcon } from "@/client/features/views/views-navigation";
-import { useRef, useState, type MouseEvent, type ReactNode } from "react";
+import { useRef, useState, type ComponentProps, type ReactNode } from "react";
 import { isMyIssues } from "./navigation";
 import { PERSON_TABS } from "@/shared/people";
 import { Icon } from "@/client/components/icons";
@@ -89,6 +89,14 @@ export function PeekCloseZone() {
   );
 }
 
+/** The top rows' tooltips by the one sidebar rule (`sidebarTip`): Linear's action names, `f_r` "Go to inbox", `h_r` "Go to my
+ *  issues", and the sidebar Search's own title (`Q$n`: "Search" with its / cap). New issue's is `NewIssueItem`'s. */
+export const SIDEBAR_TIPS = {
+  inbox: sidebarTip("Go to inbox", hotkeyOf("inbox")),
+  myIssues: sidebarTip("Go to my issues", hotkeyOf("mine")),
+  search: sidebarTip("Search", hotkeyOf("search")),
+};
+
 export function Sidebar({ boards }: { boards: Board[] }) {
   const views = useSavedViews();
   const hidden = useStore((s) => s.sidebarHidden);
@@ -147,7 +155,11 @@ export function Sidebar({ boards }: { boards: Board[] }) {
             label="Inbox options"
             entries={() => sidebarItemEntries("inbox", { prefs, setPrefs, unread: badge, markAllRead: () => void markAllRead() })}
           >
-            <SidebarLink row={{ place: { to: "inbox" } }} to={{ inbox: true, selected: null, panel: false }}>
+            <SidebarLink
+              row={{ place: { to: "inbox" } }}
+              to={{ inbox: true, selected: null, panel: false }}
+              {...SIDEBAR_TIPS.inbox}
+            >
               <Icon name="inbox" /> Inbox
               {badge > 0 && (
                 <Text data-inbox-badge variant="mini" color="base" className="ml-auto">
@@ -157,15 +169,19 @@ export function Sidebar({ boards }: { boards: Board[] }) {
             </SidebarLink>
           </ContextMenu>
         )}
-        <SideItem onClick={() => runShortcut("search")}>
-          <Icon name="search" /> Search <Shortcut className="ml-auto" keys={hotkeyOf("search")} size="small" />
+        <SideItem onClick={() => runShortcut("search")} {...SIDEBAR_TIPS.search}>
+          <Icon name="search" /> Search
         </SideItem>
         <NewIssueItem />
         {/* Like Linear, My issues is a sidebar view rather than a tab beside Active/Backlog/All. */}
         {prefs.myIssues === "Always" && (
           <ContextMenu label="My issues options" entries={() => sidebarItemEntries("myIssues", { prefs, setPrefs })}>
-            <SidebarLink row={{ place: { to: "my-issues" } }} to={{ mine: true, selected: null, panel: false }}>
-              <Icon name="user" /> My issues <Shortcut className="ml-auto" keys={hotkeyOf("mine")} size="small" />
+            <SidebarLink
+              row={{ place: { to: "my-issues" } }}
+              to={{ mine: true, selected: null, panel: false }}
+              {...SIDEBAR_TIPS.myIssues}
+            >
+              <Icon name="user" /> My issues
             </SidebarLink>
           </ContextMenu>
         )}
@@ -481,8 +497,8 @@ export function StorageNotice() {
 }
 
 /** A sidebar row that runs an action (Search, New issue, More) rather than opening a place, so it is never active. */
-const SideItem = ({ onClick, children }: { onClick: (e: MouseEvent<HTMLButtonElement>) => void; children: ReactNode }) => (
-  <button onClick={onClick} className={sidebarRowClass(false)}>
+const SideItem = ({ children, ...props }: Omit<ComponentProps<"button">, "className">) => (
+  <button {...props} className={sidebarRowClass(false)}>
     {children}
   </button>
 );
@@ -494,7 +510,8 @@ const SideItem = ({ onClick, children }: { onClick: (e: MouseEvent<HTMLButtonEle
 export function NewIssueItem() {
   const resumes = useHasLocalDraft(useStore((s) => s.namespace));
   return (
-    <SideItem onClick={() => beginCreateInView()}>
+    // Linear's create button tooltip: "Resume editing" with a draft, else `DB`'s name less its "…" (`bDt`: "Create new issue"), with C.
+    <SideItem onClick={() => beginCreateInView()} {...sidebarTip(resumes ? RESUME_EDITING : "Create new issue", hotkeyOf("new"))}>
       <span className="relative inline-flex">
         <Icon name="plus" />
         {/* Linear's dot: absolute at -1px/-1px, 8×8, controlPrimary, a 1px bgBase ring, radius 6px, no pointer events. */}
@@ -507,7 +524,6 @@ export function NewIssueItem() {
       </span>
       New issue
       {resumes && <span className="sr-only">, {RESUME_EDITING}</span>}
-      <Shortcut className="ml-auto" keys={hotkeyOf("new")} size="small" />
     </SideItem>
   );
 }

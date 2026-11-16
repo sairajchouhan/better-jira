@@ -154,11 +154,15 @@ test("BJ-273: while a draft is kept, the sidebar New issue shows Linear's dot an
   const detail = () => shortcuts.find((s) => s.id === "new")!.detail?.();
   expect(hasLocalDraft("render")).toBe(false);
   expect(sidebar()).not.toContain("data-draft-dot");
+  // Linear's sidebar rule: C is the row's tooltip ("Create new issue", `DB`'s name less its "…"), never a cap in the row.
+  expect(sidebar()).toContain('title="Create new issue (C)" data-tip="right"');
+  expect(sidebar()).not.toContain("ui-shortcut");
   expect(detail()).toBeUndefined();
   writeLocalDraft("render", draft());
   expect(hasLocalDraft("render")).toBe(true);
   expect(sidebar()).toContain("data-draft-dot");
   expect(sidebar()).toContain("Resume editing");
+  expect(sidebar()).toContain('title="Resume editing (C)"');
   expect(detail()).toBe("Resume editing");
   writeLocalDraft("render", undefined);
   expect(sidebar()).not.toContain("data-draft-dot");

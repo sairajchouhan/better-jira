@@ -8,6 +8,7 @@ import { useRouterState } from "@tanstack/react-router";
 import { routeNotFound } from "@/client/routes/tree";
 import type { SavedView } from "@/shared/saved-view-model";
 import { useStore } from "@/client/state/store";
+import { shortcutTitle, type Keys } from "@/client/components/keycap";
 import { AppLink, SavedViewLink } from "./app-link";
 import type { Destination } from "./navigation";
 import { isSidebarActive, type SidebarRow } from "./sidebar-active";
@@ -27,6 +28,13 @@ const useSidebarActive = (row: SidebarRow) => {
  */
 export const sidebarRowClass = (active: boolean, className = "") =>
   `flex h-7 items-center gap-2 rounded-lg pr-[9px] pl-2 text-left ${active ? "bg-sel text-fg" : "text-fg-2 hover:bg-(--sidebar-hover) in-data-menu-open:bg-(--sidebar-hover)"} ${className}`;
+
+/**
+ * The one rule for a sidebar row's shortcut: never drawn in the row, at rest or on hover; a row that has one shows it in Linear's row
+ * tooltip to its right, the action's name then its caps ("Go to inbox G then I"). Linear's SidebarLink (`h$`) wraps itself in `wZ`
+ * with `position: "right"` and `shortcutAction`, whose title is the action's name (`bDt`), e.g. `f_r` "Go to inbox" for Inbox.
+ */
+export const sidebarTip = (name: string, keys: Keys) => ({ title: shortcutTitle(name, keys), "data-tip": "right" });
 
 type RowProps = { row: SidebarRow } & Omit<ComponentProps<"a">, "aria-current">;
 

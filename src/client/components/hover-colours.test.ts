@@ -114,7 +114,7 @@ test("BJ-224: sidebar rows hover with the sidebar theme's sidebarLinkBg, list-ty
   // One row class for links and buttons (Search, New issue), lit under the pointer and while its context menu is open.
   const link = await source("../features/navigation/sidebar-link.tsx");
   expect(link).toContain(`"text-fg-2 hover:bg-(--sidebar-hover) in-data-menu-open:bg-(--sidebar-hover)"`);
-  expect(await source("../features/navigation/app-chrome.tsx")).toContain(`<button onClick={onClick} className={sidebarRowClass(false)}>`);
+  expect(await source("../features/navigation/app-chrome.tsx")).toContain(`<button {...props} className={sidebarRowClass(false)}>`);
   // List, inbox and sub-issue rows are Linear's list item (listItemHover / listItemMenuOpen / itemActive).
   expect(await source("../routes/board-view.tsx")).toContain("hover:bg-(--row-hover) data-menu:bg-(--row-hover)");
   expect(await source("../routes/inbox.tsx")).toContain(`"hover:bg-(--row-hover)"`);
