@@ -63,12 +63,13 @@ import { hotkeyOf, runShortcut } from "@/client/features/navigation/shortcuts";
 import { shortcutTitle } from "@/client/components/keycap";
 import { post, useCommand, focusNode } from "@/client/features/navigation/commands";
 import { focusComposer } from "@/client/features/navigation/composer-reveal";
-import { InboxIssueActions, InboxIssueGroup, InboxSnooze } from "./inbox";
+import { InboxIssueActions } from "./inbox";
+import { inboxShown } from "@/client/features/navigation/navigation";
 import { useCommentsSeen, useIssueVisit } from "@/client/features/inbox/issue-visit";
 import { SplitPanel } from "@/client/features/issue/split-panel";
 import { descriptionNotice, descriptionSession, type DescriptionPorts } from "@/client/features/issue/description-session";
 import { shortDate } from "@/client/lib/due-date";
-import { IssueBreadcrumbs, PageHeader, useIssueCrumbs } from "@/client/features/navigation/breadcrumbs";
+import { IssueBreadcrumbs, PageHeader, PaneIssueTitle, useIssueCrumbs } from "@/client/features/navigation/breadcrumbs";
 import { stepIssues } from "@/client/features/navigation/issue-trail";
 import { Button, IconButton } from "@/client/components/button";
 import { ContextMenu, type ActionEntry } from "@/client/components/action-menu";
@@ -84,68 +85,71 @@ import { ImageViewer } from "@/client/features/media/image-viewer";
 
 // --- issue view: a full page, a side panel, or the inbox's pane; the route picks the frame ---
 
-/** The `/issue/KEY-1` route: the open issue as a page. Opened from the inbox, it carries the notification's actions and no
- *  board stepper: Linear's counter is the issue list's (`jf` in IssueList, its `siblingModels`), and its inbox header holds only
- *  `InboxActionControls`. */
+/** The `/issue/KEY-1` route: the open issue as a page. Opened from the inbox's pane, it shows only the issue's chrome and no
+ *  stepper, as Linear's IssuePage reached from the inbox (no `InboxActionControls`; its counter is the issue list's, `jf`). In the
+ *  pane itself (`issueOrigin`), the inbox shows the issue (tree.tsx `InboxHost`). */
 export function IssueScreen() {
-  const open = useStore((s) => (s.panel && s.selected && !s.document ? s.issues.get(s.selected) : undefined));
-  const inbox = useStore((s) => s.inbox);
+  const open = useStore((s) => (s.panel && s.selected && !s.document && !inboxShown(s) ? s.issues.get(s.selected) : undefined));
+  const fromInbox = useStore((s) => s.inbox);
   if (!open) return null;
-  return inbox ? (
-    <>
-      <IssuePage key={firstKey(open.key)} issue={open} actions={<InboxIssueActions />} />
-      {/* The list's route hosts the snooze menu beside the list; this page has no list, so it hosts its own. */}
-      <InboxSnooze />
-    </>
-  ) : (
-    <IssuePage key={firstKey(open.key)} issue={open} navigation={<Stepper issueKey={open.key} />} />
-  );
+  return <IssuePage key={firstKey(open.key)} issue={open} navigation={fromInbox ? undefined : <Stepper issueKey={open.key} />} />;
 }
 
 const closePanel = () => navigate({ panel: false });
 const SIDE =
   "issue-detail flex flex-col bg-panel max-md:absolute max-md:inset-0 max-md:z-20 max-md:w-full";
 
-/** The issue as a full page: breadcrumbs lead the header. `actions` are the inbox's notification actions when it opened there;
- *  `navigation` is the list stepper when it opened from one. */
-export const IssuePage = memo(function IssuePage({
-  issue,
-  actions,
-  navigation,
-}: {
-  issue: Issue;
-  actions?: ReactNode;
-  navigation?: ReactNode;
-}) {
+/** The issue as a full page: breadcrumbs lead the header; `navigation` is the list stepper when it opened from one. */
+export const IssuePage = memo(function IssuePage({ issue, navigation }: { issue: Issue; navigation?: ReactNode }) {
+  const propertiesHidden = useStore((s) => s.issuePropertiesHidden);
   return (
     <div className="issue-detail flex min-w-0 flex-1 flex-col" data-mode="page">
-      <IssueHeader issue={issue} switchTo="side" actions={actions} navigation={navigation}>
+      <IssueHeader
+        issue={issue}
+        trailing={
+          <>
+            {navigation}
+            <FrameControls switchTo="side" />
+          </>
+        }
+      >
         <IssueBreadcrumbs issue={issue} />
       </IssueHeader>
-      <IssueBody issue={issue} />
+      <IssueBody issue={issue} propertiesHidden={propertiesHidden} />
     </div>
   );
 });
 /** The issue beside the board in Linear's resizable split panel. */
 export const IssueSidePanel = memo(function IssueSidePanel({ issue }: { issue: Issue }) {
+  const propertiesHidden = useStore((s) => s.issuePropertiesHidden);
   return (
     <SplitPanel className={SIDE} data-mode="side" onClose={closePanel}>
-      <IssueHeader issue={issue} switchTo="page" navigation={<Stepper issueKey={issue.key} />}>
+      <IssueHeader
+        issue={issue}
+        trailing={
+          <>
+            <Stepper issueKey={issue.key} />
+            <FrameControls switchTo="page" />
+          </>
+        }
+      >
         <IssueKey issue={issue} />
       </IssueHeader>
-      <IssueBody issue={issue} />
+      <IssueBody issue={issue} propertiesHidden={propertiesHidden} />
     </SplitPanel>
   );
 });
-/** The issue filling the inbox's right pane, with the notification's snooze and delete and no board stepper (see
- *  `IssueScreen`). The notification's group leads the issue in the same scroller, so a long unfolded group never hides it. */
+/** The issue filling the inbox's right pane: Linear's SplitIssueView. Its header leads with "KEY Title", which opens the issue's
+ *  page (`Hh`), and ends with the notification's actions (`InboxActionControls`); no stepper, no layout switch, no close button
+ *  (Escape closes it). The issue starts the body: `IssueInboxView` mounts no notification group. The properties show by width
+ *  alone: the pane has no toggle (`]` does nothing there), so a board's hidden sidebar doesn't hide them here. */
 export const InboxIssuePane = memo(function InboxIssuePane({ issue }: { issue: Issue }) {
   return (
     <aside className={`${SIDE} min-w-0 flex-1`} data-mode="side">
-      <IssueHeader issue={issue} switchTo="page" actions={<InboxIssueActions />}>
-        <IssueKey issue={issue} />
+      <IssueHeader issue={issue} trailing={<InboxIssueActions />}>
+        <PaneIssueTitle issue={issue} />
       </IssueHeader>
-      <IssueBody issue={issue} lead={<InboxIssueGroup />} />
+      <IssueBody issue={issue} />
     </aside>
   );
 });
@@ -167,21 +171,9 @@ function IssueKey({ issue }: { issue: Issue }) {
   );
 }
 
-/** The 44px bar: what leads it (`children`), favorite, Issue options, reminder, the frame's `actions`, its `navigation` (the
- *  list stepper), the switch to the other layout and close. */
-function IssueHeader({
-  issue,
-  switchTo,
-  actions,
-  navigation,
-  children,
-}: {
-  issue: Issue;
-  switchTo: "page" | "side";
-  actions?: ReactNode;
-  navigation?: ReactNode;
-  children: ReactNode;
-}) {
+/** The 44px bar: what leads it (`children`), favorite, Issue options and reminder, then the frame's `trailing` controls at the
+ *  far end (a stepper and layout buttons, or the inbox's notification actions). */
+function IssueHeader({ issue, trailing, children }: { issue: Issue; trailing?: ReactNode; children: ReactNode }) {
   const optionsOpen = useStore((s) => s.overlay === "options");
   return (
     <PageHeader className="issue-detail-header gap-1.5 text-[12px] text-fg-3">
@@ -197,9 +189,15 @@ function IssueHeader({
         <Icon name="dots" />
       </IconButton>
       <ReminderControl issue={issue} />
-      {actions}
       <span className="flex-1" />
-      {navigation}
+      {trailing}
+    </PageHeader>
+  );
+}
+/** The page's and the side panel's switch to the other layout, and close. */
+function FrameControls({ switchTo }: { switchTo: "page" | "side" }) {
+  return (
+    <>
       <IconButton
         label={switchTo === "side" ? "Open in side panel" : "Open as full page"}
         variant="muted"
@@ -210,7 +208,7 @@ function IssueHeader({
       <IconButton label="Close" shortcut="Escape" variant="muted" onClick={closePanel}>
         <Icon name="close" />
       </IconButton>
-    </PageHeader>
+    </>
   );
 }
 
@@ -219,11 +217,10 @@ const COPY_ACTIONS = [
   ["copy-id", "Copy issue ID", "copy"],
   ["copy-branch", "Copy git branch name", "branch"],
 ] as const;
-/** Every frame's body, one scroller: the copy toolbar, the frame's `lead` (the inbox's notification group), then title,
- *  properties and content in the detail grid. */
-function IssueBody({ issue, lead }: { issue: Issue; lead?: ReactNode }) {
+/** Every frame's body, one scroller: the copy toolbar, then title, properties and content in the detail grid. `propertiesHidden`:
+ *  the frame's `]` toggle hid the properties sidebar (the page and side panel have one; the inbox's pane doesn't). */
+function IssueBody({ issue, propertiesHidden = false }: { issue: Issue; propertiesHidden?: boolean }) {
   const f = useStore((s) => s.full.get(issue.key))?.fields;
-  const propertiesHidden = useStore((s) => s.issuePropertiesHidden);
   // Reading the issue reads its notifications, as Linear's issue view does (B6); the inbox's pane reads by its own rule.
   const body = useRef<HTMLDivElement>(null);
   useIssueVisit(issue.key, issue.comments);
@@ -244,7 +241,6 @@ function IssueBody({ issue, lead }: { issue: Issue; lead?: ReactNode }) {
           </IconButton>
         ))}
       </Group>
-      {lead}
       <div className="issue-detail-grid" data-properties-hidden={propertiesHidden || undefined}>
         <div className="issue-detail-title">
           <Title key={issue.key} issue={issue} />

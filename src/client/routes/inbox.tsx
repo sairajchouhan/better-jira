@@ -1006,18 +1006,6 @@ export function InboxList() {
   );
 }
 
-/** Above the open issue, in its scroller: the notification's group ("+3 updates from …"), which unfolds into each of its
- *  notifications. */
-export function InboxIssueGroup() {
-  const row = useSelectedRow();
-  if (!row || row.count < 2) return null;
-  return (
-    <div data-inbox-issue-group className="border-b border-line px-3 py-2">
-      <InboxGroupUpdates key={row.id} row={row} mirrored />
-    </div>
-  );
-}
-
 /** Linear's notification actions in the open issue's header, while the inbox is open. */
 export function InboxIssueActions() {
   const row = useSelectedRow();

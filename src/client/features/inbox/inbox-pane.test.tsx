@@ -7,6 +7,7 @@ import { commit, get, type State } from "@/client/state/store";
 import { createInboxStore, type InboxPorts, type Feed } from "@/client/state/inbox-store";
 import { QueryClient } from "@tanstack/query-core";
 import { escapeStep, shortcutApplies, shortcuts } from "@/client/features/navigation/shortcuts";
+import { PaneIssueTitle } from "@/client/features/navigation/breadcrumbs";
 import { router } from "@/client/features/navigation/app-navigation";
 import { followPane } from "./inbox";
 
@@ -116,6 +117,22 @@ test("item 10: Back from the pane, or leaving the inbox, forgets the row, so the
   expect(forget(open, { inbox: true, selected: "A-2", panel: true }, "A-2")).toBe(false); // J/K
   expect(forget(open, { ...open, view: "page" })).toBe(false); // Open full issue view keeps the row
   expect(forget({ inbox: true }, { inbox: true })).toBe(false);
+});
+
+test("item 1: the pane's header lead is the issue's key and title, linking to its full page in the app (Linear's Hh)", () => {
+  commit({ issues: new Map([["A-1", issue("A-1")]]), inbox: true, selected: "A-1", panel: true, view: "side" });
+  const html = renderToStaticMarkup(
+    <RouterContextProvider router={router}>
+      <PaneIssueTitle issue={issue("A-1")} />
+    </RouterContextProvider>,
+  );
+  const text = html.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+  expect(text).toContain("A-1");
+  expect(text).toContain("A-1 made-up title");
+  const link = html.match(/<a[^>]*>/)?.[0] ?? "";
+  expect(link).toContain('href="/issue/A-1"');
+  expect(link).not.toContain("target=");
+  expect(html).not.toContain("atlassian");
 });
 
 test("a comment notification's anchor lands on the entry it opened, never on one opened since (Escape back to the pane keeps its mark)", async () => {

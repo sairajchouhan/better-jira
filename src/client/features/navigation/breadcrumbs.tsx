@@ -224,21 +224,45 @@ function EpicIconCrumbItem({ epic }: { epic: AncestorCrumbModel }) {
     </AncestorCrumb>
   );
 }
-/** The open issue: its type, key and title, linking to Jira. The key never truncates (Opus review 4: at 390px it vanished): the
- *  title does. Linear's current issue crumb (`Api`): right-click for its copy rows and Rename…. */
-function IssueCrumb({ issue }: { issue: Issue }) {
+/** The open issue (Linear's `Hh`): its type, key and title. The key never truncates (Opus review 4: at 390px it vanished): the
+ *  title does. Right-click for its copy rows and Rename… (`Api`). On the issue's page it ends the breadcrumb and links to Jira; in
+ *  the inbox's pane it is the whole breadcrumb and opens the issue's page in the app (`to`), as `Hh` links to the issue with
+ *  `backOnEsc` and `leaveSplitView`. */
+function IssueCrumb({ issue, to }: { issue: Issue; to?: Destination }) {
+  const title = (
+    <>
+      <CrumbTypeIcon type={issue.type} />
+      <span data-crumb-issue className="flex min-w-0">
+        <EntityIdentifier className="mr-[5.6px] shrink-0">{issue.key}</EntityIdentifier>
+        <span className="truncate">{issue.summary}</span>
+      </span>
+    </>
+  );
   return (
     <Crumb id="issue">
       <ContextMenu label="Issue options" entries={() => issueBreadcrumbEntries(issue)}>
-        <Link isDisabled={false} className={CRUMB_LAST} href={issueURL(issue)} target="_blank" rel="noreferrer">
-          <CrumbTypeIcon type={issue.type} />
-          <span data-crumb-issue className="flex min-w-0">
-            <EntityIdentifier className="mr-[5.6px] shrink-0">{issue.key}</EntityIdentifier>
-            <span className="truncate">{issue.summary}</span>
-          </span>
-        </Link>
+        {to ? (
+          <CrumbLink to={to} isDisabled={false} className={CRUMB_LAST}>
+            {title}
+          </CrumbLink>
+        ) : (
+          <Link isDisabled={false} className={CRUMB_LAST} href={issueURL(issue)} target="_blank" rel="noreferrer">
+            {title}
+          </Link>
+        )}
       </ContextMenu>
     </Crumb>
+  );
+}
+/** The inbox's pane's header lead (Linear's `Hh` in the split view, under an empty breadcrumb): "KEY Title", opening the issue's
+ *  page; Escape there comes back to the same notification. No sidebar toggle: the inbox's list header has it. */
+export function PaneIssueTitle({ issue }: { issue: Issue }) {
+  return (
+    <nav aria-label="Breadcrumb" className={CRUMB_BAR}>
+      <Breadcrumbs className="flex min-w-0 items-center">
+        <IssueCrumb issue={issue} to={{ view: "page" }} />
+      </Breadcrumbs>
+    </nav>
   );
 }
 
