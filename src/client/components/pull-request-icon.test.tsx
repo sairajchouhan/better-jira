@@ -1,8 +1,9 @@
 import { expect, test } from "bun:test";
 import { readdirSync } from "node:fs";
 import { renderToStaticMarkup } from "react-dom/server";
-import { PullRequestCard, PullRequestsCardContent } from "@/client/features/issue/card-badges";
+import { PullRequestBadge, PullRequestCard, PullRequestsCardContent } from "@/client/features/issue/card-badges";
 import { IssuePullRequestRow } from "@/client/features/issue/issue-pull-requests";
+import type { Issue } from "@/shared/issue-model";
 import type { PullRequest } from "@/shared/pull-requests";
 import { PullRequestStatusIcon } from "./icons";
 
@@ -108,4 +109,12 @@ test("the PR hover card, its list of several and the issue's Diffs row draw GitH
   ]);
   expect(icons(renderToStaticMarkup(<IssuePullRequestRow pr={pr(4, "merged")} />))).toEqual(["git-merge var(--github-pr-merged)"]);
   expect(icons(renderToStaticMarkup(<IssuePullRequestRow pr={pr(5, "draft")} />))).toEqual(["git-pull-request-draft var(--github-pr-draft)"]);
+});
+
+test("the card's \"7 PRs\" badge draws the issue's leading state as GitHub's icon: all merged is GitHub's purple git-merge", () => {
+  const badge = (prStatus: PullRequest["status"]) =>
+    icons(renderToStaticMarkup(<PullRequestBadge issue={{ key: "ACME-1", prCount: 7, prStatus } as Issue} layout="board" />));
+  expect(badge("merged")).toEqual(["git-merge var(--github-pr-merged)"]);
+  expect(badge("open")).toEqual(["git-pull-request var(--github-pr-open)"]);
+  expect(badge("declined")).toEqual(["git-pull-request-closed var(--github-pr-closed)"]);
 });

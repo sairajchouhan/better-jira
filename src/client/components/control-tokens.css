@@ -17,7 +17,6 @@
   --red-base: lch(58% 73 29); /* redBase */
   --orange-base: lch(66% 80 48); /* orangeBase: [66, 80, 48] on both bases */
   --green-base: lch(68% 64.37 141.95); /* greenBase: [68, 64.37, 141.95] on a light base, l 60 on a dark one */
-  --purple-base: lch(48% 59.31 288.43); /* purpleBase: [48, 59.31, 288.43] on both bases */
   --red-base-hover: lch(53% 73 29); /* redBaseHover */
   --red-text: lch(50% 80 29); /* redText = h(redBase, {}, {l: 50, c: 80}): getTextColor keeps redBase's hue 29 */
   --red-tint: color-mix(in lch, var(--red-base) 20%, var(--panel)); /* redTint over bgBase */
