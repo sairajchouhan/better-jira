@@ -3,7 +3,7 @@ import { QueryClient } from "@tanstack/query-core";
 import type { ReactElement } from "react";
 import { toasts } from "@/client/components/toast-queue";
 import { INBOX_NOTIFICATION_ID } from "./app-notifications";
-import { createInboxStore, deleteQuestion, READ_DELAY, type InboxPorts, type Feed, type DeleteConfirmation } from "./inbox-store";
+import { createInboxStore, deleteQuestion, READ_DELAY, UPDATE_FAILED, type InboxPorts, type Feed, type DeleteConfirmation } from "./inbox-store";
 import { unreadCount } from "@/shared/inbox-model";
 import { DEFAULT_VIEW, type InboxItem } from "@/shared/inbox-model";
 
@@ -161,6 +161,17 @@ test("superseded queued writes are skipped, while other groups can write indepen
   ).toBe(false);
 });
 
+test("D10: a read Jira refuses rolls back with Linear's Update failed toast naming the error, not a status line", async () => {
+  const a = setup(true, async () => {
+    throw new Error("Jira refused");
+  });
+  await a.store.markRead([a.items[0]!], false);
+  expect(a.store.localState()["head-1"]?.read).toBeUndefined();
+  expect(a.messages).toEqual([]);
+  const toast = toasts.all().at(-1)!.content as ReactElement<{ notice: { text: string; detail: string } }>;
+  expect(toast.props.notice).toMatchObject({ text: UPDATE_FAILED, detail: "Jira refused" });
+});
+
 test("transport failure rolls back only read, preserving snooze and allowing the next write", async () => {
   let fail = true;
   const a = setup(true, async () => {
@@ -169,7 +180,6 @@ test("transport failure rolls back only read, preserving snooze and allowing the
   });
   a.store.snoozeRow(Date.now() + 60_000, a.items[0]);
   await a.store.markRead([a.items[0]!], true);
-  expect(a.messages).toContain("Could not update Jira: offline");
   expect(a.store.localState()["head-1"]?.read).toBeUndefined();
   expect(a.store.localState()["head-1"]?.snoozed).toBeGreaterThan(Date.now());
   fail = false;

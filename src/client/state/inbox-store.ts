@@ -60,6 +60,9 @@ export type InboxPorts = {
 /** Linear's `MarkNotificationAsRead` `A` (2026-11-14): the open notification is marked read 300 ms after it shows, so rows
  *  that J/K or the mouse pass through stay unread. Showing another notification, or none, before then cancels it. */
 export const READ_DELAY = 300;
+/** Linear's toast for a failed mutation (`handleTransactionError`), and its description when the error has no message (`tb`). */
+export const UPDATE_FAILED = "Update failed";
+const ROLLED_BACK = "An unknown error occurred updating your data and changes have been rolled back.";
 /** The most pages the inbox loads to show or delete the whole feed: about 1,000 notifications (ponytail). */
 export const MAX_PAGES = 20;
 /** Whether `data` holds as much of the feed as the inbox ever loads at once: every page, or `MAX_PAGES`. */
@@ -407,7 +410,9 @@ export function createInboxStore(ports: InboxPorts) {
       await job;
       await queryClient.invalidateQueries({ queryKey: ["inbox"] });
     } catch (error) {
-      set({ perf: `Could not update Jira: ${(error as Error).message}` });
+      // Linear's failed mutation (`handleTransactionError`): an "Update failed" toast with the error, the change rolled back
+      // (QA round 4, D10).
+      showNotification({ text: UPDATE_FAILED, detail: (error as Error).message || ROLLED_BACK });
     } finally {
       for (const group of mine)
         if (queues.get(group) === queued) {
