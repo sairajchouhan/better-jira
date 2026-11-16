@@ -24,3 +24,12 @@ test("BJ-386: board columns sit 348px apart, a 340px column and 8px between, in 
   expect(Number(header340)).toBe(width);
   expect(width).toBe(340);
 });
+
+test("BJ-241: list groups stack with no margin, each a 36px header, 2px under it and 2px after its rows, as Linear's", () => {
+  // ListCell: the header row's `marginBottom: e.marginBottom ?? 2`; live Linear pads each group 2px at the bottom.
+  const section = /<section key=\{c\.id\} className="([^"]*)">/.exec(view)?.[1]?.split(" ") ?? [];
+  expect(section).toEqual(["pb-0.5"]);
+  const heading = /<div data-list-group=\{bucket\.name\} className="([^"]+)"/.exec(view)?.[1]?.split(" ") ?? [];
+  expect(heading).toEqual(expect.arrayContaining(["h-9", "mb-0.5"]));
+  expect(heading.some((c) => /^m[ty]?-(?!0\.5)/.test(c))).toBe(false);
+});

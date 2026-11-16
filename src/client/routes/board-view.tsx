@@ -188,10 +188,10 @@ export const BoardView = memo(function BoardView({
         {!visible.length && results}
         {d.layout === "list" ? (
           <div data-scroll-restoration-id={`board-${board.id}`} className="ui-scroll-stable flex-1 overflow-auto py-1">
-            {/* Groups stack with nothing between them: Linear's list is header (36px) and row (44px) heights only
-                (IssueList `heightPerLevel`), BJ-241. */}
+            {/* Groups stack with no margin between them (BJ-241). Linear's list header (36px) keeps 2px below it (ListCell's
+                header row `marginBottom: e.marginBottom ?? 2`) and each group ends on a 2px padding, collapsed or not (live). */}
             {show.map((c, ci) => (
-              <section key={c.id}>
+              <section key={c.id} className="pb-0.5">
                 <GroupHeading
                   bucket={c}
                   display={d}
@@ -480,7 +480,7 @@ function GroupHeading({
     });
   return (
     <ContextMenu label={`Group ${bucket.name}`} entries={entries}>
-      <div data-list-group={bucket.name} className="sticky top-0 z-[2] flex h-9 items-center gap-2 border-y border-line bg-col px-5 text-[12px] font-medium text-fg-2">
+      <div data-list-group={bucket.name} className="sticky top-0 z-[2] mb-0.5 flex h-9 items-center gap-2 border-y border-line bg-col px-5 text-[12px] font-medium text-fg-2">
         <button
           aria-label={`${collapsed ? "Expand" : "Collapse"} ${bucket.name}`}
           aria-expanded={!collapsed}
