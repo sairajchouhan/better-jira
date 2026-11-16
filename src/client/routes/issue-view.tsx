@@ -43,7 +43,7 @@ import { actions, addIssueFiles } from "@/client/state/issue-actions";
 import { loadFull } from "@/client/state/server-data";
 import { currentKey, firstKey } from "@/client/state/jira-sync";
 import { flushLocalChanges } from "@/client/state/local-database";
-import { navigate, ui } from "@/client/features/navigation/app-navigation";
+import { navigate, openIssuesIn, ui } from "@/client/features/navigation/app-navigation";
 import { interruptedUploads } from "@/client/state/jira-media";
 import { listPosition, navigationIssues, visibleOrder } from "@/shared/view-model";
 import { epicChanges, epicLocked, epicName, epicOf } from "@/shared/epics";
@@ -203,7 +203,7 @@ function IssueHeader({
       <IconButton
         label={switchTo === "side" ? "Open in side panel" : "Open as full page"}
         variant="muted"
-        onClick={() => navigate({ view: switchTo })}
+        onClick={() => openIssuesIn(switchTo)}
       >
         <Icon name={switchTo === "side" ? "side" : "expand"} />
       </IconButton>

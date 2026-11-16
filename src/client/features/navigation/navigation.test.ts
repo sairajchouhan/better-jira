@@ -96,7 +96,7 @@ test("an issue opens the way its board does; choosing page or side is remembered
   const opened = run([{ type: "go", to: { selected: "OLD-1", panel: true } }]);
   expect(opened.screen).toMatchObject({ selected: "A-1", panel: true, view: "side" });
   expect(url(opened.screen)).toBe("/board/1/all?issue=A-1");
-  const page = transition(opened.screen, { type: "go", to: { view: "page" } }, data());
+  const page = transition(opened.screen, { type: "open-in", view: "page" }, data());
   expect(page.preferences?.[1]!.display.openIn).toBe("page");
   expect(page.history).toBe("push");
   // A new board opens issues its own way, from its preferences, then its saved default.
@@ -125,8 +125,7 @@ test("a link's view shows that issue once, then reverts without becoming a prefe
   expect(linked.preferences).toBeUndefined();
   const closed = transition(linked.screen, { type: "moved", screen: { panel: false } }, data());
   expect(closed.screen).toMatchObject({ view: "side", linkView: false, panel: false });
-  // Reverting rewrites the board's own choice, unchanged.
-  expect(closed.preferences?.[1]!.display.openIn).toBe("side");
+  expect(closed.preferences).toBeUndefined();
   const missing = run([restore({ ...board1, issue: "GONE-1" })]);
   expect(missing.screen).toMatchObject({ panel: false, selected: null });
 });
@@ -144,9 +143,76 @@ test("inside a saved view, a new openIn is saved to the view; opening or restori
   expect(linked.screen).toMatchObject({ view: "side", linkView: true });
   expect(url(linked.screen)).toBe("/view/triage-v1?issue=A-1");
   expect([linked.viewDisplay, linked.preferences]).toEqual([undefined, undefined]);
-  const toggled = run([{ type: "go", to: { selected: "A-1", panel: true } }, { type: "go", to: { view: "side" } }], data(), opened.screen);
+  const toggled = run([{ type: "go", to: { selected: "A-1", panel: true } }, { type: "open-in", view: "side" }], data(), opened.screen);
   expect(toggled.viewDisplay?.display.openIn).toBe("side");
   expect(toggled.preferences).toBeUndefined();
+});
+
+// The user's bug: a board set to open issues as a page went back to the side panel after the Inbox or a link opened an issue.
+// Linear's "Open in split view" / "Open in full view" open once and never write the view's `openInSplitView` (startup-root `openSubmenu`).
+const inboxOpen = (selected: string, board: number, view: "side" | "page" = "side") =>
+  ({ type: "go", to: { board, selected, panel: true, view, inbox: true } }) as const;
+const toInbox = { type: "go", to: { inbox: true, selected: null, panel: false } } as const;
+
+test("opening an issue from the Inbox never changes how any board opens issues, and the board opens its own way after", () => {
+  const d = data({ preferences: { 1: prefs("page"), 2: prefs("page") } });
+  const pageBoard = { ...start, view: "page" } as Screen;
+  // Click (side), Enter (page), then another row on another board: nothing is saved.
+  const visit = walk([toInbox, inboxOpen("A-1", 1), inboxOpen("A-1", 1, "page"), { type: "go", to: { view: "side" } }, inboxOpen("B-1", 2)], d, pageBoard);
+  expect(visit.d.preferences).toEqual(d.preferences);
+  expect(visit.screen).toMatchObject({ inbox: true, selected: "B-1", view: "side", linkView: true });
+  // Back on board 1 (the sidebar), its issues open as a page.
+  const back = walk([{ type: "go", to: { board: 1, selected: null, panel: false } }], visit.d, visit.screen);
+  expect(back.screen).toMatchObject({ inbox: false, board: 1, view: "page", linkView: false });
+  expect(transition(back.screen, { type: "go", to: { selected: "A-1", panel: true } }, back.d).screen.view).toBe("page");
+  expect(back.d.preferences).toEqual(d.preferences);
+});
+
+test("an Inbox issue on the same board as the list it leaves for still opens as that board does (side to side, page board)", () => {
+  // Board 1 side, board 2 page: from board 1 to the Inbox, open a board-2 notification beside it, then go to board 2.
+  const visit = walk([toInbox, inboxOpen("B-1", 2), { type: "go", to: { board: 2, selected: null, panel: false } }]);
+  expect(visit.screen).toMatchObject({ board: 2, view: "page", linkView: false });
+  expect(visit.d.preferences).toEqual(data().preferences);
+});
+
+test("the header's switch in the Inbox shows the issue that way there, and saves nothing", () => {
+  const d = data({ preferences: { 1: prefs("page") } });
+  const t = walk([toInbox, inboxOpen("A-1", 1), { type: "open-in", view: "page" }, { type: "open-in", view: "side" }], d, { ...start, view: "page" });
+  expect(t.screen).toMatchObject({ inbox: true, view: "side" });
+  expect(t.d.preferences).toEqual(d.preferences);
+});
+
+test("a link to an issue opens it as its board does, and saves nothing; a page link reverts once the issue closes", () => {
+  const d = data({ preferences: { 1: prefs("side"), 2: prefs("page") } });
+  // An issue link (issueAt: board, selected, panel) from board 1 to an issue on board 2.
+  const linked = transition(start, { type: "go", to: { board: 2, selected: "B-1", panel: true } }, d);
+  expect(linked.screen).toMatchObject({ board: 2, view: "page", linkView: false });
+  expect(linked.preferences?.[2]?.display.openIn ?? "page").toBe("page");
+  expect(linked.preferences?.[1]?.display.openIn ?? "side").toBe("side");
+  // From the Inbox the link still opens as the issue's board does, not as the Inbox showed the last row.
+  const inboxScreen = walk([toInbox, inboxOpen("A-1", 1)], d).screen;
+  expect(transition(inboxScreen, { type: "go", to: { board: 2, selected: "B-1", panel: true } }, d).screen.view).toBe("page");
+  // A `/issue/KEY` address and Enter's page on a side board: shown once, never saved.
+  const pageLink = walk([restore({ to: "issue", key: "A-1", over: board1 }), { type: "moved", screen: { panel: false } }], d);
+  expect(pageLink.screen).toMatchObject({ view: "side", linkView: false });
+  const entered = walk([{ type: "go", to: { selected: "A-1", panel: true, view: "page" } }, { type: "moved", screen: { panel: false } }], d);
+  expect(entered.screen).toMatchObject({ view: "side", linkView: false });
+  expect([pageLink.d.preferences, entered.d.preferences]).toEqual([d.preferences, d.preferences]);
+});
+
+test("Back from a saved view to its board shows the board's own way, not the view's", () => {
+  const opened = run([{ type: "open-view", view: view() }]);
+  expect(opened.screen.view).toBe("page");
+  const back = transition(opened.screen, restore(board1), data());
+  expect(back.screen).toMatchObject({ activeViewId: null, view: "side", linkView: false });
+  expect(back.preferences?.[1]?.display.openIn ?? "side").toBe("side");
+});
+
+test("only the switch saves: from a page link on a side board, choosing the page saves it to the board", () => {
+  const linked = run([restore({ to: "issue", key: "A-1", over: board1 })]);
+  const chosen = walk([{ type: "open-in", view: "side" }, { type: "open-in", view: "page" }], data(), linked.screen);
+  expect(chosen.screen).toMatchObject({ view: "page", linkView: false });
+  expect(chosen.d.preferences[1]!.display.openIn).toBe("page");
 });
 
 const labelFilter = (value: string) => ({
@@ -225,8 +291,8 @@ test("the view editor takes display changes into its draft, keeps the board's pr
   const editing = run([{ type: "edit-view", draft }]);
   expect(editing.screen).toMatchObject({ editorDraft: { name: "" }, activeViewId: null, mine: true });
   expect(url(editing.screen)).toBe("/view/new");
-  const toggled = run([{ type: "go", to: { selected: "A-1", panel: true } }, { type: "go", to: { view: "page" } }], data(), editing.screen);
-  expect(toggled.screen.editorDraft?.display.openIn).toBe("page");
+  const toggled = run([{ type: "go", to: { selected: "A-1", panel: true } }, { type: "open-in", view: "side" }], data(), editing.screen);
+  expect(toggled.screen.editorDraft?.display.openIn).toBe("side");
   expect(toggled.preferences).toBeUndefined();
   const cancelled = transition(editing.screen, { type: "discard-editor" }, data());
   expect(cancelled).toMatchObject({ forgetDraft: true, screen: { editorDraft: null, activeViewId: "v1" } });

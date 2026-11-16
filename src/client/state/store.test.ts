@@ -1597,11 +1597,11 @@ test("navigation: Back restores an issue page's trail; a reload of its entry sta
 });
 
 test("navigation: issues open beside the board or as a page, and the board remembers the choice", async () => {
-  const { navigate, ui, trace } = await navigationFixture();
+  const { navigate, openIssuesIn, ui, trace } = await navigationFixture();
   const steps = [];
   navigate({ selected: "NAV-1", panel: true });
   steps.push(trace());
-  navigate({ view: "page" });
+  openIssuesIn("page");
   steps.push(trace());
   ui.send({ type: "escape" });
   await Promise.resolve();
@@ -1612,7 +1612,7 @@ test("navigation: issues open beside the board or as a page, and the board remem
   steps.push(trace());
   navigate({ board: 2 });
   steps.push(trace());
-  navigate({ view: "side" });
+  openIssuesIn("side");
   steps.push(trace());
   await travel(-1);
   steps.push(trace());
@@ -1872,7 +1872,7 @@ test("navigation: a link's view opens that issue once and never becomes the boar
 });
 
 test("navigation: changing how issues open inside a saved view saves it to that view, but restoring the view never does (BJ-155)", async () => {
-  const { navigate, openSavedView, set, get, trace } = await navigationFixture();
+  const { navigate, openIssuesIn, openSavedView, set, get, trace } = await navigationFixture();
   const view = await savedView({ id: "open-in", name: "Open in", display: { openIn: "page" } });
   set({ savedViews: [view] });
   const { requests, restore } = recordRequests();
@@ -1890,11 +1890,11 @@ test("navigation: changing how issues open inside a saved view saves it to that 
     openSavedView(view);
     navigate({ selected: "NAV-1", panel: true });
     steps.push(trace());
-    navigate({ view: "side" });
+    openIssuesIn("side");
     steps.push(trace());
     await Promise.resolve();
     expect(get().savedViews[0]!.display.openIn).toBe("side");
-    navigate({ view: "side" });
+    openIssuesIn("side");
     steps.push(trace());
     await travel(-1);
     steps.push(trace());
@@ -2130,18 +2130,18 @@ test("navigation: switching or leaving a view shows that page's own filter, and 
 });
 
 test("navigation: the view editor keeps its draft in the address across reload, takes display changes, and returns on cancel", async () => {
-  const { navigate, beginViewEditor, createViewDraft, editViewDraft, discardViewEditor, set, get, trace } = await navigationFixture();
+  const { navigate, openIssuesIn, beginViewEditor, createViewDraft, editViewDraft, discardViewEditor, set, get, trace } = await navigationFixture();
   const { setDisplay: changeDisplay } = await import("@/client/features/views/view-settings");
   const view = await savedView({ id: "edited", name: "Edited", board: 2 });
   set({ savedViews: [view] });
   const steps = [];
-  navigate({ view: "page" });
+  openIssuesIn("page");
   beginViewEditor(createViewDraft());
   steps.push(trace());
   changeDisplay(1, { layout: "board" });
   steps.push(trace());
   navigate({ selected: "NAV-1", panel: true });
-  navigate({ view: "side" });
+  openIssuesIn("side");
   steps.push(trace());
   navigate({ panel: false });
   await Promise.resolve();

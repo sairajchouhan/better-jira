@@ -9,7 +9,7 @@ import { Debouncer } from "@tanstack/pacer";
 import { createBrowserHistory, createMemoryHistory, redirect, type ParsedLocation } from "@tanstack/react-router";
 import { uiMachine, inspector, type UiContext } from "@/client/state/machines";
 import { MACHINE_FIELDS, placeOf, restoredTrail, transition, type Destination, type NavigationEvent, type Place, type Screen } from "./navigation";
-import { commit, get, set, subscribe, type State, issueBoardId } from "@/client/state/store";
+import { commit, get, set, subscribe, type State, type View, issueBoardId } from "@/client/state/store";
 import { currentKey } from "@/client/state/jira-sync";
 import { createViewDraft, editViewDraft, updateSavedView, viewError } from "@/client/features/views/saved-views";
 import { emptyOverlay, viewForRoute, type SavedView, type ViewDraft } from "@/shared/saved-view-model";
@@ -93,14 +93,15 @@ export function navigate(to: Destination) {
   if (to.selected && !get().issues.has(currentKey(to.selected))) return void router.navigate(linkTo(to) as never);
   go({ type: "go", to });
 }
-/** Where an issue opens from a link to it: beside the list or as a page, as the screen opens issues, on the board that holds it
- *  (the one on screen for an issue no board holds). */
+/** Where an issue opens from a link to it: on the board that holds it (the one on screen for an issue no board holds), beside the
+ *  list or as a page as that board opens issues (navigation.ts `openInOf`). */
 export const issueAt = (key: string, s: State = get()): Destination => ({
   board: issueBoardId(s.issues.get(currentKey(key)), s),
   selected: key,
   panel: true,
-  view: s.view,
 });
+/** The user's switch of the open issue between the side panel and the full page, remembered as the list's "Open issues in". */
+export const openIssuesIn = (view: View) => go({ type: "open-in", view });
 /** Opens an issue by its key here, whether or not the mirror holds it yet (`navigate`). */
 export const openIssueByKey = (key: string) => navigate(issueAt(key));
 /** The issue a link names when it is an issue's page on this Jira site (`/browse/KEY`, a board's `selectedIssue`). */

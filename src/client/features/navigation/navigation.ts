@@ -30,7 +30,8 @@ export type Screen = {
    *  `pageFilters[pageKey(screen)]`, which `transition` derives after every step. */
   overlayFilters: FilterGroup;
   editorDraft: ViewDraft | null;
-  /** A link's or reload's `view` shows the open issue that way once: it reverts when the issue closes and never becomes a preference (R2-D4). */
+  /** The open issue shows another way than this list opens issues (a link, a reload, the Inbox, Enter's page): it reverts when
+   *  the issue closes and never becomes a preference (R2-D4). */
   linkView: boolean;
   /** The sidebar favorite this screen was opened from (Linear's `location.state.favoriteId`); see sidebar-active.ts. */
   favorite: string | null;
@@ -61,8 +62,12 @@ export type Destination = {
   trail?: TrailStep;
 };
 export type NavigationEvent =
-  /** Go somewhere: a new board leaves the open view or editor, and fills in how that board opens issues. */
+  /** Go somewhere: a new list leaves the open view or editor, and opens issues its own way. A destination's `view` shows its issue
+   *  that way once and is never saved. */
   | { type: "go"; to: Destination }
+  /** The user switched the open issue between the side panel and the full page: the open view, the editor draft or the board
+   *  remembers it, as the Display menu's "Open issues in" does. Never saved from the Inbox, whose pane is no board's. */
+  | { type: "open-in"; view: View }
   /** The ui machine moved on its own (Escape, My issues, editing a description). */
   | { type: "moved"; screen: Partial<Screen> }
   | { type: "open-view"; view: SavedView; favorite?: string }
@@ -138,71 +143,74 @@ function move(s: Screen, to: Destination): Screen {
   };
 }
 
+/** How a list opens issues: the editor's draft, else the open saved view, else the board (My issues' own key 0), else its default.
+ *  The Inbox opens them as the board of its open issue does. */
+function openInOf(s: Screen, data: NavigationData): View {
+  const own = (s.editorDraft ?? data.savedViews.find((v) => v.id === s.activeViewId))?.display.openIn;
+  if (own) return own;
+  const board = isMyIssues(s) ? 0 : s.board;
+  return data.preferences[board]?.display.openIn ?? data.defaults[board]?.openIn ?? "side";
+}
+/** The list a screen shows, as far as how it opens issues goes. */
+const listKey = (s: Screen) =>
+  s.editorDraft
+    ? `editor:${s.editorDraft.id ?? ""}`
+    : s.activeViewId
+      ? `view:${s.activeViewId}`
+      : s.inbox
+        ? "inbox"
+        : s.mine
+          ? "mine"
+          : `board:${s.board}`;
+
 /**
- * After the machine moved: a changed `view` is remembered by the open view, the editor draft or the board, unless a
- * link or restore chose it (`quiet`). A link's view reverts once its issue closes.
+ * After the machine moved. Only the user's own switch (`explicit`, the `open-in` event) is remembered, by the open view, the editor
+ * draft or the board. Any other view (a link, a restore, the Inbox, Enter's page) shows the open issue that way once, and reverts to
+ * how the list opens issues when it closes, as Linear's "Open in split view" and "Open in full view" open once and leave the view's
+ * `openInSplitView` preference alone (startup-root `openSubmenu`, `openInPanel`/`openPage`).
  */
-function settle(prev: Screen, next: Screen, data: NavigationData, quiet: boolean, out: Transition) {
+function settle(prev: Screen, next: Screen, data: NavigationData, explicit: boolean, out: Transition) {
   let screen = next;
-  if (next.view !== prev.view) {
-    if (quiet) screen = { ...screen, linkView: true };
-    else if (prev.activeViewId) {
-      const v = data.savedViews.find((v) => v.id === prev.activeViewId);
-      if (v && v.display.openIn !== next.view)
-        out.viewDisplay = { id: v.id, display: { ...v.display, openIn: next.view } };
-    } else if (prev.editorDraft)
-      screen = {
-        ...screen,
-        editorDraft: { ...prev.editorDraft, display: { ...prev.editorDraft.display, openIn: next.view } },
-      };
-    else {
-      screen = { ...screen, linkView: false };
-      const preferenceBoard = isMyIssues(next) ? 0 : next.board;
-      const prefs = data.preferences[preferenceBoard] ?? defaultPreferences();
-      out.preferences = {
-        ...data.preferences,
-        [preferenceBoard]: { ...prefs, display: { ...prefs.display, openIn: next.view } },
-      };
+  if (explicit && !next.inbox) {
+    screen = { ...screen, linkView: false };
+    if (next.view !== prev.view) {
+      if (prev.activeViewId) {
+        const v = data.savedViews.find((v) => v.id === prev.activeViewId);
+        if (v && v.display.openIn !== next.view)
+          out.viewDisplay = { id: v.id, display: { ...v.display, openIn: next.view } };
+      } else if (prev.editorDraft)
+        screen = {
+          ...screen,
+          editorDraft: { ...prev.editorDraft, display: { ...prev.editorDraft.display, openIn: next.view } },
+        };
+      else {
+        const preferenceBoard = isMyIssues(next) ? 0 : next.board;
+        const prefs = data.preferences[preferenceBoard] ?? defaultPreferences();
+        out.preferences = {
+          ...data.preferences,
+          [preferenceBoard]: { ...prefs, display: { ...prefs.display, openIn: next.view } },
+        };
+      }
     }
-  }
+  } else screen = { ...screen, linkView: next.view !== openInOf(next, data) };
   out.screen = screen;
   if (!screen.linkView || screen.panel) return;
-  out.screen = { ...screen, linkView: false };
-  // Back to how the open view (or else the board) opens issues; never the board's choice written into a view.
-  const saved = out.viewDisplay;
-  const savedViews = saved
-    ? data.savedViews.map((v) => (v.id === saved.id ? { ...v, display: saved.display } : v))
-    : data.savedViews;
-  const openIn =
-    (screen.editorDraft ?? savedViews.find((v) => v.id === screen.activeViewId))?.display.openIn ??
-    data.preferences[isMyIssues(screen) ? 0 : screen.board]?.display.openIn ??
-    "side";
-  if (openIn === screen.view) return;
-  const after = go(out.screen, { view: openIn }, { ...data, savedViews });
+  // Closed: back to how the list opens issues.
+  const after = go({ ...screen, linkView: false }, { view: openInOf(screen, data) }, data);
   out.screen = after.screen;
   out.history = "push";
-  if (after.preferences) out.preferences = after.preferences;
-  if (after.viewDisplay) out.viewDisplay = after.viewDisplay;
 }
 
-/** `navigate`: leaving the open view or editor, the views page, renamed keys and a new board's issue view; `quiet` (a restore or a view being opened) skips the leaving. */
-function enter(screen: Screen, to: Destination, data: NavigationData, quiet: boolean, out: Transition) {
+/** `navigate`: leaving the open view or editor, renamed keys, and how the list it lands on opens issues; `quiet` (a restore or a view
+ *  being opened) skips the leaving. `from` is the screen before any view or draft the step installed, to tell a new list. */
+function enter(screen: Screen, to: Destination, data: NavigationData, quiet: boolean, out: Transition, from = screen) {
   let s = screen;
-  if (!quiet && s.activeViewId && (to.board !== undefined || to.inbox === true || to.mine === true)) {
-    s = { ...s, activeViewId: null };
-    to = { ...to, view: to.view ?? data.preferences[to.mine ? 0 : to.board ?? s.board]?.display.openIn ?? "side" };
-  }
-  if (!quiet && s.editorDraft && (to.board !== undefined || to.inbox || to.mine)) {
-    s = { ...s, editorDraft: null };
-  }
+  if (!quiet && (to.board !== undefined || to.inbox === true || to.mine === true) && (s.activeViewId || s.editorDraft))
+    s = { ...s, activeViewId: null, editorDraft: null };
   if (to.selected) to = { ...to, selected: data.currentKey(to.selected) };
-  const view =
-    to.view ??
-    (to.mine === true ? data.preferences[0]?.display.openIn ?? "side" : undefined) ??
-    (to.board !== undefined && (to.board !== s.board || isMyIssues(s))
-      ? (data.preferences[to.board]?.display.openIn ?? data.defaults[to.board]?.openIn ?? "side")
-      : undefined);
-  settle(s, move(s, { ...to, ...(view ? { view } : {}) }), data, quiet, out);
+  const next = move(s, to);
+  // A new list opens issues its own way, unless the destination shows its issue another way once.
+  settle(s, to.view || listKey(next) === listKey(from) ? next : { ...next, view: openInOf(next, data) }, data, false, out);
 }
 
 const go = (screen: Screen, to: Destination, data: NavigationData) => {
@@ -284,6 +292,9 @@ function step(screen: Screen, event: NavigationEvent, data: NavigationData): Tra
   switch (event.type) {
     case "go":
       return go(screen, event.to, data);
+    case "open-in":
+      settle(screen, { ...screen, view: event.view }, data, true, out);
+      return out;
     case "moved":
       if (event.screen.mine === true && !screen.mine && !screen.activeViewId && !screen.editorDraft)
         return go(screen, { mine: true, selected: null, panel: false }, data);
@@ -301,7 +312,7 @@ function step(screen: Screen, event: NavigationEvent, data: NavigationData): Tra
       const v = event.view;
       const s = { ...screen, editorDraft: null, activeViewId: v.id };
       // The view's own board and openIn, as given: no renamed-key or board-default lookups.
-      settle(s, move(s, { board: v.board, selected: null, panel: false, inbox: false, view: v.display.openIn }), data, true, out);
+      settle(s, move(s, { board: v.board, selected: null, panel: false, inbox: false, view: v.display.openIn }), data, false, out);
       out.screen = { ...out.screen, mine: v.mine, inbox: false };
       out.forgetDraft = !!screen.editorDraft;
       return out;
@@ -309,7 +320,7 @@ function step(screen: Screen, event: NavigationEvent, data: NavigationData): Tra
     case "edit-view": {
       const draft = structuredClone(event.draft);
       const s = { ...screen, editorDraft: draft, activeViewId: null };
-      enter(s, { board: draft.board, selected: null, panel: false, inbox: false }, data, true, out);
+      enter(s, { board: draft.board, selected: null, panel: false, inbox: false }, data, true, out, screen);
       out.screen = { ...out.screen, mine: draft.mine, inbox: false };
       return out;
     }
@@ -367,6 +378,7 @@ function restore(screen: Screen, place: Place, saved: ViewDraft | null, data: Na
     data,
     true,
     out,
+    screen,
   );
   const mine = editorDraft?.mine ?? active?.mine ?? !!person;
   if (!inbox) out.screen = { ...out.screen, mine, inbox: false };
