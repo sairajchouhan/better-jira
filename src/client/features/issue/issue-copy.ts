@@ -284,8 +284,10 @@ export function copyDocument(kind: "url" | "title" | "link" | "markdown", doc: {
   return copyText(kind === "url" ? doc.url : kind === "title" ? doc.title : doc.markdown());
 }
 
+/** Only the kinds that print the status look it up: an inbox row whose issue isn't mirrored passes its key and title alone,
+ *  which the board lookup can't read (QA round 4, D4). */
 const textOf = (kind: CopyKind, issue: Issue, url: string) =>
-  issueCopy(kind, issue, get().full.get(issue.key), url, statusOf(issue)?.name ?? issue.status, ME.name);
+  issueCopy(kind, issue, get().full.get(issue.key), url, needsFull(kind) ? (statusOf(issue)?.name ?? issue.status) : "", ME.name);
 
 /** One projection of the issue as copied; the full issue (comments) is loaded first for the kinds that include it. */
 export async function issueText(kind: CopyKind, issue: Issue, url = issueURL(issue)): Promise<string> {

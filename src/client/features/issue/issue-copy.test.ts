@@ -264,3 +264,15 @@ test("a document's Copy title as link copies Linear's anchor and the Markdown li
     { "text/plain": "# Plan" },
   ]);
 });
+
+test("D4: an inbox row's issue outside the mirror (key and title only) copies its ID and title", async () => {
+  clip = fakeClipboard();
+  const boards = get().boards;
+  set({ boards: [{ id: 1, statuses: [] } as never] }); // any board: the status lookup asks the issue which boards hold it
+  const row = { key: "KAN-9", summary: "Row title" } as Issue;
+  await copyIssue("ID", row, KAN_7);
+  await copyIssue("title", row, KAN_7);
+  expect(clip.writes).toEqual([{ "text/plain": "KAN-9" }, { "text/plain": "KAN-9: Row title" }]);
+  expect(lastToast()).toBe('"KAN-9: Row title" copied to clipboard');
+  set({ boards });
+});

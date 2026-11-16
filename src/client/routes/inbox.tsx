@@ -42,8 +42,9 @@ import { SelectRow, Toggle, ViewOptions } from "@/client/components/display-opti
 import { PUSH_CATEGORIES, pushCategoryOn } from "@/shared/inbox-push";
 import { disableDesktopNotifications, enableDesktopNotifications, pushPermission } from "@/client/features/inbox/desktop-notifications";
 
+/** The shared copy path, with the mirrored issue when there is one; a row outside the mirror has its key and title. */
 const copyRow = (item: InboxItem, kind: CopyKind) =>
-  copyIssue(kind, { key: item.key, summary: item.title } as Issue, item.url);
+  copyIssue(kind, get().issues.get(item.key) ?? ({ key: item.key, summary: item.title } as Issue), item.url);
 
 function useInboxOrder() {
   const v = useShownView();
