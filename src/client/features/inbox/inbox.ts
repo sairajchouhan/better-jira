@@ -234,5 +234,16 @@ export function useInboxBadge() {
   useEffect(() => inbox.resumeWrites(), []);
   // oxlint-disable-next-line react/exhaustive-effect-dependencies -- A snooze stored into the past (another tab, a reload) wakes at once.
   useEffect(() => wakeSnoozed(itemsOf(data), now), [data, own, now]);
+  // Read marks that outlived their notification go as the feed changes, so the badge stays Jira's count (D3).
+  useEffect(() => inbox.tidyLocal(loadedRows(data?.pages[0]?.unread)), [data]);
   return count;
+}
+/** Every row the loaded feeds hold, both tabs of the priority inbox too, and Jira's unread list. */
+function loadedRows(unread: { id: string; head: string }[] = []) {
+  return [
+    ...(["all", "direct", "watching"] as const).flatMap((category) =>
+      itemsOf(queryClient.getQueryData<InfiniteData<Feed, string>>(["inbox", category])),
+    ),
+    ...unread,
+  ];
 }

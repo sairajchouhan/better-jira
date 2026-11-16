@@ -101,7 +101,7 @@ test("read-only marks persist locally, and each store owns its selection and und
     b = setup(false);
   a.store.selectRow(a.items[0]);
   a.flush();
-  expect(a.store.localState()["head-1"]).toEqual({ read: true });
+  expect(a.store.localState()["head-1"]).toEqual({ read: true, group: "1" });
   expect(a.store.selected()).toBe("1");
   expect(b.store.selected()).toBeNull();
   a.store.deleteRow();
@@ -246,12 +246,13 @@ test("BEn: in the split view a snooze selects the next row without a toast; Z re
   expect(a.store.selected()).toBe("2");
   expect(a.store.localState()["head-1"]).toEqual({
     read: true,
+    group: "1",
     snoozed: until,
   });
   expect(inboxToast()).toBeUndefined();
   a.store.undoInbox();
   expect(a.store.selected()).toBe("1");
-  expect(a.store.localState()["head-1"]).toEqual({ read: true });
+  expect(a.store.localState()["head-1"]).toEqual({ read: true, group: "1" });
 });
 
 test("BEn: with Show snoozed on, the snoozed row stays selected", () => {
@@ -317,7 +318,7 @@ test("unsnoozedAt: a snooze that ran out brings the row back unread and remember
   a.store.snoozeRow(Date.now() + 60_000, a.items[1]);
   a.store.wakeSnoozed(a.items, Date.now());
   await Promise.resolve();
-  expect(a.store.localState()["head-1"]).toEqual({ read: false, unsnoozed: until });
+  expect(a.store.localState()["head-1"]).toEqual({ read: false, group: "1", unsnoozed: until });
   expect(a.store.localState()["head-2"]?.snoozed).toBeGreaterThan(Date.now());
   expect(a.store.localState()["head-2"]?.unsnoozed).toBeUndefined();
 });
@@ -540,3 +541,44 @@ test("B1: an already read row starts no timer", () => {
   a.store.selectRow(a.items[0]);
   expect(a.timers).toHaveLength(0);
 });
+
+test("D3: Z after a delete or snooze made during a read write never brings back that write's local read mark", async () => {
+  for (const act of ["delete", "snooze", "unsnooze"] as const) {
+    const gate = deferred();
+    const a = setup(true, async () => (await gate.promise, null));
+    a.items[0]!.unread = false;
+    if (act === "unsnooze") a.store.snoozeRow(Date.now() + 60_000, a.items[0]);
+    const write = a.store.markRead([a.items[0]!], false); // U: mark as unread, Jira still answering
+    if (act === "delete") a.store.deleteRow(a.items[0]);
+    else if (act === "snooze") a.store.snoozeRow(Date.now() + 60_000, a.items[0]);
+    else a.store.unsnoozeRow(a.items[0]);
+    gate.resolve();
+    await write;
+    a.store.undoInbox();
+    expect(a.store.localState()["head-1"]?.read).toBeUndefined();
+    // The row's head goes; Jira's count is what the badge shows.
+    expect(unreadCount([], [], a.store.localState())).toBe(0);
+  }
+});
+
+test("D3: on a writable site a read mark with no write behind it is dropped at load; a cut-off write's mark is kept", async () => {
+  const a = setup(true, () => new Promise(() => {}));
+  a.saved.local = { "head-old": { read: false }, "head-del": { read: false, deleted: true }, "head-1": { read: true } };
+  a.saved.pending = { "head-1": { group: "1", read: true } };
+  a.store.resumeWrites();
+  await tick();
+  expect(a.store.localState()).toEqual({ "head-del": { deleted: true }, "head-1": { read: true } });
+  expect(unreadCount([], [], a.store.localState())).toBe(0);
+});
+
+test("D3: a read-only site's mark goes once Jira's feed shows its group under a newer head", () => {
+  const a = setup(false);
+  a.store.markRead([a.items[0]!, a.items[1]!], false);
+  expect(a.store.localState()["head-1"]).toEqual({ read: false, group: "1" });
+  const data = a.ports.queryClient.getQueryData<{ pages: Feed[] }>(["inbox", "all"])!;
+  // New activity on issue 1: Jira's group 1 now leads with another notification.
+  a.store.tidyLocal([{ ...a.items[0]!, head: "head-1b" }, a.items[1]!, ...(data.pages[0]!.unread ?? [])]);
+  expect(a.store.localState()["head-1"]).toBeUndefined();
+  expect(a.store.localState()["head-2"]).toEqual({ read: false, group: "2" });
+});
+

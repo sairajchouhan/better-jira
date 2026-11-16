@@ -134,10 +134,23 @@ export function createInboxStore(ports: InboxPorts) {
   }
   const setLocal = (heads: string[], patch: Local) =>
     putLocal(heads, (old) => ({ ...old, ...patch }));
-  const dropLocal = (heads: string[], key: keyof Local) =>
+  const dropLocal = (heads: string[], ...keys: (keyof Local)[]) =>
     putLocal(heads, (old) => {
-      const { [key]: _, ...rest } = old ?? {};
+      const rest = { ...old };
+      for (const key of keys) delete rest[key];
       return rest;
+    });
+  /** What an undo of a delete or snooze puts back: the entry as it was, but the read mark as it is now. The read mark belongs
+   *  to its write (`markRead`), which may have settled since; restoring an old one would strand it and count the row unread
+   *  for good (QA round 4, D3). */
+  const restoreLocal = (before: Map<string, Local | undefined>) =>
+    putLocal([...before.keys()], (now, head) => {
+      const { read: _, group: __, ...was } = before.get(head) ?? {};
+      return {
+        ...was,
+        ...(now?.read !== undefined && { read: now.read }),
+        ...(now?.group !== undefined && { group: now.group }),
+      };
     });
   function changeView(patch: Partial<InboxView>) {
     view = { ...viewState(), ...patch };
@@ -340,10 +353,12 @@ export function createInboxStore(ports: InboxPorts) {
       remember(label, () => void markRead(items, !value, undefined, groups));
     const heads = items.map((i) => i.head),
       mark = ++marks;
+    // A read-only site keeps the mark for good, with its group, so new activity on the issue can end it (`tidyLocal`).
+    if (firstPage()?.writable === false)
+      return putLocal(heads, (old, head) => ({ ...old, read: value, group: items.find((i) => i.head === head)!.id }));
     for (const head of heads) marking.set(head, mark);
-    setLocal(heads, { read: value });
     // Unknown (no page yet) is a write resumed at boot; the server refuses it if the site is read-only.
-    if (firstPage()?.writable === false) return;
+    setLocal(heads, { read: value });
     editPending((pending) => {
       for (const i of items) pending[i.head] = { group: i.id, read: value };
     });
@@ -387,6 +402,32 @@ export function createInboxStore(ports: InboxPorts) {
       dropLocal(latest, "read");
     }
   }
+  /** Ends read marks that outlived their notification (QA round 4, D3): Linear's count is Jira's, so a mark counts only while
+   *  it can still be true. On a writable site a mark lives only while its write is on the way (this tab's `marking`, or any
+   *  tab's stored `pending`), so any other is left over. On a read-only site a mark is the only record, and it ends when the
+   *  feed shows its group led by a newer notification. `feeds` are the loaded rows of every feed, and Jira's unread list. */
+  function tidyLocal(feeds: Pick<InboxItem, "id" | "head">[]) {
+    const own = localState(),
+      writable = firstPage()?.writable;
+    if (writable === undefined) return;
+    let stale: string[];
+    if (writable) {
+      const pending = read<Pending>("pending", {});
+      stale = Object.keys(own).filter(
+        (head) => own[head]!.read !== undefined && !marking.has(head) && !pending[head],
+      );
+      if (stale.length) dropLocal(stale, "read", "group");
+      return;
+    }
+    const heads = new Map<string, Set<string>>();
+    for (const row of feeds) heads.set(row.id, (heads.get(row.id) ?? new Set()).add(row.head));
+    stale = Object.keys(own).filter((head) => {
+      const group = own[head]!.group,
+        shown = group && heads.get(group);
+      return !!shown && !shown.has(head);
+    });
+    if (stale.length) putLocal(stale, () => undefined);
+  }
   /** Sends the read writes a reload cut off, once per page load; the feed refetches when they land. */
   let resumed = false;
   function resumeWrites() {
@@ -399,6 +440,7 @@ export function createInboxStore(ports: InboxPorts) {
         .map(([head, p]) => ({ id: p.group, head }));
       if (rows.length) void markRead(rows, value);
     }
+    tidyLocal([]);
   }
   /** The pending delayed read (`READ_DELAY`) of the row that shows. */
   let pendingRead: { id: string; cancel: () => void } | undefined;
@@ -507,7 +549,7 @@ export function createInboxStore(ports: InboxPorts) {
       else leaveRow();
     }
     const entry = remember(label, () => {
-      putLocal([...before.keys()], (_, head) => before.get(head));
+      restoreLocal(before);
       if (was && gone.has(was.id) && selectedId !== was.id) showRow(was);
     });
     if (toast) {
@@ -603,7 +645,7 @@ export function createInboxStore(ports: InboxPorts) {
     const before = item && localState()[item.head];
     if (!item || !before?.snoozed) return;
     dropLocal([item.head], "snoozed");
-    remember("unsnooze notification", () => putLocal([item.head], () => before));
+    remember("unsnooze notification", () => restoreLocal(new Map([[item.head, before]])));
   }
   /** Rows whose snooze ran out come back unread, in Jira too, as Linear's do, and remember when (`unsnoozedAt`). */
   function wakeSnoozed(items: InboxItem[], now: number) {
@@ -685,6 +727,7 @@ export function createInboxStore(ports: InboxPorts) {
     snoozeRow,
     unsnoozeRow,
     wakeSnoozed,
+    tidyLocal,
     hasSelectedRow,
     showTab,
     priorityInbox,

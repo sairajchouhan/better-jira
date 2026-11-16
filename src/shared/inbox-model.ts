@@ -387,6 +387,8 @@ export function unreadCount(
 /** What the inbox keeps locally per head notification: Jira has no delete or snooze, and read-only sites keep read state here too. */
 export type Local = {
   read?: boolean;
+  /** The Jira group of a read mark kept on a read-only site, so the mark goes once new activity gives the group a newer head. */
+  group?: string;
   deleted?: boolean;
   /** Snoozed until this time (Linear's `snoozedUntilAt`). */
   snoozed?: number;
