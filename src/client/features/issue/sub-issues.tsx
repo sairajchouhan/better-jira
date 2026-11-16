@@ -66,6 +66,7 @@ import {
   movedOrder,
   canDropSubIssue,
   subIssueDropSlot,
+  activeSubIssue,
   subIssueRows,
   type SubIssueCount,
   type SubIssueDisplay,
@@ -314,13 +315,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
   });
   // The row with focus in it, or the one the pointer moved over since the last j/k step (`pointerLeads`, BJ-382): a still
   // pointer's row never takes Linear's active item back from the keys.
-  useCommand(
-    "hovered-sub-issue",
-    () =>
-      section.current?.querySelector<HTMLElement>(
-        pointerLeads() ? "[data-sub-issue]:hover, [data-sub-issue]:focus-within" : "[data-sub-issue]:focus-within",
-      )?.dataset.subIssue,
-  );
+  useCommand("hovered-sub-issue", () => activeSubIssue(section.current, pointerLeads()));
   const rowEntries = (child: Issue, _anchor: HTMLElement): ActionEntry[] => {
     const entries = issueMenuEntries(child, {
       presentation: "sub-issue",

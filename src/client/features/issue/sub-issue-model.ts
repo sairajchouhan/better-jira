@@ -309,3 +309,13 @@ export function canDropSubIssue(
 export function subIssueDropSlot(siblings: readonly string[], dragged: string, over: string, after: boolean) {
   return siblings.filter((key) => key !== dragged).indexOf(over) + (after ? 1 : 0);
 }
+
+/**
+ * The sub-issue row an issue shortcut acts on (Linear's single active item, BJ-382): the row the pointer moved over since the last
+ * key step (`pointerLeads`), else the row holding focus. Two queries, not one `:hover, :focus-within`, which would return whichever
+ * comes first in the section rather than the hovered row.
+ */
+export function activeSubIssue(root: Pick<ParentNode, "querySelector"> | null | undefined, pointerLeads: boolean) {
+  const row = (selector: string) => root?.querySelector<HTMLElement>(selector)?.dataset.subIssue;
+  return (pointerLeads ? row("[data-sub-issue]:hover") : undefined) ?? row("[data-sub-issue]:focus-within");
+}

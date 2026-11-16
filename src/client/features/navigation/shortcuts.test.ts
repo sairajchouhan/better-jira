@@ -198,7 +198,23 @@ test("BJ-382: j/k steps mark the keys as leading, and the sub-issue section's ho
   expect(source).toMatch(/function move\(direction: number, horizontal = false\) \{\s*keyStepped\(\);/);
   expect(source).toMatch(/pointerLeads\(\)\s*\?\s*globalThis\.document\?\.querySelector<HTMLElement>\("\[data-key\]\[role=row\]:hover"\)/);
   const subIssues = await Bun.file(new URL("../issue/sub-issues.tsx", import.meta.url)).text();
-  expect(subIssues).toContain('pointerLeads() ? "[data-sub-issue]:hover, [data-sub-issue]:focus-within" : "[data-sub-issue]:focus-within"');
+  expect(subIssues).toContain('useCommand("hovered-sub-issue", () => activeSubIssue(section.current, pointerLeads()));');
+});
+
+test("BJ-382: the sub-issue shortcut row is the hovered one while the pointer leads, else the focused one, wherever each sits", async () => {
+  const { activeSubIssue } = await import("@/client/features/issue/sub-issue-model");
+  // A section whose focused row (C-1) comes before the hovered one (C-3): one `:hover, :focus-within` query would answer C-1.
+  const rows: Record<string, string> = { "[data-sub-issue]:hover": "C-3", "[data-sub-issue]:focus-within": "C-1" };
+  const section = (present: string[]) => ({
+    querySelector: (selector: string) =>
+      present.includes(selector) ? { dataset: { subIssue: rows[selector] } } : selector.includes(",") ? { dataset: { subIssue: "C-1" } } : null,
+  }) as unknown as ParentNode;
+  const both = section(Object.keys(rows));
+  expect(activeSubIssue(both, true)).toBe("C-3");
+  expect(activeSubIssue(both, false)).toBe("C-1");
+  expect(activeSubIssue(section(["[data-sub-issue]:focus-within"]), true)).toBe("C-1");
+  expect(activeSubIssue(section(["[data-sub-issue]:hover"]), false)).toBeUndefined();
+  expect(activeSubIssue(null, true)).toBeUndefined();
 });
 
 test("BJ-374: arrows a focused card hands over (⇧→ Go to linked pull request, ↑/↓/←/→) reach the shortcuts past React Aria's grid", async () => {
