@@ -1,5 +1,6 @@
 import {
   createContext,
+  Fragment,
   use,
   useEffect,
   useEffectEvent,
@@ -12,7 +13,7 @@ import {
   type RefObject,
 } from "react";
 import { Tooltip as AriaTooltip, TooltipTrigger } from "react-aria-components";
-import { Keycap } from "./keycap";
+import { Joiner, Keycap, spokenShortcut } from "./keycap";
 import {
   choosePlacement,
   closeOnEscape,
@@ -25,17 +26,23 @@ import {
   type TooltipStore,
 } from "./tooltip-rules";
 
-/** A title's "(keys)" display text as Linear's caps: one per modifier glyph or "+"-joined part ("⌘⇧S" → ⌘ ⇧ S, "Ctrl+K" → Ctrl K),
- *  sequence words ("then", "/") dropped. */
-export const tipCaps = (keys: string) =>
+/** A title's "(keys)" display text as Linear's caps, one array per chord of a sequence ("G then I" → [G] [I]): one cap per modifier
+ *  glyph or "+"-joined part ("⌘⇧S" → ⌘ ⇧ S, "Ctrl+K" → Ctrl K). A "/" between caps is `shortcutTitle`'s alternate separator and is
+ *  dropped; a "/" that starts or ends the keys is the / key itself ("Search (/)", "⌘ /"). */
+export const tipCaps = (keys: string): string[][] =>
   keys
-    .split(/\s+/)
-    .filter((key) => key && key !== "/" && key !== "then")
-    .flatMap((key) => key.split(/(?<=[⌃⌘⌥⇧])|\+(?=.)/).filter(Boolean));
+    .split(/\s+then\s+/)
+    .map((chord) =>
+      chord
+        .split(/\s+/)
+        .filter((key, index, all) => key && !(key === "/" && index > 0 && index < all.length - 1))
+        .flatMap((key) => key.split(/(?<=[⌃⌘⌥⇧])|\+(?=.)/).filter(Boolean)),
+    )
+    .filter((chord) => chord.length > 0);
 
-/** One tooltip line: its text and caps. A title's lines are split on "\n"; "text (keys)" draws the caps after the text, "(keys) text"
- *  before it, as Linear's `N_` does with its default shortcutPosition "start" ("T to collapse group"). */
-export type TipLine = { text: string; keys: string[]; keysFirst: boolean };
+/** One tooltip line: its text and its shortcut's chords. A title's lines are split on "\n"; "text (keys)" draws the caps after the
+ *  text, "(keys) text" before it, as Linear's `N_` does with its default shortcutPosition "start" ("T to collapse group"). */
+export type TipLine = { text: string; keys: string[][]; keysFirst: boolean };
 export function parseTip(raw: string): TipLine[] {
   return raw.split("\n").map((line) => {
     const first = /^\(([^()]+)\)\s+(.*)$/.exec(line);
@@ -44,6 +51,11 @@ export function parseTip(raw: string): TipLine[] {
     return last ? { text: last[1]!, keys: tipCaps(last[2]!), keysFirst: false } : { text: line, keys: [], keysFirst: false };
   });
 }
+
+/** Where a title's tooltip opens, from its element's `data-tip`: Linear's default `bottom` (`Rwe`: `position = "bottom"`), `above`
+ *  for timestamps, `right` for the sidebar's rows (`h$` passes `position: "right"` to its `wZ` tooltip). */
+export const tipPlacement = (tip: string | undefined): Placement =>
+  tip === "above" ? "top" : tip === "right" ? "right" : "bottom";
 
 // ─── The core: one store for the page, one Root per tooltip, React Aria's Tooltip for the surface ───────────────────────────────
 
@@ -205,15 +217,22 @@ function TooltipLines({ lines }: { lines: TipLine[] }) {
   );
 }
 
-/** A line's text and caps. Linear's tooltip shortcut (Aze) is b4 at size small: its caps sit in D4's container, 3px apart. The title
- *  already spells the caps in display order, so they are drawn as given rather than re-derived from a chord. */
+/** A line's text and caps. Linear's tooltip shortcut (`rVn` draws `qr`, the b4 Shortcut, at size small): its caps sit in D4's
+ *  container, 3px apart, a sequence's chords joined by "then" ("Go to inbox G then I"), read out once as "G, then I". The title
+ *  already spells the caps in display order, so they are drawn as given rather than re-derived from a registry chord. */
 function TipRow({ line }: { line: TipLine }) {
   const caps = line.keys.length > 0 && (
     <span className="ui-shortcut">
-      {line.keys.map((key, index) => (
-        <Keycap key={index} size="small">
-          {key}
-        </Keycap>
+      <span className="sr-only">{spokenShortcut(line.keys)}</span>
+      {line.keys.map((chord, index) => (
+        <Fragment key={index}>
+          {index > 0 && <Joiner size="small">then</Joiner>}
+          {chord.map((key, at) => (
+            <Keycap key={at} aria-hidden size="small">
+              {key}
+            </Keycap>
+          ))}
+        </Fragment>
       ))}
     </span>
   );
@@ -243,14 +262,14 @@ export const Tooltip = {
 
 // ─── Variant: the plain tooltip of every `title` ────────────────────────────────────────────────────────────────────────────────
 
-type Target = { element: HTMLElement; title: string; above: boolean; focus: boolean; serial: number };
+type Target = { element: HTMLElement; title: string; placement: Placement; focus: boolean; serial: number };
 
 /** Where a parked `title` stays parked but shows no tooltip: inside a hover card or on its trigger, where the card is the one
  *  surface that opens (one open at a time, so a title there would close the card). */
 const QUIET = "[data-hover-card-trigger],[data-hover-card]";
 
 /** Linear's tooltip for every `title`: after a 450ms rest a menu-surface label sits 8px under the control (above for
- *  `data-tip="above"`, like Linear's timestamps), with a trailing "(keys)" shown as key caps. One listener finds the titled element
+ *  `data-tip="above"`, like Linear's timestamps; right of it for `data-tip="right"`, like Linear's sidebar rows), with a trailing "(keys)" shown as key caps. One listener finds the titled element
  *  under the pointer (or keyboard focus) and mounts a Root for it. The native title is parked in data-title while it is the target,
  *  so the browser's own tip never doubles it. */
 export function TitleTooltips() {
@@ -290,7 +309,7 @@ function followTitles(setTarget: (target: Target | null) => void) {
     }
     next.removeAttribute("title");
     if (!next.closest(QUIET))
-      setTarget({ element: next, title, above: next.dataset.tip === "above", focus, serial: ++serial });
+      setTarget({ element: next, title, placement: tipPlacement(next.dataset.tip), focus, serial: ++serial });
   };
   const over = (event: PointerEvent) => {
     // A touch never hovers.
@@ -340,7 +359,7 @@ function TitleTooltip({ target }: { target: Target }) {
     <Tooltip.Root timing={TOOLTIP_TIMING.plain}>
       <TitleTrigger target={target} />
       <Tooltip.Surface
-        placement={target.above ? "top" : "bottom"}
+        placement={target.placement}
         className={`app-tooltip${lines.length > 1 ? " app-tooltip-lines" : ""}`}
       >
         <Tooltip.Lines lines={lines} />

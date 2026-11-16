@@ -123,7 +123,8 @@ function Caps({ chord, look }: { chord: readonly string[]; look: Look }) {
   ));
 }
 
-function Joiner({ size = "normal", children }: { size?: Size; children: string }) {
+/** The "or"/"then" between a shortcut's caps (`Vbe` sizes); hidden from screen readers, which hear the spoken form. */
+export function Joiner({ size = "normal", children }: { size?: Size; children: string }) {
   return (
     <span aria-hidden data-size={size} className="ui-shortcut-label">
       {children}
