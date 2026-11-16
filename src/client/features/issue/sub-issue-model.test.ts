@@ -278,3 +278,21 @@ test("BJ-350: the sub-issue display options draw their ordering select from subI
   expect(view).toContain("options={subIssueOrderings(estimates, display.ordering)}");
   expect(view).not.toContain("options={orderings}");
 });
+
+test("every issue is an issue: a child in another project, on no board, counts by its own status under any parent type", () => {
+  const board = {
+    id: 1,
+    name: "B",
+    columns: [
+      { name: "To do", statuses: [{ id: "1", name: "To Do", category: "new" }] },
+      { name: "Done", statuses: [{ id: "3", name: "Done", category: "done" }] },
+    ],
+  } as Board;
+  const parent = { key: "TEAM-1", boards: [1], status: "1", type: "Spike", level: 0 } as Issue;
+  const kept = { key: "OTHER-1", boards: [], status: "3", type: "Bug", level: 0, parent: "TEAM-1", parentLevel: 0 } as unknown as Issue;
+  const held = { key: "TEAM-2", boards: [1], status: "1", type: "Sub-task", level: -1, parent: "TEAM-1" } as Issue;
+  const issues = new Map([parent, kept, held].map((i) => [i.key, i]));
+  expect(childrenByParent(issues).get("TEAM-1")?.map((i) => i.key)).toEqual(["OTHER-1", "TEAM-2"]);
+  expect(statusOf([board], kept)).toEqual({ name: "Done", category: "done", order: 1 });
+  expect(subIssueCount(issues, [board], "TEAM-1", "children")).toEqual({ done: 1, total: 2 });
+});

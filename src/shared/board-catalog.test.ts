@@ -1,6 +1,6 @@
 import { type Board, type Issue, type User, type JiraOptions } from "@/shared/issue-model";
 import { expect, test } from "bun:test";
-import { assignableUsers, knownLabels, statusById, statuses } from "./board-catalog";
+import { assignableUsers, knownLabels, statusBoard, statusById, statuses } from "./board-catalog";
 
 
 const board: Board = {
@@ -171,4 +171,13 @@ test("Ship should-fix: an empty board offers its own project; a board that shows
   // The board's filter doesn't show its location's project: a new issue there would vanish from the board.
   expect(projectChoices([oth], { project: own }).map((p) => p.key)).toEqual(["OTH"]);
   expect(projectChoices([], { project: null })).toEqual([]);
+});
+
+test("an issue no configured board holds reads its status from a board that knows it (Jira's status ids are site-wide)", () => {
+  const other = { ...board, id: 2, columns: [{ name: "Doing", statuses: [{ id: "5", name: "Doing", category: "indeterminate" }] }] } as Board;
+  const kept = { key: "OTHER-1", boards: [], status: "5" } as unknown as Issue;
+  expect(statusBoard([board, other], kept)?.id).toBe(2);
+  expect(statusBoard([board, other], kept, board)?.id).toBe(2);
+  expect(statusBoard([board, other], { ...kept, status: "3" }, other)?.id).toBe(1);
+  expect(statusBoard([board, other], { ...kept, boards: [1], status: "5" })?.id).toBe(1);
 });

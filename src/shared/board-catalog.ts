@@ -10,6 +10,13 @@ export const statuses = (board: Board | undefined) =>
   board?.columns.flatMap((c) => c.statuses) ?? [];
 export const statusById = (board: Board | undefined, id: unknown) =>
   statuses(board).find((s) => s.id === id);
+/** The board an issue reads its status from: one that holds it, else (a child in another project, kept on no configured board)
+ *  any board whose columns know that status, as Jira's status ids are site-wide. */
+export const statusBoard = (boards: readonly Board[], issue: Pick<Issue, "boards" | "status">, preferred?: Board) =>
+  (preferred && onBoard(issue, preferred.id) ? preferred : undefined) ??
+  boards.find((b) => onBoard(issue, b.id)) ??
+  (preferred && statusById(preferred, issue.status) ? preferred : undefined) ??
+  boards.find((b) => statusById(b, issue.status));
 
 /** Everyone an issue can be assigned to: you first, then Jira's assignable users and anyone assigned an issue in the mirror, by name.
  *  The pickers group them with `assigneeGroups`. */

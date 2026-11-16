@@ -1,6 +1,6 @@
 import { compareNatural, compareText } from "@/shared/compare";
 import { type Board, type Issue } from "@/shared/issue-model";
-import { statusById } from "@/shared/board-catalog";
+import { statusBoard, statusById } from "@/shared/board-catalog";
 import { isEpic, listedUnder, type TitleLineVariant } from "@/shared/epics";
 import {
   ORDERINGS,
@@ -10,7 +10,6 @@ import {
   type Ordering,
   type Property,
 } from "@/shared/view-model";
-import { onBoard } from "@/shared/board-membership";
 import { estimateChoices } from "@/client/features/views/view-choices";
 /** The words of the line under an issue's title, per variant (shared/epics.ts titleParentOf), and of the menu its ring opens.
  *  A parent Task: Linear's "Sub-issue of" and Open sub-issue…. An epic: "In epic", and Linear's word for a project's issues
@@ -86,7 +85,7 @@ export function childrenByParent(issues: ReadonlyMap<string, Issue>): ChildrenIn
 }
 /** An issue's status on its own board, as every sub-issue list, count and menu reads it; "new" when the board doesn't know it. */
 export const statusOf = (boards: readonly Board[], child: Issue) => {
-  const board = boards.find((b) => onBoard(child, b.id)),
+  const board = statusBoard(boards, child),
     columns = board?.columns ?? [],
     result = statusById(board, child.status);
   return {

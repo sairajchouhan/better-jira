@@ -1,5 +1,5 @@
 import type { User, Issue, Board, Full, IssueDraft, JiraOptions } from "@/shared/issue-model";
-import { knownPeople, statusById } from "@/shared/board-catalog";
+import { knownPeople, statusBoard, statusById } from "@/shared/board-catalog";
 import { boardFor } from "@/shared/board-membership";
 import { useMemo, useSyncExternalStore } from "react";
 import { defaultPreferences, type Display, type Preferences } from "@/shared/view-model";
@@ -325,5 +325,5 @@ export const boardOf = (key: string) => {
   const issue = state.issues.get(key);
   return issue && issueBoard(issue);
 };
-/** The issue's status on its own board. */
-export const statusOf = (i: Issue) => statusById(boardOf(i.key), i.status);
+/** The issue's status on its own board; one no configured board holds reads it from a board that knows it (`statusBoard`). */
+export const statusOf = (i: Issue) => statusById(statusBoard(state.boards, i, boardOf(i.key)), i.status);
