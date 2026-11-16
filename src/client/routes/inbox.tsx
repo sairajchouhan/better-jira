@@ -94,11 +94,14 @@ export function Row({
   now,
   snoozedUntil,
   unsnoozedAt,
+  menuOpen = false,
   onMenu,
 }: {
   item: InboxItem;
   selected: boolean;
   now: number;
+  /** Its context menu is open: Linear keeps the row's hover background meanwhile (checked live, 2026-11-16). */
+  menuOpen?: boolean;
   onMenu: (item: InboxItem, point: { x: number; y: number }) => void;
 } & SnoozeMarks) {
   const issue = useStore((s) => s.issues.get(item.key));
@@ -111,6 +114,7 @@ export function Row({
       data-inbox-row={item.id}
       data-unread={item.unread || undefined}
       aria-current={selected || undefined}
+      data-menu={menuOpen || undefined}
       aria-label={rowLabel(item, status?.name)}
       onClick={(e) => {
         if (e.metaKey || e.ctrlKey || e.shiftKey) return;
@@ -137,7 +141,7 @@ export function Row({
         e.preventDefault();
         onMenu(item, { x: e.clientX, y: e.clientY });
       }}
-      className={`mx-2 flex gap-3 rounded-lg px-2 ${snoozedUntil ? "h-[77px]" : "h-[55px]"} ${selected ? "bg-sel" : "hover:bg-(--row-hover)"}`}
+      className={`mx-2 flex gap-3 rounded-lg px-2 ${snoozedUntil ? "h-[77px]" : "h-[55px]"} ${selected ? "bg-sel" : "hover:bg-(--row-hover) data-menu:bg-(--row-hover)"}`}
     >
       <Actor item={item} />
       <span className="flex min-w-0 flex-1 flex-col gap-0.5 py-2.5">
@@ -911,6 +915,7 @@ export function InboxList() {
               selected={item.id === selected}
               now={now}
               {...snoozeMarks(item, own[item.head], now)}
+              menuOpen={menu?.item.id === item.id}
               onMenu={(item, point) => setMenu({ item, point })}
             />
           )),

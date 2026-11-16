@@ -45,3 +45,12 @@ test("R3 G22: a row's accessible name has the status its icon shows (the issue's
   expect(html).toMatch(/aria-label="[^"]*· Bug, QA /);
   expect(html).toContain('title="QA"');
 });
+
+test("D14: the right-clicked row keeps Linear's hover background while its menu is open", () => {
+  const props = { item: row, selected: false, now: Date.parse("2026-11-02T10:00:00Z"), onMenu: () => {} };
+  const open = renderToStaticMarkup(<Row {...props} menuOpen />),
+    closed = renderToStaticMarkup(<Row {...props} />);
+  expect(open).toContain("data-menu=");
+  expect(open).toContain("data-menu:bg-(--row-hover)");
+  expect(closed).not.toContain("data-menu=");
+});

@@ -117,7 +117,7 @@ test("BJ-224: sidebar rows hover with the sidebar theme's sidebarLinkBg, list-ty
   expect(await source("../features/navigation/app-chrome.tsx")).toContain(`<button {...props} className={sidebarRowClass(false)}>`);
   // List, inbox and sub-issue rows are Linear's list item (listItemHover / listItemMenuOpen / itemActive).
   expect(await source("../routes/board-view.tsx")).toContain("hover:bg-(--row-hover) data-menu:bg-(--row-hover)");
-  expect(await source("../routes/inbox.tsx")).toContain(`"hover:bg-(--row-hover)"`);
+  expect(await source("../routes/inbox.tsx")).toContain(`"hover:bg-(--row-hover) data-menu:bg-(--row-hover)"`);
   expect(await source("../features/issue/sub-issues.tsx")).toContain(`hover:bg-(--row-hover) \${active ? "bg-(--row-hover)" : ""}`);
 });
 
