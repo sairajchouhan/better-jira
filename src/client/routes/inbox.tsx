@@ -886,7 +886,7 @@ export function InboxList() {
         ref={list}
         role="list"
         data-scroll-restoration-id="inbox-list"
-        className="min-h-0 flex-1 overflow-y-auto py-1.5"
+        className="ui-scroll-stable min-h-0 flex-1 overflow-y-auto py-1.5"
       >
         {groups.map((group) => [
           group.label && (

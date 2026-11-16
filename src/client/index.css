@@ -3303,6 +3303,13 @@ pre.code-block .cb-ex-col button {
 .command-menu .menu-list .menu-item::before {
   right: max(0px, calc(6px - var(--scrollbar-width)));
 }
+/* Linear's scroll container (Ij with `gutter: "stable"`, ScrollArea `sMr.stable` sx-185mbhu): the inbox list and the list
+   layout keep the scrollbar's room whether or not they overflow, so rows don't shift when the bar comes and goes. */
+@layer components {
+  .ui-scroll-stable {
+    scrollbar-gutter: stable;
+  }
+}
 /* The sidebar (Ij with `gutter: isSafari ? auto : stable`): a stable gutter, its end padding less the scrollbar's room
    (`contentPadding(isSafari ? sidebarPadding : max(0, sidebarPadding - scrollbarWidth))`). Safari keeps the auto gutter and the
    full padding; `hanging-punctuation` is Safari's alone. */

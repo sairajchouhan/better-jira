@@ -187,7 +187,7 @@ export const BoardView = memo(function BoardView({
       <div className="relative flex min-w-0 min-h-0 flex-1 flex-col" data-layout={d.layout}>
         {!visible.length && results}
         {d.layout === "list" ? (
-          <div data-scroll-restoration-id={`board-${board.id}`} className="flex-1 overflow-auto py-1">
+          <div data-scroll-restoration-id={`board-${board.id}`} className="ui-scroll-stable flex-1 overflow-auto py-1">
             {/* Groups stack with nothing between them: Linear's list is header (36px) and row (44px) heights only
                 (IssueList `heightPerLevel`), BJ-241. */}
             {show.map((c, ci) => (

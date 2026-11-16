@@ -71,6 +71,14 @@ test("the probe box is 50px wide, always scrolling, and its content overflows it
   expect(px(block(css, ".scrollbar-probe > div"))).toBeGreaterThan(px(probe));
 });
 
+test("the inbox list and the list layout keep a stable gutter through one shared class", async () => {
+  expect(block(block(css, "@layer components", css.indexOf(".ui-scroll-stable") - 400), ".ui-scroll-stable")).toContain(
+    "scrollbar-gutter: stable",
+  );
+  expect(await read("routes/inbox.tsx")).toContain('className="ui-scroll-stable min-h-0 flex-1 overflow-y-auto');
+  expect(await read("routes/board-view.tsx")).toContain('className="ui-scroll-stable flex-1 overflow-auto py-1"');
+});
+
 test("hideScrollbars is one layered class, used by the menus, the create-issue chips and the editor toolbar", async () => {
   const hide = block(css, "@layer components", css.indexOf(".scrollbar-probe"));
   expect(block(hide, ".ui-hide-scrollbars {")).toContain("scrollbar-width: none");
