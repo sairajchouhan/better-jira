@@ -234,6 +234,8 @@ export function useInboxBadge() {
   useEffect(() => inbox.resumeWrites(), []);
   // oxlint-disable-next-line react/exhaustive-effect-dependencies -- A snooze stored into the past (another tab, a reload) wakes at once.
   useEffect(() => wakeSnoozed(itemsOf(data), now), [data, own, now]);
+  // A snooze wakes at its time, not at the next tick of the minute clock (QA round 4, D11).
+  useEffect(() => inbox.wakeAt(own, () => wakeSnoozed(itemsOf(data), Date.now())), [data, own]);
   // Read marks that outlived their notification go as the feed changes, so the badge stays Jira's count (D3).
   useEffect(() => inbox.tidyLocal(loadedRows(data?.pages[0]?.unread)), [data]);
   return count;

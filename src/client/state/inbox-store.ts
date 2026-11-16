@@ -58,6 +58,8 @@ export type InboxPorts = {
 /** Linear's `MarkNotificationAsRead` `A` (2026-11-14): the open notification is marked read 300 ms after it shows, so rows
  *  that J/K or the mouse pass through stay unread. Showing another notification, or none, before then cancels it. */
 export const READ_DELAY = 300;
+/** The longest wait `setTimeout` keeps (2^31 − 1 ms); a longer one fires at once. */
+const MAX_WAIT = 2 ** 31 - 1;
 const timeout = (fn: () => void, ms: number) => {
   const id = setTimeout(fn, ms);
   return () => clearTimeout(id);
@@ -660,6 +662,19 @@ export function createInboxStore(ports: InboxPorts) {
     );
     void markRead(due, false);
   }
+  /** Runs `wake` when the next snooze in `own` runs out (Linear unsnoozes at the time it shows), and returns its cancel. A wait
+   *  longer than `setTimeout` keeps (24.8 days, under "A month from now") is waited for in steps. */
+  function wakeAt(own: Record<string, Local>, wake: () => void) {
+    const next = Math.min(...Object.values(own).map((l) => (l.snoozed && l.snoozed > Date.now() ? l.snoozed : Infinity)));
+    if (next === Infinity) return;
+    let cancel = () => {};
+    const arm = () => {
+      const left = next - Date.now();
+      cancel = (ports.later ?? timeout)(() => (next - Date.now() > 0 ? arm() : wake()), Math.min(Math.max(left, 0), MAX_WAIT));
+    };
+    arm();
+    return () => cancel();
+  }
   const hasSelectedRow = () => !!selectedRow();
   /** Linear's ⌥1 and ⌥2: the priority inbox's tabs. */
   const showTab = (tab: InboxView["tab"]) => changeView({ tab });
@@ -727,6 +742,7 @@ export function createInboxStore(ports: InboxPorts) {
     snoozeRow,
     unsnoozeRow,
     wakeSnoozed,
+    wakeAt,
     tidyLocal,
     hasSelectedRow,
     showTab,

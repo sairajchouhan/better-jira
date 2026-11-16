@@ -582,3 +582,21 @@ test("D3: a read-only site's mark goes once Jira's feed shows its group under a 
   expect(a.store.localState()["head-2"]).toEqual({ read: false, group: "2" });
 });
 
+test("D11: a snooze wakes at its own time, not at the next minute; a month-long one waits in steps setTimeout can keep", () => {
+  const a = setup(false);
+  const woke: number[] = [];
+  expect(a.store.wakeAt({}, () => woke.push(1))).toBeUndefined();
+  const soon = Date.now() + 5_000;
+  a.store.wakeAt({ "head-1": { snoozed: soon }, "head-2": { snoozed: soon + 60_000 } }, () => woke.push(1));
+  expect(a.timers).toHaveLength(1);
+  expect(a.timers[0]!.ms).toBeGreaterThan(4_000);
+  expect(a.timers[0]!.ms).toBeLessThanOrEqual(5_000);
+  a.timers.splice(0);
+  const cancel = a.store.wakeAt({ "head-1": { snoozed: Date.now() + 31 * 86_400_000 } }, () => woke.push(2));
+  expect(a.timers[0]!.ms).toBe(2 ** 31 - 1);
+  a.flush(); // the first step ends early: not due yet, so it waits again
+  expect(woke).toEqual([]);
+  expect(a.timers).toHaveLength(1);
+  cancel!();
+  expect(a.timers).toHaveLength(0);
+});
