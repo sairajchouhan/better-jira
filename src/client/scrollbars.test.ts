@@ -58,11 +58,17 @@ test("the ::-webkit-scrollbar thumb only applies where scrollbar-width is missin
   expect(base.replace(fallback, "")).not.toContain("::-webkit-scrollbar");
 });
 
-test("the probe box is Linear's: 0 tall, 50px wide, always scrolling", () => {
-  const probe = block(css, ".scrollbar-probe");
-  expect(probe).toContain("height: 0");
+test("the probe box is 50px wide, always scrolling, and its content overflows it", () => {
+  const probe = block(css, ".scrollbar-probe {");
   expect(probe).toContain("width: 50px");
   expect(probe).toContain("overflow-y: scroll");
+  expect(probe).toContain("visibility: hidden");
+  expect(probe).toContain("pointer-events: none");
+  // Chrome only gives a box a classic scrollbar on a live macOS switch to "Always" when it overflows: an empty 0-tall probe
+  // (Linear's) kept measuring 0, so the class never came and every scroller drew the native bar on its grey track.
+  const px = (rule: string) => Number(/height: (\d+)px/.exec(rule)?.[1] ?? 0);
+  expect(px(probe)).toBeGreaterThan(0);
+  expect(px(block(css, ".scrollbar-probe > div"))).toBeGreaterThan(px(probe));
 });
 
 test("hideScrollbars is one layered class, used by the menus, the create-issue chips and the editor toolbar", async () => {

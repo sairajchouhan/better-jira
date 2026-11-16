@@ -3143,13 +3143,21 @@ pre.code-block .cb-ex-col button {
    body.layoutScrollbarObtrusive where scrollbars take up space and sets --scrollbar-width to their measured room (0 for
    overlay scrollbars). Overlay scrollbars are left alone; obtrusive ones turn thin, in the theme's scrollbarBg. */
 .scrollbar-probe {
-  /* Linear's probe (sx-qtp20y sx-1pju0fl sx-1rife3k); fixed here so it takes no room in our layout. */
+  /* Linear's probe (sx-qtp20y sx-1pju0fl sx-1rife3k: 0 tall, 50px wide, overflow-y scroll); fixed and hidden here so it
+     takes no room in our layout. Unlike Linear's, its content overflows it: when macOS switches from "When scrolling" to
+     "Always" in an open tab, Chrome gives a classic scrollbar only to boxes that overflow, so an empty probe kept measuring 0,
+     body never got the class, and every scroller drew the native 15px bar on its grey track. */
   position: fixed;
   top: 0;
   left: 0;
-  height: 0;
+  height: 30px;
   width: 50px;
   overflow-y: scroll;
+  visibility: hidden;
+  pointer-events: none;
+}
+.scrollbar-probe > div {
+  height: 40px;
 }
 @layer base {
   /* `:root,.sx-1eduqi0{--scrollbar-width:12px}`: the default until the probe has measured. */
