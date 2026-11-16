@@ -45,6 +45,10 @@
   :is([data-menu-open] > *, [data-menu-open] > * > *).ui-badge:is(button, a) > .ui-badge-text {
     color: var(--chip-fg-hover);
   }
+  /* A number's room held while it loads (card-badges.tsx PullRequestNumberRoom): laid out, never seen. */
+  .ui-badge-text[data-placeholder] {
+    visibility: hidden;
+  }
   /* The Created / Updated dates: borderless, no hover, disabled, transparent with no padding. */
   .ui-badge[data-variant="plain"] {
     padding: 0;

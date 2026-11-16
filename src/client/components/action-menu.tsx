@@ -304,10 +304,14 @@ export function CheckRow({
 export function ContextMenu({
   label,
   entries,
+  version,
   children,
 }: {
   label: string;
   entries: () => ActionEntry[];
+  /** Changes when `entries` are replaced wholesale (a list that was loading has landed): the open menu takes the new rows, where
+   *  otherwise it keeps the rows it opened with. */
+  version?: string;
   children: ReactNode;
 }) {
   const [point, setPoint] = useState<{ x: number; y: number } | null>(null);
@@ -322,7 +326,7 @@ export function ContextMenu({
       }}
     >
       {children}
-      {point && <ActionMenu label={label} point={point} entries={entries()} close={() => setPoint(null)} />}
+      {point && <ActionMenu key={version} label={label} point={point} entries={entries()} close={() => setPoint(null)} />}
     </div>
   );
 }

@@ -277,15 +277,22 @@ export function pullRequestActions(pr: PullRequest): ActionEntry[] {
   ];
 }
 
+/** Whether a pull request badge reads the issue's list as it mounts: only for one pull request whose number (or state, for an issue
+ *  Jira's development index links but its Development field doesn't count) didn't come with the issue. Every other badge draws
+ *  from the issue alone, as Linear's `mhn` draws from the models it holds, and reads the list on hover, click or menu. */
+export const pullRequestBadgeReads = (issue: Pick<Issue, "prCount" | "prNumber" | "prStatus">) =>
+  issue.prCount === 1 && (!issue.prNumber || !issue.prStatus);
+
 /** Linear's pull request badge (`mhn`): one PR shows its status icon and number ("#7"); several show the icon of the first status in
- *  Linear's order and "N PRs". The count and Jira's summary state come with the issue (its Development field), so several PRs cost
- *  no read; one PR's number needs Jira's development detail, read when the badge mounts. A click runs "Go to linked pull request…",
+ *  Linear's order and "N PRs". The count, Jira's summary state and the one PR's number (`prNumber`) come with the issue, so the
+ *  first paint is the final one. An issue whose number the server hasn't read yet reads the list as the badge mounts, holding the
+ *  number's room meanwhile (`PullRequestNumberRoom`). A click runs "Go to linked pull request…",
  *  which opens the one pull request or lists them below the badge (board `bottom-left`, list `bottom-right`); ⇧→ on the card does
  *  the same. Hover shows the card. One pull request's badge opens Linear's pull request menu on right-click, at the pointer, in place
  *  of the card's issue menu (`wO` with `lhn`); several leave the right-click to the card. */
 export function PullRequestBadge({ issue, layout }: { issue: Issue; layout: "board" | "list" }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
-  const { data } = usePullRequests(issue, issue.prCount === 1);
+  const { data, isError } = usePullRequests(issue, pullRequestBadgeReads(issue));
   const go = async (target: HTMLElement) => {
     const prs = await fetchPullRequests(issue).catch(() => []);
     if (prs.length === 1) openExternal(prs[0]!.url);
@@ -299,7 +306,9 @@ export function PullRequestBadge({ issue, layout }: { issue: Issue; layout: "boa
     return true;
   });
   const count = data?.length || (issue.prCount ?? 0);
-  const text = pullRequestBadgeText(count, data?.[0]?.number);
+  const number = issue.prNumber ?? data?.[0]?.number;
+  const text = pullRequestBadgeText(count, number);
+  const room = count === 1 && !number && !data && !isError;
   const badge = (
     <HoverCard label="Pull requests" content={<PullRequestsCard issue={issue} />}>
       <Badge.Button
@@ -313,7 +322,7 @@ export function PullRequestBadge({ issue, layout }: { issue: Issue; layout: "boa
         <Badge.Icon>
           <PullRequestStatusIcon status={(data?.length ? leadingStatus(data) : undefined) ?? issue.prStatus} />
         </Badge.Icon>
-        {text && <Badge.Text>{text}</Badge.Text>}
+        {text ? <Badge.Text>{text}</Badge.Text> : room && <PullRequestNumberRoom />}
       </Badge.Button>
     </HoverCard>
   );
@@ -322,6 +331,8 @@ export function PullRequestBadge({ issue, layout }: { issue: Issue; layout: "boa
       {count === 1 ? (
         <ContextMenu
           label="Pull request options"
+          // Opened before the list arrives, the menu shows "Loading…" and takes the rows when it lands.
+          version={data ? "loaded" : "loading"}
           entries={() => (data?.[0] ? pullRequestActions(data[0]) : [{ name: data ? "No linked pull requests" : "Loading pull requests…" }])}
         >
           {badge}
@@ -341,6 +352,16 @@ export function PullRequestBadge({ issue, layout }: { issue: Issue; layout: "boa
     </>
   );
 }
+
+/** Holds the room a pull request number ("#2965") takes while the badge reads it, unseen. Without it the badge draws icon-only, then
+ *  widens when the number lands: on a board card that can push the badge onto a second row and move every card below. Held from
+ *  the first paint, the badge wraps (or not) once. Only an issue the server hasn't read the number for yet draws it; Linear has no
+ *  such state, as its badge always holds the pull request model. */
+const PullRequestNumberRoom = () => (
+  <Badge.Text aria-hidden data-placeholder="">
+    #0000
+  </Badge.Text>
+);
 
 /** ⇧→ on a card or row: the card's pull request badge opens it when shown; otherwise the one pull request, or the newest. */
 export async function goToPullRequests(issue: Issue) {
