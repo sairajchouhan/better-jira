@@ -1,4 +1,5 @@
-import type { ComponentProps, ReactNode } from "react";
+import type { ComponentProps, CSSProperties, ReactNode } from "react";
+import { ProgressBar } from "react-aria-components";
 import { Text } from "./text";
 import "./control-tokens.css";
 import "./empty-state.css";
@@ -75,3 +76,19 @@ export function DocumentLoadingState({ className = "", ...props }: ComponentProp
     </div>
   );
 }
+
+/** Linear's loading caret (`GI` placed by `akt`, the LoadingContainer `$Ot` in startup-root): an 8×16 labelBase block 14px down
+ *  its positioned parent's top-left (the `noPadding` place), hidden for `delay` then blinking every second. React Aria's
+ *  ProgressBar gives it the progressbar role and label Linear's bare div lacks. */
+export function LoadingCaret({ label, delay = LOADING_CARET_DELAY }: { label: string; delay?: number }) {
+  return (
+    <ProgressBar
+      isIndeterminate
+      aria-label={label}
+      className="ui-loading-caret"
+      style={{ "--ui-loading-caret-delay": `${delay}ms` } as CSSProperties}
+    />
+  );
+}
+/** `tkt`: the caret's default delay, so a load under a second never shows it. */
+export const LOADING_CARET_DELAY = 1000;

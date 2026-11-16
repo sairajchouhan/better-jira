@@ -79,8 +79,45 @@
       animation: none;
     }
   }
+  /* Linear's loader caret (`KI.loaderCaret` + `positionedLoaderCaretNoPadding`): 8×16, 2px radius, labelBase, absolute at
+     14px from the top and 0 from the left, hidden until its delay ends, then `sx-69pro1-B` every 1s. */
+  .ui-loading-caret {
+    position: absolute;
+    top: 14px;
+    left: 0;
+    width: 8px;
+    height: 16px;
+    border-radius: 2px;
+    background-color: var(--fg-2);
+    opacity: 0;
+    animation: ui-loading-caret-blink 1s cubic-bezier(0.25, 0.46, 0.45, 0.94) var(--ui-loading-caret-delay, 1000ms) infinite;
+  }
+  /* Linear's `.suspenseFadeIn`: what a SuspenseObserver held fades in over 80ms once its fallback had shown. */
+  .ui-suspense-fade-in {
+    animation: 80ms ui-suspense-fade-in;
+  }
 }
 
+/* Linear's `sx-69pro1-B`. */
+@keyframes ui-loading-caret-blink {
+  0%,
+  40%,
+  to {
+    opacity: 1;
+  }
+  50%,
+  90% {
+    opacity: 0.2;
+  }
+}
+@keyframes ui-suspense-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
 @keyframes ui-skeleton-in {
   from {
     opacity: 0;

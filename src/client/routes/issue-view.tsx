@@ -32,7 +32,8 @@ import { activityEvents, type ActivityEvent, type Relation } from "@/client/feat
 import { ActivityRun, type ActivityItem } from "@/client/features/issue/activity-entry";
 import { summaryItems } from "@/client/features/issue/activity-collapse";
 import { mergeHistory } from "@/client/features/issue/jira-history";
-import { useIssueHistory } from "@/client/features/issue/use-issue-history";
+import { useIssueHistoryState } from "@/client/features/issue/use-issue-history";
+import { ActivityGate, useActivityReveal } from "@/client/features/issue/activity-loading";
 import { normalizeDocument } from "@/shared/document";
 import { imageCommentIds } from "@/client/features/media/media-edits";
 import { DueIcon, Icon, PriorityIcon, StatusIcon, TypeDot, hue } from "@/client/components/icons";
@@ -828,7 +829,8 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
   const composerFiles = useDraftFiles(issue.key),
     draft = useCommentDraft(issue.key);
   const subscribersRef = useRef<HTMLButtonElement>(null),
-    commentRef = useRef<HTMLDivElement>(null);
+    // The section, not the comment box: the box mounts only once the Activity has loaded, and focus waits for that mount.
+    commentRef = useRef<HTMLElement>(null);
   useCommand("change-subscribers", (key) => {
     if (key !== issue.key || !focusNode(subscribersRef.current)) return;
     // Opened after the focus, so the menu anchors on the button and hands focus back to it.
@@ -849,12 +851,17 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
     commentFocus.current = observer;
     return true;
   });
+  // Jira's whole history arrives after the details (BJ-13). As Linear's, the Activity waits for it under its heading (the
+  // fallback, activity-loading.tsx), then shows every row and the comment box at once; a failed read shows the app's own edits.
+  const { entries: history, pending } = useIssueHistoryState(issue.key, f?.updated);
+  const reveal = useActivityReveal(firstKey(issue.key), !f || pending);
+  const loaded = reveal.ready && !!f;
   // Any other spot the address points at (an activity entry, an image's comments) centres once the issue shows, and on each
   // new link to it, as Linear's `oT(e, "center")`; comments ring and centre themselves (`useAnchorHighlight`). The router's
   // own hash scroll is off (tree.tsx): it aligned to the top, under the pane's copy bar (R4-inbox-D2).
   const { hash: anchor, entry } = useLocationAnchor();
   useEffect(() => {
-    if (!f || !anchor || anchor.startsWith("comment-")) return;
+    if (!loaded || !anchor || anchor.startsWith("comment-")) return;
     let id: string;
     try {
       id = decodeURIComponent(anchor);
@@ -864,7 +871,7 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
     const target = document.getElementById(id);
     if (target) revealCentred(target);
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- A new link to the same spot (a new history entry) reveals it again.
-  }, [f, anchor, entry]);
+  }, [loaded, anchor, entry]);
   const subscribed = isWatching(issue);
   /** An image comment whose image was removed from the description opens the image on its own. */
   const [viewing, setViewing] = useState<{ file: Attachment; external: boolean }>();
@@ -883,8 +890,6 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
         external: !file,
       });
   };
-  // Jira's whole history arrives after the details (BJ-13); until then the Activity shows this app's own edits.
-  const history = useIssueHistory(issue.key, f?.updated);
   const comments: any[] | undefined = f?.comment?.comments;
   // An epic set through Jira's parent link reads as Linear's project change, worded with Epic (BJ-262).
   const activity = useMemo(
@@ -933,10 +938,9 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
         })),
       ]
     : [];
-  if (!f) return null;
   const imageComments = imageCommentIds(issue.mediaEdits);
   return (
-    <section className="issue-activity mt-4 border-t border-line pt-[18px]">
+    <section ref={commentRef} className="issue-activity mt-4 border-t border-line pt-[18px]">
       {viewing && (
         <ImageViewer
           file={viewing.file}
@@ -978,51 +982,54 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
           )}
         </button>
       </div>
-      <DescriptionHistoryProvider
-        issueKey={issue.key}
-        events={activity}
-        created={creation}
-        revisions={issue.descriptionHistory}
-      >
-        <ol className="space-y-3">
-          <CommentThreads
-            issue={issue}
-            comments={(f.comment?.comments ?? []).filter((c: any) => !imageComments.has(c.id))}
-            avatar={(c) => <Avatar user={jiraUser(c.author)} size={18} />}
-            me={<Avatar user={ME} size={18} />}
-            timestamp={timestamp}
-            events={items}
-            run={(run, place) => <ActivityRun key={run[0]!.anchor} events={run} place={place} />}
-          />
-        </ol>
-      </DescriptionHistoryProvider>
-      <div ref={commentRef} className="mt-[14px]">
-        {/* A new key clears the box after sending; autoFocus keeps the caret in it. */}
-        <CommentComposer
-          key={draft.key}
-          initial={draft.initial}
-          id="comment"
-          scope={`${issue.key}:comment`}
-          onLateMedia={draft.update}
+      <ActivityGate ready={loaded} fadeIn={reveal.waited}>
+        <DescriptionHistoryProvider
           issueKey={issue.key}
-          attachments={issue.attachments}
-          onFiles={composerFiles.onFiles}
-          label="Leave a comment…"
-          placeholder="Leave a comment…"
-          autoFocus={draft.autoFocus}
-          saveLabel="Submit comment"
-          onChange={(doc) => {
-            composerFiles.changed(doc);
-            draft.save(doc);
-          }}
-          onSave={(doc) => {
-            if (actions.comment(issue.key, doc)) {
-              composerFiles.sent(doc);
-              draft.sent();
-            }
-          }}
-        />
-      </div>
+          events={activity}
+          created={creation}
+          revisions={issue.descriptionHistory}
+        >
+          <ol className="space-y-3">
+            <CommentThreads
+              issue={issue}
+              // Built before the gate decides, so the details may not be here yet.
+              comments={(f?.comment?.comments ?? []).filter((c: any) => !imageComments.has(c.id))}
+              avatar={(c) => <Avatar user={jiraUser(c.author)} size={18} />}
+              me={<Avatar user={ME} size={18} />}
+              timestamp={timestamp}
+              events={items}
+              run={(run, place) => <ActivityRun key={run[0]!.anchor} events={run} place={place} />}
+            />
+          </ol>
+        </DescriptionHistoryProvider>
+        <div className="issue-activity-composer mt-[14px]">
+          {/* A new key clears the box after sending; autoFocus keeps the caret in it. */}
+          <CommentComposer
+            key={draft.key}
+            initial={draft.initial}
+            id="comment"
+            scope={`${issue.key}:comment`}
+            onLateMedia={draft.update}
+            issueKey={issue.key}
+            attachments={issue.attachments}
+            onFiles={composerFiles.onFiles}
+            label="Leave a comment…"
+            placeholder="Leave a comment…"
+            autoFocus={draft.autoFocus}
+            saveLabel="Submit comment"
+            onChange={(doc) => {
+              composerFiles.changed(doc);
+              draft.save(doc);
+            }}
+            onSave={(doc) => {
+              if (actions.comment(issue.key, doc)) {
+                composerFiles.sent(doc);
+                draft.sent();
+              }
+            }}
+          />
+        </div>
+      </ActivityGate>
     </section>
   );
 }

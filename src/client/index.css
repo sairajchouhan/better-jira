@@ -2257,8 +2257,13 @@ li[data-done="true"] > .todo-content {
 }
 
 .issue-activity [data-thread],
-.issue-activity > div:last-child {
+.issue-activity-composer {
   margin-inline: -8px;
+}
+/* Linear's Activity fallback (`Oi`): 300px kept under the heading, the loading caret at its top-left (activity-loading.tsx). */
+.activity-loading {
+  position: relative;
+  height: 300px;
 }
 /* RAJ-52/53 event rows (created, property, link): 24.8px tall, 4px apart, a 14px avatar 11px in and the name 36px in. */
 .activity-event {
