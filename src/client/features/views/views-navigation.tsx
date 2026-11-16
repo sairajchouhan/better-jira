@@ -8,6 +8,7 @@ import { ME, useStore } from "@/client/state/store";
 import { moveFavorite } from "@/client/features/navigation/favorites";
 import { boardURL, favoriteEntries } from "@/client/features/navigation/sidebar-menus";
 import { placeURL } from "@/client/features/navigation/app-navigation";
+import { favoriteName } from "@/client/features/navigation/quick-navigation";
 import { ContextMenu } from "@/client/components/action-menu";
 import { SectionDisclosure } from "@/client/components/section-disclosure";
 import { findIssueDocument } from "@/shared/issue-resource";
@@ -38,7 +39,7 @@ export function ViewFavorites({ expanded, onToggle }: { expanded: boolean; onTog
     // Resting on the row opens its card (Linear's `h$` around `d5n`; a team's on its toggle button, `m5n`): one wrapper for every
     // kind, so all share the delay, the placement and the dismissal.
     const label = view?.name ?? (issue ? issue.key : board?.name ?? (document ? document.resource.title || "New document" : ""));
-    const content = <><FavoriteHoverCard.Label thing={thing} label={label}><FavoriteIcon {...thing} /><span className="min-w-0 flex-1 truncate">{view?.name ?? (document ? document.resource.title || "New document" : issue ? `${issue.key} ${issue.summary}` : board?.name)}</span></FavoriteHoverCard.Label><RemoveFavoriteButton id={id} /></>;
+    const content = <><FavoriteHoverCard.Label thing={thing} label={label}><FavoriteIcon {...thing} /><span className="min-w-0 flex-1 truncate">{favoriteName(thing)}</span></FavoriteHoverCard.Label><RemoveFavoriteButton id={id} /></>;
     // Each row is the sidebar's one link, marked by the shared rule: active only when the screen came from this favorite.
     const row = { place: favoritePlace(id), favorite: id };
     // The row drags by its surface (BJ-75), so the link itself is never the browser's own drag of its URL.

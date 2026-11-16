@@ -32,7 +32,7 @@ test("mixed favorites preserve order, labels, document fallback and legacy board
   ] });
   expect(choices).toEqual([
     { id: "document:doc", favorite: "document:doc", name: "New document", destination: { board: 1, selected: "T-1", panel: true, document: "doc" } },
-    { id: "T-1", favorite: "T-1", name: "T-1 An issue", destination: { board: 1, selected: "T-1", panel: true } },
+    { id: "T-1", favorite: "T-1", name: "An issue", destination: { board: 1, selected: "T-1", panel: true } },
     { id: "view:bugs", favorite: "view:bugs", name: "Bugs", destination: { view } },
     ...(["active", "backlog", "old"] as const).map((scope) => ({
       id: `board:1:${scope}`, favorite: `board:1:${scope}`, name: `Team · ${scope}`,
