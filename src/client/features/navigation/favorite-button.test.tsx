@@ -26,6 +26,8 @@ test("a favorite row's ×: Linear's `g5n` Remove favorite, 10px X, held in place
   expect(html).toContain("after:-inset-[5px]");
   // Gone while its row is dragged (Linear `u5n`: no trailing when `isDragged`; our Sortable.Item marks `data-dragged`).
   expect(html).toContain("in-data-dragged:hidden");
+  // Its title shows over the row's open card, in its own store, so the card stays open under it (Linear: card and tooltip both up).
+  expect(html).toContain('data-tip-over-card=""');
 });
 
 test("clicking a favorite's × removes it and keeps the click from opening the row's link", () => {

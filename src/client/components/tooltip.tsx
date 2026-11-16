@@ -65,13 +65,24 @@ export const tipPlacement = (tip: string | undefined): Placement =>
 const StoreContext = createContext<TooltipStore>(createTooltipStore());
 
 /**
+ * The store of a title that shows over its own open card: a control inside a hover card's trigger marked `data-tip-over-card`
+ * (a sidebar favorite's ×). Linear's favorite row passes no `isChildTooltipActive` to its card (`d5n` → `h$`), so the ×'s
+ * "Remove favorite" tooltip opens under it while the card stays open beside the row. Its own store keeps the page's one-open
+ * rule from closing that card.
+ */
+const OVER_CARD_STORE = createTooltipStore();
+
+/**
  * The page's tooltip state, lifted above every trigger: the one-open store, and the Escape rule on the window (one press hides the
  * open tooltip and goes on to the page; `closeOnEscape`). Every tooltip, hover card and edge tooltip reads it.
  */
 function TooltipProvider({ children }: { children: ReactNode }) {
   const [store] = useState(() => createTooltipStore());
   useEffect(() => {
-    const key = (event: KeyboardEvent) => void closeOnEscape(event, store);
+    const key = (event: KeyboardEvent) => {
+      closeOnEscape(event, store);
+      closeOnEscape(event, OVER_CARD_STORE);
+    };
     addEventListener("keydown", key, true);
     return () => removeEventListener("keydown", key, true);
   }, [store]);
@@ -267,8 +278,12 @@ export const Tooltip = {
 type Target = { element: HTMLElement; title: string; placement: Placement; focus: boolean; serial: number };
 
 /** Where a parked `title` stays parked but shows no tooltip: inside a hover card or on its trigger, where the card is the one
- *  surface that opens (one open at a time, so a title there would close the card). */
+ *  surface that opens (one open at a time, so a title there would close the card). A title marked `OVER_CARD` still shows, in
+ *  its own store. */
 const QUIET = "[data-hover-card-trigger],[data-hover-card]";
+const OVER_CARD = "[data-tip-over-card]";
+/** Whether a titled element shows its tooltip when it is the target. */
+export const showsTitle = (element: Pick<Element, "closest" | "matches">) => !element.closest(QUIET) || element.matches(OVER_CARD);
 
 /** Linear's tooltip for every `title`: after a 450ms rest a menu-surface label sits 8px under the control (above for
  *  `data-tip="above"`, like Linear's timestamps; right of it for `data-tip="right"`, like Linear's sidebar rows), with a trailing "(keys)" shown as key caps. One listener finds the titled element
@@ -310,7 +325,7 @@ function followTitles(setTarget: (target: Target | null) => void) {
       next.dataset.tipLabel = "";
     }
     next.removeAttribute("title");
-    if (!next.closest(QUIET))
+    if (showsTitle(next))
       setTarget({ element: next, title, placement: tipPlacement(next.dataset.tip), focus, serial: ++serial });
   };
   const over = (event: PointerEvent) => {
@@ -358,7 +373,7 @@ function followTitles(setTarget: (target: Target | null) => void) {
 function TitleTooltip({ target }: { target: Target }) {
   // A `data-tip-plain` title has no shortcut, so a name ending in "(…)" stays text.
   const lines = parseTip(target.title, target.element.hasAttribute("data-tip-plain"));
-  return (
+  const tooltip = (
     <Tooltip.Root timing={TOOLTIP_TIMING.plain}>
       <TitleTrigger target={target} />
       <Tooltip.Surface
@@ -369,6 +384,7 @@ function TitleTooltip({ target }: { target: Target }) {
       </Tooltip.Surface>
     </Tooltip.Root>
   );
+  return target.element.matches(OVER_CARD) ? <StoreContext value={OVER_CARD_STORE}>{tooltip}</StoreContext> : tooltip;
 }
 
 /** Points the Root at the titled element and reports it: a hover enters (each move over it restarts the rest), keyboard focus opens

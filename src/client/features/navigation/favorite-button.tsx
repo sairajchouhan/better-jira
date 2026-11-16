@@ -55,6 +55,8 @@ export function RemoveFavoriteButton({ id }: { id: string }) {
       role="button"
       aria-label="Remove favorite"
       title="Remove favorite"
+      // Its tooltip opens while the row's card stays open (Linear's `d5n` card has no child-tooltip close).
+      data-tip-over-card=""
       data-remove-favorite
       onClick={removeFavoriteClick(id)}
       className="relative -ml-0.5 flex size-2.5 shrink-0 cursor-default text-fg-4 opacity-0 group-hover/favorite:opacity-100 group-active/favorite:opacity-100 after:absolute after:-inset-[5px] after:content-[''] hover:text-fg-2 active:text-fg-2 in-data-dragged:hidden [@media(hover:none)]:pointer-events-none"

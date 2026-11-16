@@ -2,7 +2,7 @@ import { expect, test } from "bun:test";
 import { PULL_REQUEST_ROW_CARD_DELAY } from "@/client/features/issue/issue-pull-requests";
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
-import { parseTip, tipCaps, tipPlacement, Tooltip } from "./tooltip";
+import { parseTip, showsTitle, tipCaps, tipPlacement, Tooltip } from "./tooltip";
 import { TOOLTIP, TOOLTIP_TIMING } from "./tooltip-rules";
 
 test("tipCaps splits a title's keys into one cap per key, one array per chord of a sequence", () => {
@@ -62,4 +62,21 @@ test("tooltips, hover cards and the edge tooltip take Linear's `Rwe` and `B_` ti
 test("parseTip: a plain title (data-tip-plain) is text as it stands, so a name ending in (…) is not drawn as caps", () => {
   expect(parseTip("Ops (EU)", true)).toEqual([{ text: "Ops (EU)", keys: [], keysFirst: false }]);
   expect(parseTip("Ops (EU)")[0]!.keys).toEqual([["EU"]]);
+});
+
+test("a title inside a hover card stays quiet, except one marked over-card (a favorite's ×: Linear shows Remove favorite over its card)", () => {
+  const element = (inCard: boolean, overCard: boolean): Parameters<typeof showsTitle>[0] => ({
+    closest: (selector: string) => (inCard && selector.includes("data-hover-card") ? ({} as Element) : null),
+    matches: ((selector: string) => overCard && selector === "[data-tip-over-card]") as Element["matches"],
+  });
+  expect(showsTitle(element(false, false))).toBe(true);
+  expect(showsTitle(element(true, false))).toBe(false);
+  expect(showsTitle(element(true, true))).toBe(true);
+});
+
+test("every card's pad is Linear's tooltip offset (`Vwe` pads by `Nwe`, 8px) on the side it opens", async () => {
+  const css = await Bun.file(new URL("../index.css", import.meta.url)).text();
+  expect(css).toMatch(/\.hover-card\[data-placement="bottom"\] > \.hover-card-zone \{\s*padding-block: 8px;/);
+  expect(css).toMatch(/\.hover-card\[data-placement="right"\] > \.hover-card-zone \{\s*padding-inline: 8px;/);
+  expect(TOOLTIP.cardPad).toBe(8);
 });
