@@ -16,7 +16,7 @@ import { FindField } from "@/client/components/find-field";
 import { Tabs } from "@/client/components/tabs";
 import { Text } from "@/client/components/text";
 import { Icon, PriorityIcon, StatusIcon, TypeDot, type IconName } from "@/client/components/icons";
-import { FILTER_FIELDS, filterOperator, withOperator, withoutFilter, describe, groupSummary, rowLabel, feedCategory, hasFilters, missingIssueNote, shortAgo, type FilterField, type InboxItem, type InboxView, snoozeMarks, type SnoozeMarks } from "@/shared/inbox-model";
+import { FILTER_FIELDS, filterOperator, withOperator, withoutFilter, describe, emptyInbox, groupSummary, rowLabel, feedCategory, hasFilters, missingIssueNote, shortAgo, type FilterField, type InboxItem, type InboxView, snoozeMarks, type SnoozeMarks } from "@/shared/inbox-model";
 import { CommentCard, InboxGroupUpdates } from "@/client/features/inbox/inbox-group";
 import { TIME_PLACEHOLDER, TimeOptionRows } from "@/client/features/time-options/time-option-rows";
 import { snoozedFor } from "@/shared/time-options";
@@ -804,7 +804,8 @@ export function InboxList() {
     // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Reobserve the load sentinel after a page appends rows.
   }, [hasNextPage, isFetchingNextPage, pages, fetchNextPage]);
   // Linear's filtered empty state (Inbox `Bt`): what the filters and the find hide, and a way to clear them.
-  const hidden = base.length - rows.length;
+  const hidden = base.length - rows.length,
+    empty = emptyInbox(hidden, v.unreadOnly);
   // Boolean selectors: another overlay opening elsewhere must not re-render the list.
   const actionsOpen = useStore((s) => s.overlay === "inbox-actions"),
     filterOpen = useStore((s) => s.overlay === "inbox-filter"),
@@ -938,9 +939,9 @@ export function InboxList() {
             <EmptyState
               role="status"
               className="h-full"
-              title={hidden > 0 ? "No matching notifications" : v.unreadOnly ? "No unreads" : "No notifications"}
+              title={empty.title}
               actions={
-                hidden > 0 && (
+                empty.action === "clear" ? (
                   <Button
                     variant="muted"
                     size="small"
@@ -952,7 +953,11 @@ export function InboxList() {
                   >
                     Clear Filters
                   </Button>
-                )
+                ) : empty.action === "show-all" ? (
+                  <Button variant="muted" size="normal" onClick={() => changeView({ unreadOnly: false })}>
+                    Show all notifications
+                  </Button>
+                ) : null
               }
             >
               {hidden > 0 && (

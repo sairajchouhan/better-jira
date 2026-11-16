@@ -687,6 +687,15 @@ export const sameInboxOrder = (a: InboxOrder, b: InboxOrder) =>
   a.groups.length === b.groups.length &&
   a.groups.every((g, i) => g.label === b.groups[i]!.label && sameRows(g.rows, b.groups[i]!.rows));
 
+/** Linear's empty inbox (Inbox `En` and `Rt`, confirmed live 2026-11-16): rows the filters or find hide make it "No matching
+ *  notifications" with Clear Filters, whatever else is on; otherwise unread-only says "No unreads" and offers "Show all
+ *  notifications", which turns it off. `hidden` counts only the rows the view would show without its filters and find. */
+export const emptyInbox = (hidden: number, unreadOnly: boolean) =>
+  hidden > 0
+    ? ({ title: "No matching notifications", action: "clear" } as const)
+    : unreadOnly
+      ? ({ title: "No unreads", action: "show-all" } as const)
+      : ({ title: "No notifications" } as const);
 /** Whether any inbox property filter has selected values. */
 export const hasFilters = (view: InboxView) =>
   Object.values(view.filters).some((values) => values?.length);

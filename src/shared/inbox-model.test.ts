@@ -1,5 +1,6 @@
 import { describe as group, expect, test } from "bun:test";
 import {
+  emptyInbox,
   DEFAULT_VIEW,
   facetsOf,
   feedCategory,
@@ -625,4 +626,11 @@ test("BJ-264: a row back from snooze sorts by when it came back (Linear's movedT
   expect(ids("oldest")).toEqual(["newer", "old"]);
   // Without the unsnooze it stays where its own time puts it.
   expect(visibleItems([newer, old], {}, DEFAULT_VIEW, now).map((r) => r.id)).toEqual(["newer", "old"]);
+});
+
+test("D7: Linear's empty inbox: hidden rows say No matching notifications even in unread-only; else No unreads offers Show all", () => {
+  expect(emptyInbox(1, true)).toEqual({ title: "No matching notifications", action: "clear" });
+  expect(emptyInbox(1, false)).toEqual({ title: "No matching notifications", action: "clear" });
+  expect(emptyInbox(0, true)).toEqual({ title: "No unreads", action: "show-all" });
+  expect(emptyInbox(0, false)).toEqual({ title: "No notifications" });
 });
