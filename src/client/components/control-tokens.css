@@ -94,6 +94,8 @@
  * so each level repoints them with the base tokens.
  */
 [data-elevation] {
+  /* Nk's track is the theme it sits in's bgBorder (`cu().color.bgBorder`), so on a popup, card or dialog it is that surface's. */
+  --progress-track: var(--bg-border);
   --panel: lch(100% 0 282); /* bgBase */
   --fg: lch(10% 0 282); /* labelTitle */
   --fg-2: lch(20% 1 282); /* labelBase */
