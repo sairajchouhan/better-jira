@@ -11,7 +11,7 @@ import { Menu } from "@/client/components/menu";
 import { MenuSurface } from "@/client/components/menu-surface";
 import { Button, IconButton } from "@/client/components/button";
 import { ConfirmDialog, Dialog } from "@/client/components/dialog";
-import { EmptyState } from "@/client/components/empty-state";
+import { DocumentIllustration, NotFoundMessage } from "@/client/components/not-found";
 import { AutoResizingTextArea, NO_AUTOFILL } from "@/client/components/field";
 import { Tabs } from "@/client/components/tabs";
 import { Text } from "@/client/components/text";
@@ -59,15 +59,8 @@ export function IssueDocument({ issue, id }: { issue: Issue; id: string }) {
   return resource ? (
     <DocumentEditor key={id} issue={issue} resource={resource} />
   ) : (
-    <EmptyState
-      role="status"
-      title="Document not found"
-      actions={
-        <Button variant="secondary" size="medium" onClick={() => navigate({ document: null })}>
-          Back to issue
-        </Button>
-      }
-    />
+    // Linear's Document 404 (\`P9\` → \`N9\` with \`ubi.Document\`): its title, the default message and the page illustration.
+    <NotFoundMessage title="Document not found" image={<DocumentIllustration />} />
   );
 }
 interface DocumentContextValue {

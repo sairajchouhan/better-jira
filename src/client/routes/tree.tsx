@@ -7,7 +7,6 @@
 import { inboxChunk, issueDocumentChunk, issueViewChunk } from "./route-chunks";
 import { preloadAtStartup, ROUTE_ORDER } from "@/client/lib/loadable";
 import {
-  createLink,
   createRootRouteWithContext,
   createRoute,
   createRouter,
@@ -26,9 +25,9 @@ import type { Trail } from "@/client/features/navigation/issue-trail";
 import { isPersonTab, type PersonTab } from "@/shared/people";
 import { viewPath, type SavedView } from "@/shared/saved-view-model";
 import type { Scope } from "@/shared/view-model";
-import { missingIssueNote } from "@/shared/inbox-model";
 import { AppLoading, EmptyState, LoadingState } from "@/client/components/empty-state";
-import { Button, ButtonLink } from "@/client/components/button";
+import { NotFoundMessage } from "@/client/components/not-found";
+import { Button } from "@/client/components/button";
 import { useStore } from "@/client/state/store";
 import { boardFor } from "@/shared/board-membership";
 
@@ -97,11 +96,20 @@ const indexRoute = createRoute({ getParentRoute: () => rootRoute, path: "/" });
 function whenKept(key: string, asked: string, context: RouteContext): Promise<void> | void {
   if (context.issue(key)) return;
   return context.keep(key).then((found) => {
-    if (!found || !context.issue(key)) throw notFound({ data: { issue: asked } });
+    if (!found || !context.issue(key)) throw missing("Issue");
   });
 }
 /** Then `next`, at once when nothing was waited for. */
 const then = (waiting: Promise<void> | void, next: () => void) => (waiting ? waiting.then(next) : next());
+/** What a route couldn't find, named as Linear names its model (\`x$(entity)\`, startup-root): a board is a space (Linear's
+ *  team). An address that names nothing, or a tab a board doesn't have, throws a bare \`notFound()\`. */
+export type MissingEntity = "Issue" | "View" | "Space";
+const missing = (entity: MissingEntity) => notFound({ data: { entity } });
+/** The not-found page's title: Linear's \`\${entity} not found\`, or \`Not found\` when nothing was named (\`P9\`). */
+export const notFoundTitle = (data: unknown) => {
+  const entity = (data as { entity?: MissingEntity } | undefined)?.entity;
+  return entity ? `${entity} not found` : "Not found";
+};
 /** The issue's beside-the-list check: a renamed key moves to the current one; an unknown key is kept or not found. */
 function openBeside(issue: string | undefined, context: RouteContext, location: ParsedLocation) {
   if (!issue) return;
@@ -149,7 +157,9 @@ const boardRoute = createRoute({
   beforeLoad: ({ params, search, context, location, preload }) => {
     const board = Number(params.board),
       { scope } = params;
-    if (!context.hasBoard(board) || !isScope(scope)) throw notFound();
+    if (!context.hasBoard(board)) throw missing("Space");
+    // A tab the board doesn't have is a bare Not found, as Linear's \`/team/RAJ/nonsense\`.
+    if (!isScope(scope)) throw notFound();
     return then(openBeside(search.issue, context, location), () => {
       if (!preload) context.show({ to: "board", board, scope, ...listSearch(search) }, location);
     });
@@ -161,7 +171,7 @@ const boardHomeRoute = createRoute({
   path: "/board/$board",
   beforeLoad: ({ params, context, location }) => {
     const board = Number(params.board);
-    if (!context.hasBoard(board)) throw notFound();
+    if (!context.hasBoard(board)) throw missing("Space");
     throw redirect({
       to: "/board/$board/$scope",
       params: { board: params.board, scope: context.scope(board) },
@@ -182,7 +192,7 @@ const teamRoute = createRoute({
 const segmentOf = (view: Pick<SavedView, "id" | "name">) => decodeURIComponent(viewPath(view).slice("/view/".length));
 function savedView(segment: string, context: RouteContext, location: ParsedLocation, suffix = "") {
   const view = context.view(segment);
-  if (!view) throw notFound();
+  if (!view) throw missing("View");
   if (segmentOf(view) !== segment)
     throw redirect({ href: `/view/${encodeURIComponent(segmentOf(view))}${suffix}${location.searchStr}`, replace: true });
   return view;
@@ -223,7 +233,8 @@ const editViewRoute = createRoute({
 /** `/my-issues[/tab]` and `/profiles/<user>[/tab]`: Assigned is the bare path. */
 function personTab(tab: string | undefined): PersonTab {
   if (tab === undefined) return "assigned";
-  if (!isPersonTab(tab) || tab === "assigned") throw notFound();
+  // A tab My issues doesn't have is a missing view, as Linear's \`/my-issues/nonsense\` ("View not found").
+  if (!isPersonTab(tab) || tab === "assigned") throw missing("View");
   return tab;
 }
 const myIssuesRoute = createRoute({
@@ -418,21 +429,10 @@ export function legacyPlace(
 export const routeNotFound = (matches: readonly { status: string; error: unknown; _notFound?: boolean }[]) =>
   matches.some((m) => m.status === "notFound" || m["_notFound"] === true || isNotFound(m.error));
 
-/** Linear's `fk` button look on a router link. */
-const RouteButton = createLink(ButtonLink);
-/** An address that names nothing, or an issue Jira doesn't have or hides from this account (the mirror asked it first,
- *  `whenKept`). Covers the boards the shell keeps mounted. */
-function NotFound({ data }: NotFoundRouteProps) {
-  const issue = (data as { issue?: string } | undefined)?.issue;
-  return (
-    <EmptyState
-      title={issue ? `Issue ${issue} not found` : "Page not found"}
-      actions={<RouteButton to="/" variant="secondary" size="medium">Go to your board</RouteButton>}
-      className="absolute inset-0 z-10 bg-panel"
-    >
-      <p>{issue ? missingIssueNote("missing") : "This address doesn't name a board, view or issue."}</p>
-    </EmptyState>
-  );
+/** Linear's route error boundary for a 404 (\`P9\` → \`N9\`): the model's name and Linear's message, over the boards the
+ *  shell keeps mounted. An issue Jira doesn't have or hides from this account says so the same way (\`whenKept\`). */
+export function NotFound({ data }: Pick<NotFoundRouteProps, "data">) {
+  return <NotFoundMessage title={notFoundTitle(data)} className="absolute inset-0 z-10 bg-panel" />;
 }
 function RouteError({ error, reset }: ErrorComponentProps) {
   return (

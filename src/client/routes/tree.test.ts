@@ -3,7 +3,7 @@ import { createMemoryHistory, isNotFound } from "@tanstack/react-router";
 import { viewForRoute, type SavedView } from "@/shared/saved-view-model";
 import { defaultPreferences } from "@/shared/view-model";
 import type { Place } from "@/client/features/navigation/navigation";
-import { createAppRouter, locationOf, routeNotFound, routeURL, type RouteContext } from "./tree";
+import { createAppRouter, locationOf, notFoundTitle, routeNotFound, routeURL, type RouteContext } from "./tree";
 
 const p = defaultPreferences();
 const triage = { id: "v1", name: "Triage", board: 1, filters: p.filters, display: p.display, scope: p.scope } as SavedView;
@@ -139,4 +139,24 @@ test("BJ-341: an issue no board holds opens from its address once the mirror kee
   expect(await open("/board/1/all?issue=OFF-7")).toMatchObject({ notFound: false, shown: { to: "board", issue: "OFF-7" } });
   delete issues["OFF-7"];
   expect(await open("/issue/NONE-1")).toMatchObject({ notFound: true, shown: undefined });
+});
+
+// BJ-403: the not-found page names what's missing in Linear's words (\`x$(entity)\` → \`${entity} not found\`), never the key.
+test("BJ-403: a missing issue, view or board is titled as Linear titles its model; an address naming nothing is Not found", async () => {
+  const cases: [string, string][] = [
+    ["/issue/NONE-1", "Issue not found"],
+    ["/board/1/all?issue=GONE-1", "Issue not found"],
+    ["/view/nothing", "View not found"],
+    ["/board/9/all", "Space not found"],
+    ["/board/9", "Space not found"],
+    ["/board/1/someday", "Not found"],
+    ["/my-issues/nope", "View not found"],
+    ["/profiles/alex/nope", "View not found"],
+    ["/nope/xyz", "Not found"],
+  ];
+  for (const [href, title] of cases) {
+    const { router } = await open(href);
+    const missing = router.state.matches.find((m) => isNotFound(m.error))?.error as { data?: unknown } | undefined;
+    expect([href, notFoundTitle(missing?.data)]).toEqual([href, title]);
+  }
 });

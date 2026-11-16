@@ -87,7 +87,7 @@ export const preloadOnHover = (to: Destination | null) => (to ? intent.maybeExec
 
 /** Goes somewhere: see navigation.ts for leaving views, how issues open and what the address shows. An issue the mirror doesn't
  *  hold yet (a linked issue, a parent on no board, a link in Jira content) goes by its address: the route keeps it first and then
- *  shows it, or says Jira has no such issue (tree.tsx `whenKept`), as Linear opens any issue's path in the app and loads what its
+ *  shows it, or shows Issue not found (tree.tsx `whenKept`), as Linear opens any issue's path in the app and loads what its
  *  sync didn't bring (BJ-354). */
 export function navigate(to: Destination) {
   if (to.selected && !get().issues.has(currentKey(to.selected))) return void router.navigate(linkTo(to) as never);
