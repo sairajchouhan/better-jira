@@ -751,7 +751,8 @@ export function ProjectBadge({ issue }: { issue: Issue }) {
   const type = useStore((s) => (epic ? (s.issues.get(epic)?.type ?? "Epic") : undefined));
   // An epic or a sub-issue can't pick its project (epicLocked), so its badge only names it, as the detail pill does.
   const locked = useStore((s) => epicLocked(issue, (key) => s.issues.get(key)));
-  if (!name) return null;
+  // An epic's own card names no epic: it is the epic.
+  if (!name || epic === issue.key) return null;
   const content = (
     <>
       <Badge.Icon>
