@@ -45,7 +45,15 @@ export const boardHasEstimates = (board: number) => estimates(get(), board);
 export const useBoardHasEstimates = (board: number) => useStore((s) => estimates(s, board));
 
 function write(board: number, patch: Partial<Preferences>) {
-  const s = get();
+  const s = get(),
+    openIn = viewSettings(board, s).display.openIn;
+  save(s, board, patch);
+  // The Display menu's "Open issues in" changed for the list on screen: show it now, whichever of the draft, the view or the board
+  // keeps it (navigation.ts then sees the list's own way, so nothing reverts it).
+  const next = patch.display?.openIn;
+  if (board === s.board && next && next !== openIn) navigate({ view: next });
+}
+function save(s: State, board: number, patch: Partial<Preferences>) {
   if (s.editorDraft && board === s.board) {
     setViewDraft({ ...s.editorDraft, ...patch });
     return;
@@ -62,7 +70,6 @@ function write(board: number, patch: Partial<Preferences>) {
   }
   const prefs = { ...stored(s, board), ...rest };
   set({ preferences: { ...s.preferences, [board === s.board && isMyIssues(s) ? 0 : board]: prefs } });
-  if (board === s.board) navigate({ view: prefs.display.openIn });
 }
 const filters = (board: number, change: (f: FilterGroup) => FilterGroup) =>
   write(board, { filters: change(viewSettings(board).filters) });
