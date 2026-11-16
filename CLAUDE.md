@@ -25,7 +25,6 @@ This applies to every bug fix, every behaviour question, and whenever the user s
 - Jira names on Linear's UI: Space = Linear Team, Epic = Linear Project, fix version = Linear Milestone. Settled.
 - Out of scope: bulk actions, sprints/cycles, shared views, triage, templates, recurring issues, real-time collaboration, and anything Jira can't store or run.
 - Notifications and activity must carry everything the production Jira web app shows, drawn in Linear's style.
-- Every issue is just an issue, whatever its type (Epic, Spike, Story, Bug, Sub-task…). Parent and children come from Jira's parent field, never from the type name. No type gets its own page, renderer or section; a type-specific difference is a small tweak inside the shared issue code, and only when the user asks for it.
 
 ## How to build
 - Apply both React skills on every edit, and say how in the report:
