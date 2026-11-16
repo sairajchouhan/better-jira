@@ -80,11 +80,20 @@ const FEED = `query InboxFeed($ari: String, $first: Int, $after: String, $catego
     }
   }
 }`;
-/** The first page of every group with more than one notification, in one request (aliases, like `mark`): each row leads
- *  with Linear's main notification, and expanding the group shows the same page at once. A failure only costs that: the rows
- *  fall back to Jira's newest, and the group reads its page when it is expanded. */
+/** Groups per gateway request: the gateway answers a request in about as long whatever it holds, so the groups go as
+ *  parallel requests of six. Measured on a 28-group feed: one request 1.63–1.83 s, six-group requests 1.36–1.63 s
+ *  (R4-inbox-D5). */
+export const GROUP_CHUNK = 6;
+/** The first page of every group with more than one notification (aliases, like `mark`): each row leads with Linear's
+ *  main notification, and expanding the group shows the same page at once. A failed request only costs its groups: their
+ *  rows fall back to Jira's newest, and each group reads its page when it is expanded. */
 async function groupNotes(groups: string[]): Promise<Record<string, { nodes: unknown[]; pageInfo?: any }>> {
-  if (!groups.length) return {};
+  const chunks: string[][] = [];
+  for (let i = 0; i < groups.length; i += GROUP_CHUNK) chunks.push(groups.slice(i, i + GROUP_CHUNK));
+  const read = await Promise.all(chunks.map(groupChunk));
+  return Object.assign({}, ...read);
+}
+async function groupChunk(groups: string[]): Promise<Record<string, { nodes: unknown[]; pageInfo?: any }>> {
   const fields = groups
     .map(
       (_, i) =>
