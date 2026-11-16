@@ -227,9 +227,11 @@ export const BoardView = memo(function BoardView({
           </div>
         ) : (
           <div className="flex min-h-0 flex-1">
+            {/* Linear's board columns are 348px apart (CustomerCountPopover `et`: qe=348) with a 340px background
+                (columnBackgroundWidth calc(100% - 8px)), so 8px between columns (BJ-386). */}
             <div ref={boardScroller} data-scroll-restoration-id={`board-${board.id}`} className="min-h-0 min-w-0 flex-1 overflow-auto px-2 pt-1">
               {d.rows !== "none" && (
-                <div className="sticky top-0 z-10 flex w-max gap-4 bg-panel">
+                <div className="sticky top-0 z-10 flex w-max gap-2 bg-panel">
                   {show.map((col) => (
                     <div key={col.id} className="w-[340px] shrink-0 rounded-t-[5px] bg-(--col-top)">
                       <ColumnHeading
@@ -248,7 +250,7 @@ export const BoardView = memo(function BoardView({
                   (d.rows === "none" || row.issues.length > 0) && (
                   <div
                     key={row.id}
-                    className={d.rows === "none" ? "flex h-full min-h-0 gap-4" : "mb-4 w-max"}
+                    className={d.rows === "none" ? "flex h-full min-h-0 gap-2" : "mb-4 w-max"}
                   >
                     {/* The lane spans the board's full width, so its title can stay pinned left while the board scrolls. */}
                     {d.rows !== "none" && (
@@ -267,7 +269,7 @@ export const BoardView = memo(function BoardView({
                         )}
                       </div>
                     )}
-                    <div className={d.rows === "none" ? "contents" : "flex gap-4"}>
+                    <div className={d.rows === "none" ? "contents" : "flex gap-2"}>
                       {show.map((col, ci) => (
                         <ColumnView
                           key={col.id}
