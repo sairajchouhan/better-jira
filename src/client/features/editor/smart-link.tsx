@@ -1,12 +1,13 @@
 import { useSyncExternalStore, type MouseEvent, type ReactNode } from "react";
 import { IssueHoverCard } from "@/client/features/issue/issue-hover-card";
-import { Icon, StatusIcon } from "@/client/components/icons";
-import { LinkIcon } from "@/client/components/link-icon";
+import { Icon, PullRequestStatusIcon, StatusIcon } from "@/client/components/icons";
+import { SiteIcon } from "@/client/components/link-icon";
+import { usePullRequestStatus } from "@/client/state/pull-request-status";
 import { openIssueByKey } from "@/client/features/navigation/app-navigation";
 import { useSmartLinkDetails } from "@/client/state/smart-link-details";
 import { get, statusOf, subscribe } from "@/client/state/store";
 import { safeLink } from "@/shared/document";
-import { faviconSrc, smartLink, type SmartLink as Target } from "@/shared/smart-link";
+import { githubPullRequest, smartLink, type SmartLink as Target } from "@/shared/smart-link";
 
 /** Linear's mention chip (startup-root `jE`): an image kept on the first line with its text, then a muted prefix (an issue's
  *  key) and the label. One chip for every smart link kind, in read-only documents and the editor alike. */
@@ -70,12 +71,22 @@ function PageLink({ link }: { link: Extract<Target, { kind: "confluence" }> }) {
   return <MentionChip kind="confluence" href={link.url} image={<Icon name="file" />} label={details?.title || link.title} />;
 }
 
+/** A link's image in its chip: a GitHub pull request's state icon when this app has read its state (an issue's pull requests), as
+ *  Linear's PR mention shows it; else its site's icon (GitHub's logo, or a favicon). The state colours are GitHub's own (Primer's
+ *  open green, merged purple, closed red), the user's choice over Linear's palette; unread, it is the open icon in labelBase. */
+const ExternalLinkImage = ({ url }: { url: string }) => (githubPullRequest(url) ? <PullRequestImage url={url} /> : <SiteIcon url={url} />);
+
+/** Only a pull request link watches the query cache for its state. */
+function PullRequestImage({ url }: { url: string }) {
+  return <PullRequestStatusIcon status={usePullRequestStatus(url)} />;
+}
+
 function ExternalLink({ link }: { link: Extract<Target, { kind: "external" }> }) {
   return (
     <MentionChip
       kind="external"
       href={link.url}
-      image={<LinkIcon src={faviconSrc(link.origin)} size={14} className="rounded-[3px]" />}
+      image={<ExternalLinkImage url={link.url} />}
       label={link.title}
     />
   );

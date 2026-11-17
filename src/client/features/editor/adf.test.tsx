@@ -127,9 +127,12 @@ test("BJ-16: smart links render as Linear's mention chip: issue status, key and 
     ["external", "https://docs.google.com/document/d/abc/edit", "Google Doc"],
     ["external", "https://example.com/handbook", "example.com/handbook"],
   ]);
-  // The issue's status icon (Doing's in-progress colour) and the sites' icons through this server, never the sites.
+  // The issue's status icon (Doing's in-progress colour) and the sites' icons through this server, never the sites. A GitHub pull
+  // request wears its state icon (open, in labelBase, while its state is unread), never GitHub's black favicon.
   expect(html).toContain("var(--st-progress)");
-  expect(html).toContain('src="/api/favicon?origin=https%3A%2F%2Fgithub.com"');
+  expect(html).toMatch(/href="https:\/\/github.com\/acme\/widgets\/pull\/42"[^>]*><span class="smart-link-image"><svg[^>]*data-pr-status="unknown"/);
+  expect(html).not.toContain("origin=https%3A%2F%2Fgithub.com");
+  expect(html).toContain('src="/api/favicon?origin=https%3A%2F%2Fdocs.google.com"');
   expect(html).not.toMatch(/<img[^>]+src="https?:/);
   // Block cards keep their own line: the editor's wrapper.
   expect(html).toContain('<p class="smart-link-block"><a class="mention-chip smart-link" data-smart-link="external" href="https://docs.google.com');
@@ -151,4 +154,18 @@ test("BJ-199: plain text uses chip titles from metadata, mirror and cached page 
   const rich = toEditorDocument(doc({ type: "paragraph", content: [{ type: "inlineCard", attrs: { url: "https://example.atlassian.net/browse/TEST-2" } }] }));
   expect(rich.textBetween(0, rich.content.size)).toBe("TEST-2 Second fixture");
   expect(adfToText({ type: "inlineCard", attrs: { url: "https://github.com/acme/widgets/pull/42", data: { name: "Fix widget" } } })).toBe("Fix widget");
+});
+
+test("a GitHub pull request link wears the state an issue's pull request list read for it, in GitHub's colour", async () => {
+  const { queryClient } = await import("@/client/state/server-data");
+  queryClient.setQueryData(["pull-requests", "TEST-9", 1, "merged"], [{ url: "https://github.com/acme/widgets/pull/42", status: "merged" }]);
+  try {
+    const html = renderToStaticMarkup(
+      <Adf node={doc({ type: "paragraph", content: [{ type: "inlineCard", attrs: { url: "https://github.com/Acme/widgets/pull/42" } }] })} />,
+    );
+    expect(html).toContain('data-pr-status="merged"');
+    expect(html).toContain('fill="var(--github-pr-merged)"');
+  } finally {
+    queryClient.removeQueries({ queryKey: ["pull-requests", "TEST-9"] });
+  }
 });
