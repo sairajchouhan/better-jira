@@ -2,6 +2,7 @@ import { useSyncExternalStore, type MouseEvent, type ReactNode } from "react";
 import { IssueHoverCard } from "@/client/features/issue/issue-hover-card";
 import { Icon, PullRequestStatusIcon, StatusIcon } from "@/client/components/icons";
 import { SiteIcon } from "@/client/components/link-icon";
+import { CARD_RULES } from "@/client/components/tooltip-rules";
 import { usePullRequestStatus } from "@/client/state/pull-request-status";
 import { openIssueByKey } from "@/client/features/navigation/app-navigation";
 import { useSmartLinkDetails } from "@/client/state/smart-link-details";
@@ -45,7 +46,12 @@ function IssueLink({ link }: { link: Extract<Target, { kind: "issue" }> }) {
   const details = useSmartLinkDetails(link.url, !mirrored && link.site === get().site);
   const status = mirrored ? statusOf(mirrored) : details?.status;
   return (
-    <IssueHoverCard relation={{ kind: "related", key: link.key, issue: { summary: mirrored?.summary ?? details?.title ?? link.key, status: status ?? { name: "", category: "new" } } }} issue={mirrored}>
+    <IssueHoverCard
+      relation={{ kind: "related", key: link.key, issue: { summary: mirrored?.summary ?? details?.title ?? link.key, status: status ?? { name: "", category: "new" } } }}
+      issue={mirrored}
+      // In a document an issue chip's card is the editor's popover (`HUn` → `Aa`), as a mention's is.
+      rules={CARD_RULES.document}
+    >
     <MentionChip
       kind="issue"
       href={link.url}

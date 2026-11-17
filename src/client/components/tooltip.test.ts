@@ -76,9 +76,11 @@ test("a title inside a hover card stays quiet, except one marked over-card (a fa
   expect(showsTitle(element(true, true))).toBe(true);
 });
 
-test("every card's pad is Linear's tooltip offset (`Vwe` pads by `Nwe`, 8px) on the side it opens", async () => {
+test("every card's pad is its rules' (`Vwe` pads by `Nwe`, 8px, or a document's `Pwe`, 4px) on the side it opens", async () => {
   const css = await Bun.file(new URL("../index.css", import.meta.url)).text();
-  expect(css).toMatch(/\.hover-card\[data-placement="bottom"\] > \.hover-card-zone \{\s*padding-block: 8px;/);
-  expect(css).toMatch(/\.hover-card\[data-placement="right"\] > \.hover-card-zone \{\s*padding-inline: 8px;/);
+  expect(css).toMatch(/\.hover-card\[data-placement\^="bottom"\] > \.hover-card-zone \{\s*padding-block: var\(--card-pad, 8px\);/);
+  expect(css).toMatch(/\.hover-card\[data-placement\^="right"\] > \.hover-card-zone \{\s*padding-inline: var\(--card-pad, 8px\);/);
   expect(TOOLTIP.cardPad).toBe(8);
+  const source = await Bun.file(new URL("./hover-card.tsx", import.meta.url)).text();
+  expect(source).toContain('style={{ "--card-pad": `${rules.pad}px` } as CSSProperties}');
 });

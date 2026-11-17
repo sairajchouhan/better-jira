@@ -1,4 +1,6 @@
 import {
+  createContext,
+  use,
   useEffect,
   useEffectEvent,
   useLayoutEffect,
@@ -14,16 +16,19 @@ import { Tooltip, useTooltip } from "./tooltip";
 import { OverlayBoundary } from "./overlay-boundary";
 import { ElevationScope, isFocusReturn, useElevation } from "./menu-surface";
 import {
-  CARD_FALLBACKS,
+  CARD_RULES,
   choosePlacement,
   keepsCardOpen,
   safeArea,
   sideOf,
   TOOLTIP,
-  TOOLTIP_TIMING,
+  type CardRules,
   type Placement,
   type Timing,
 } from "./tooltip-rules";
+
+/** The open card's rules, for its trigger, surface and zone. */
+const RulesContext = createContext<CardRules>(CARD_RULES.tooltip);
 
 /**
  * The tooltip's interactive form (Linear's `$` with `interactive`, startup-root `Rwe`): the same core as every tooltip (one open
@@ -31,7 +36,9 @@ import {
  * trigger, sits flush against it, tries `top-start`, `top`, `bottom-start`, `bottom` when its placement does not fit (`Bwe`), and
  * closes the moment the pointer leaves unless it went into the card (`keepsCardOpen`). One surface for the issue, user, link and
  * pull request cards. `label` names it for tests and screen readers. `display="inline"` is Linear's `style: { display: "inline" }`
- * on a trigger inside a run of text (an Activity row's issue, `Ao`), so it wraps with the words.
+ * on a trigger inside a run of text (an Activity row's issue, `Ao`), so it wraps with the words. A card in a comment or
+ * description takes `rules={CARD_RULES.document}` (Linear's document popover, `Aa`): it waits 150ms after the pointer leaves.
+ * A press inside a card never closes it (`Vwe` only notes the press; `Aa` sets `disableClickAway`).
  *
  * The card is React Aria's preview popover (`Popover trigger="PreviewTrigger"`, non-modal): a `dialog` a keyboard user can Tab into
  * from its trigger, which hands focus back to the trigger as it closes. Its trigger is ours, not React Aria's `PreviewTrigger`:
@@ -42,39 +49,101 @@ import {
  */
 export function HoverCard({
   content,
-  placement = "top-start",
+  rules = CARD_RULES.tooltip,
+  placement = rules.placement as HoverCardPlacement,
   label,
   display = "inline-flex",
-  timing = TOOLTIP_TIMING.card,
+  timing = rules.timing,
   isDisabled = false,
   children,
 }: {
   /** The card body, mounted only while the card is open. */
   content: ReactNode;
+  /** Which of Linear's cards this is: its interactive tooltip (`Rwe`, the default) or a document's popover (`Aa`). */
+  rules?: CardRules;
   /** `right` is the sidebar's (`h$` passes `position: "right"` to its `wZ`): beside the row, centred on it. */
-  placement?: Extract<Placement, "top" | "top-start" | "left" | "right">;
+  placement?: HoverCardPlacement;
   label?: string;
   /** `block` is a full-width row's trigger (the sidebar's `_$.tooltipBlock`): the row keeps its whole width. `fill` takes the
    *  room left in its flex row and lays its children out with the row's own gap (a team favorite's toggle button, `m5n`). */
   display?: "inline-flex" | "inline" | "block" | "fill";
-  /** When the card opens: Linear's interactive tooltip rule (550ms of rest, every move restarting it) unless the trigger says
-   *  otherwise. An issue sidebar's pull request row rests 150ms; a mention in a document opens 450ms after the pointer comes onto
-   *  it, moves or not (`TOOLTIP_TIMING.documentPopover`). */
+  /** When the card opens, when the trigger says otherwise than its rules: an issue sidebar's pull request row rests 150ms. */
   timing?: Timing;
   /** No card while this holds (a favorite row while any favorite is dragged, `d5n`), and an open one closes. */
   isDisabled?: boolean;
   children: ReactNode;
 }) {
   return (
-    <Tooltip.Root timing={timing}>
-      <HoverCardTrigger display={display} isDisabled={isDisabled}>
-        {children}
-      </HoverCardTrigger>
-      <HoverCardSurface placement={placement} label={label}>
-        <HoverCardZone label={label}>{content}</HoverCardZone>
-      </HoverCardSurface>
-    </Tooltip.Root>
+    <RulesContext value={rules}>
+      <Tooltip.Root timing={timing}>
+        <HoverCardTrigger display={display} isDisabled={isDisabled}>
+          {children}
+        </HoverCardTrigger>
+        <HoverCardSurface placement={placement} label={label}>
+          <HoverCardZone label={label}>{content}</HoverCardZone>
+        </HoverCardSurface>
+      </Tooltip.Root>
+    </RulesContext>
   );
+}
+
+type HoverCardPlacement = Extract<Placement, "top" | "top-start" | "bottom-start" | "left" | "right">;
+
+/**
+ * A card on an element the page already has, not one it wraps: a link in a comment or description, found by the document's one
+ * pointer listener (`DocumentLinkCards`), as Linear's `linkPopovers` (`HUn`) finds the link under the pointer and opens its one
+ * popover (`Aa`) against it. Mounted when the pointer comes onto `element`, it starts the open delay at once; later visits to the
+ * same element start it again. The card's rules, surface and zone are `HoverCard`'s.
+ */
+export function ElementHoverCard({
+  element,
+  content,
+  rules,
+  label,
+}: {
+  element: HTMLElement;
+  content: ReactNode;
+  rules: CardRules;
+  label?: string;
+}) {
+  return (
+    <RulesContext value={rules}>
+      <Tooltip.Root timing={rules.timing}>
+        <ElementTrigger element={element} />
+        <HoverCardSurface placement={rules.placement} label={label}>
+          <HoverCardZone label={label}>{content}</HoverCardZone>
+        </HoverCardSurface>
+      </Tooltip.Root>
+    </RulesContext>
+  );
+}
+
+/** Points the card at `element` and reports its pointer to the store: entering opens after the rules' delay, each move restarts it
+ *  when the timing says so, leaving closes after the rules' grace unless the pointer went into the card. */
+function ElementTrigger({ element }: { element: HTMLElement }) {
+  const { triggerRef, surfaceRef, actions } = useTooltip();
+  const rules = use(RulesContext);
+  const enter = useEffectEvent(() => actions.enter());
+  const move = useEffectEvent(() => actions.move());
+  const leave = useEffectEvent((to: EventTarget | null) => {
+    if (!keepsCardOpen(inCard(surfaceRef, to) ? "card" : "elsewhere")) actions.leave(rules.leaveGraceMs);
+  });
+  useLayoutEffect(() => {
+    triggerRef.current = element;
+    enter();
+    const onEnter = (event: PointerEvent) => event.pointerType !== "touch" && enter();
+    const onMove = (event: PointerEvent) => event.pointerType !== "touch" && move();
+    const onLeave = (event: PointerEvent) => event.pointerType !== "touch" && leave(event.relatedTarget);
+    element.addEventListener("pointerenter", onEnter);
+    element.addEventListener("pointermove", onMove);
+    element.addEventListener("pointerleave", onLeave);
+    return () => {
+      element.removeEventListener("pointerenter", onEnter);
+      element.removeEventListener("pointermove", onMove);
+      element.removeEventListener("pointerleave", onLeave);
+    };
+  }, [element, triggerRef]);
+  return null;
 }
 
 /**
@@ -86,6 +155,7 @@ export function HoverCard({
  */
 function HoverCardSurface({ placement, label, children }: { placement: Placement; label?: string; children: ReactNode }) {
   const { id, isOpen, triggerRef, surfaceRef, actions } = useTooltip();
+  const rules = use(RulesContext);
   const [chosen, setChosen] = useState(placement);
   const choose = useEffectEvent(() => {
     const trigger = triggerRef.current,
@@ -93,7 +163,7 @@ function HoverCardSurface({ placement, label, children }: { placement: Placement
     if (!trigger || !box) return;
     setChosen(
       choosePlacement({
-        placements: [placement, ...CARD_FALLBACKS],
+        placements: [placement, ...rules.fallbacks],
         reference: trigger.getBoundingClientRect(),
         floating: { width: box.width, height: box.height },
         viewport: { width: innerWidth, height: innerHeight },
@@ -130,7 +200,7 @@ function HoverCardSurface({ placement, label, children }: { placement: Placement
         placement={chosen.replace("-", " ") as never}
         shouldFlip={false}
         offset={0}
-        containerPadding={TOOLTIP.containerPadding}
+        containerPadding={rules.containerPadding}
         aria-label={label}
         className="hover-card"
       >
@@ -177,6 +247,7 @@ function HoverCardTrigger({
   children: ReactNode;
 }) {
   const { isOpen, surfaceRef, triggerRef, actions } = useTooltip();
+  const rules = use(RulesContext);
   const restoring = useRef(false);
   const own = (event: TriggerEvent) => ownsEvent(isDisabled, event);
   const close = useEffectEvent(() => actions.close());
@@ -206,9 +277,10 @@ function HoverCardTrigger({
       onPointerMove={(event) => own(event) && event.pointerType !== "touch" && actions.move()}
       onPointerLeave={(event) => {
         if (!own(event)) return;
-        if (event.pointerType !== "touch" && !keepsCardOpen(inCard(surfaceRef, event.relatedTarget) ? "card" : "elsewhere")) actions.leave();
+        if (event.pointerType !== "touch" && !keepsCardOpen(inCard(surfaceRef, event.relatedTarget) ? "card" : "elsewhere"))
+          actions.leave(rules.leaveGraceMs);
       }}
-      onPointerDown={(event) => own(event) && actions.close()}
+      onPointerDown={(event) => own(event) && rules.closeOnPress && actions.close()}
       onFocus={(event) =>
         own(event) &&
         !restoring.current &&
@@ -230,11 +302,13 @@ function HoverCardTrigger({
   );
 }
 
-/** Linear's `Vwe` wrapper: the card's whole box with a transparent 8px pad on its main axis (`Gwe`, `TOOLTIP.cardPad`, index.css),
- *  so it meets its trigger. Leaving it closes the card unless the pointer went back to the trigger, or went nowhere just after a press inside.
- *  Escape from inside it closes only the card. */
+/** Linear's `Vwe` wrapper: the card's whole box with a transparent pad on its main axis (`Gwe`: the rules' `pad`, 8px on the
+ *  interactive tooltip's cards, 4px on a document's), so it meets its trigger. Entering it keeps a card waiting out its leave grace.
+ *  Leaving it closes the card: a document's at once, wherever the pointer went (`Aa`'s `v`); the interactive tooltip's unless the
+ *  pointer went back to the trigger, or went nowhere just after a press inside (`Rwe`). Escape from inside it closes only the card. */
 function HoverCardZone({ label, children }: { label?: string; children: ReactNode }) {
   const { surfaceRef, triggerRef, actions } = useTooltip();
+  const rules = use(RulesContext);
   const pressedAt = useRef(-Infinity);
   // Linear's card surface (`T_`) is painted in its menu theme, so what the card holds (a view's filter chips) reads that theme's
   // tokens, as in a menu.
@@ -242,11 +316,14 @@ function HoverCardZone({ label, children }: { label?: string; children: ReactNod
   return (
     <div
       className="hover-card-zone"
+      style={{ "--card-pad": `${rules.pad}px` } as CSSProperties}
       onPointerDown={() => (pressedAt.current = Date.now())}
+      onPointerEnter={() => actions.stay()}
       // With focus in the card, Escape is the card's: the tooltip rule (capture, on the window) hides it, and the key stops here
       // instead of going on to the page under it (the issue page's Escape left for the board).
       onKeyDown={(event) => event.key === "Escape" && event.stopPropagation()}
       onPointerLeave={(event) => {
+        if (rules.leaveGraceMs > 0) return actions.leave();
         const to = event.relatedTarget;
         const where =
           to === null
@@ -262,11 +339,13 @@ function HoverCardZone({ label, children }: { label?: string; children: ReactNod
       <div
         data-hover-card={label}
         {...elevation.props}
-        className="w-max min-w-[220px] max-w-[520px] rounded-lg border border-[var(--menu-line)] bg-[var(--menu)] px-2 py-[5px] text-xs text-[var(--menu-fg)] shadow-[var(--menu-shadow)]"
+        className="w-max max-w-[520px] rounded-lg border border-[var(--menu-line)] bg-[var(--menu)] px-2 py-[5px] text-xs text-[var(--menu-fg)] shadow-[var(--menu-shadow)]"
+        style={{ minWidth: rules.minWidth || undefined }}
       >
         <ElevationScope level={elevation.level}>{children}</ElevationScope>
       </div>
-      <SafeArea />
+      {/* `Aa` draws no safe area: its 150ms grace carries the pointer across. */}
+      {rules.leaveGraceMs === 0 && <SafeArea />}
     </div>
   );
 }

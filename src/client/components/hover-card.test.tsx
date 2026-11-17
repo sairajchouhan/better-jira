@@ -45,3 +45,19 @@ test("the card's surface is painted in Linear's menu theme (`T_`), so what it ho
   expect(source).toMatch(/data-hover-card=\{label\}\s*\{\.\.\.elevation\.props\}/);
   expect(source).toContain("<ElevationScope level={elevation.level}>{children}</ElevationScope>");
 });
+
+test("a press on a card's trigger closes it only by its rules (`Rwe`'s closeOnPointerDown); a press inside never does", async () => {
+  const source = await Bun.file(new URL("./hover-card.tsx", import.meta.url)).text();
+  expect(source).toContain("onPointerDown={(event) => own(event) && rules.closeOnPress && actions.close()}");
+  // The zone only notes a press (`Vwe`), and entering it keeps a card waiting out its leave grace (`Aa`'s `y`).
+  expect(source).toContain("onPointerDown={() => (pressedAt.current = Date.now())}");
+  expect(source).toContain("onPointerEnter={() => actions.stay()}");
+  // Leaving the trigger hands the store the rules' grace; leaving a document's card closes it at once (`Aa`'s `v`).
+  expect(source).toContain("actions.leave(rules.leaveGraceMs)");
+  expect(source).toContain("if (rules.leaveGraceMs > 0) return actions.leave();");
+});
+
+test("an issue chip in a document opens Linear's document popover, as a mention does", async () => {
+  const source = await Bun.file(new URL("../features/editor/smart-link.tsx", import.meta.url)).text();
+  expect(source).toContain("rules={CARD_RULES.document}");
+});

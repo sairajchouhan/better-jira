@@ -58,6 +58,59 @@ export const tooltipFallbacks = (placement: Placement): Placement[] =>
 /** `Bwe(placement, true)`: a card tries these, whatever its placement. */
 export const CARD_FALLBACKS: readonly Placement[] = ["top-start", "top", "bottom-start", "bottom"];
 
+/** How a hover card opens, sits and closes. Linear has two: its interactive tooltip (`Rwe`), for cards on rows, pills, badges and
+ *  favorites, and a document's link popover (LightboxEditorProvider `Aa`, opened by the editor's `linkPopovers` plugin, `HUn`),
+ *  for a mention, an issue chip or a link in a comment or description. */
+export type CardRules = {
+  timing: Timing;
+  placement: Placement;
+  /** Where it tries next when `placement` does not fit (Floating UI's `flip`). */
+  fallbacks: readonly Placement[];
+  /** The shift padding that keeps it inside the window. */
+  containerPadding: number;
+  /** The transparent pad on its main axis (`Vwe` → `Gwe`), so it meets its trigger. */
+  pad: number;
+  /** How long it stays after the pointer leaves its trigger for anywhere but the card. 0 closes it at once (`Rwe`); `Aa` waits
+   *  150ms (`h`), so the pointer can cross onto the card, and closes it the moment the pointer leaves the card itself (`v`). */
+  leaveGraceMs: number;
+  /** Whether a press on its trigger closes it (`Rwe`'s closeOnPointerDown). `Aa` sets `disableClickAway`, and `HUn` closes it
+   *  only when its trigger leaves the document. */
+  closeOnPress: boolean;
+  /** Its surface's least width. `T_` has none; ours keeps 220px on the interactive tooltip's cards, which were laid out on it. */
+  minWidth: number;
+};
+
+const DOCUMENT_CARD: CardRules = {
+  timing: TOOLTIP_TIMING.documentPopover,
+  placement: "top-start",
+  fallbacks: ["top", "top-start", "bottom-start", "bottom"],
+  containerPadding: 8,
+  pad: 4,
+  leaveGraceMs: 150,
+  closeOnPress: false,
+  minWidth: 0,
+};
+
+export const CARD_RULES = {
+  /** `Rwe` with `interactive`: 550ms of rest, flush, `Fwe` 12px inside the window, an 8px pad (`zwe` → `Nwe`), closed the moment
+   *  the pointer leaves for anywhere but the card, or presses its trigger. */
+  tooltip: {
+    timing: TOOLTIP_TIMING.card,
+    placement: "top-start",
+    fallbacks: CARD_FALLBACKS,
+    containerPadding: TOOLTIP.containerPadding,
+    pad: TOOLTIP.cardPad,
+    leaveGraceMs: 0,
+    closeOnPress: true,
+    minWidth: 220,
+  },
+  /** `Aa` for a model (a user, an issue): `top-start`, then `top`, `top-start`, `bottom-start`, `bottom`, 8px inside the window
+   *  (`shift: {padding: 8}`), flush (`offset: 0`), a 4px pad (`Pt(…, void 0, …)` → `Pwe`), 150ms after the pointer leaves. */
+  document: DOCUMENT_CARD,
+  /** `Aa` for an external link (`ExternalLink`): below it from its start, then `bottom`, `bottom-start`, `top-start`, `top`. */
+  documentLink: { ...DOCUMENT_CARD, placement: "bottom-start", fallbacks: ["bottom", "bottom-start", "top-start", "top"] },
+} as const satisfies Record<string, CardRules>;
+
 type Rect = { left: number; top: number; right: number; bottom: number };
 type Size = { width: number; height: number };
 
@@ -174,6 +227,13 @@ const timeout: Schedule = (task, ms) => {
 export function createTooltipStore(schedule: Schedule = timeout) {
   let openId: string | undefined, warmId: string | undefined, hoverId: string | undefined, shut: string | undefined;
   let pending: { id: string; timing: Timing; cancel: () => void } | undefined;
+  // A card's close waiting out its leave grace (`Aa`'s `h`): the pointer left the trigger, and entering the card cancels it.
+  let closing: { id: string; cancel: () => void } | undefined;
+  const cancelClosing = (id?: string) => {
+    if (id !== undefined && closing?.id !== id) return;
+    closing?.cancel();
+    closing = undefined;
+  };
   const listeners = new Set<() => void>();
   const emit = () => listeners.forEach((listener) => listener());
   const cancelPending = () => {
@@ -182,6 +242,7 @@ export function createTooltipStore(schedule: Schedule = timeout) {
   };
   const show = (id: string) => {
     if (pending?.id === id) cancelPending();
+    if (closing?.id !== id) cancelClosing();
     warmId = id;
     if (openId === id) return;
     openId = id;
@@ -193,6 +254,7 @@ export function createTooltipStore(schedule: Schedule = timeout) {
   };
   // `Rwe`'s effect when hover ends: hide, then let this tooltip's warm window lapse after `warmMs` unless another took it.
   const settle = (id: string, under = false) => {
+    cancelClosing(id);
     if (hoverId === id) {
       hoverId = undefined;
       if (under) shut = id;
@@ -224,9 +286,35 @@ export function createTooltipStore(schedule: Schedule = timeout) {
     move(id: string) {
       if (pending?.id === id && pending.timing.restartOnMove) wait(id, pending.timing);
     },
-    leave(id: string) {
+    /** The pointer left the trigger (or the card). With `graceMs` (a document's card, `Aa`), an open card waits that long before it
+     *  closes, and `stay` keeps it; a card still waiting to open doesn't open (`HUn`'s `mouseout` clears its timer). The close
+     *  doesn't touch a new wait to open: a pointer that came back to the trigger sees it close, then open again 450ms after it
+     *  came back, as Linear's does. */
+    leave(id: string, graceMs = 0) {
       if (shut === id) shut = undefined;
+      if (graceMs > 0 && openId === id) {
+        if (hoverId === id) hoverId = undefined;
+        if (pending?.id === id) cancelPending();
+        if (closing?.id === id) return;
+        closing = {
+          id,
+          cancel: schedule(() => {
+            closing = undefined;
+            if (openId !== id) return;
+            openId = undefined;
+            emit();
+            schedule(() => {
+              if (openId !== id && warmId === id) warmId = undefined;
+            }, TOOLTIP.warmMs);
+          }, graceMs),
+        };
+        return;
+      }
       if (hoverId === id || openId === id || pending?.id === id) settle(id);
+    },
+    /** The pointer came onto the open card: a close waiting out its grace doesn't come (`Aa`'s `y`). */
+    stay(id: string) {
+      cancelClosing(id);
     },
     focus(id: string) {
       hoverId = id;

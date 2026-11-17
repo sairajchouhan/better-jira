@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { TOOLTIP_TIMING } from "@/client/components/tooltip-rules";
+import { CARD_RULES } from "@/client/components/tooltip-rules";
 import { personAt } from "@/client/features/navigation/app-navigation";
 import { ME } from "@/client/state/store";
 import { mentionedUser } from "./user-mention";
@@ -10,11 +10,10 @@ test("a mention names the known person with its id, else the mention's own text 
   expect(mentionedUser([priya], "acc-2", "@Sam Lee")).toEqual({ id: "acc-2", name: "Sam Lee" });
 });
 
-test("a mention's card opens on Linear's `HUn` timer: 450ms from the pointer's arrival, not restarted by a move, above it from its start", async () => {
-  expect(TOOLTIP_TIMING.documentPopover).toEqual({ delay: 450, restartOnMove: false });
+test("a mention's card is Linear's document popover: 450ms from the pointer's arrival, above it from its start, 150ms after it leaves", async () => {
+  expect(CARD_RULES.document).toMatchObject({ timing: { delay: 450, restartOnMove: false }, placement: "top-start", leaveGraceMs: 150 });
   const source = await Bun.file(new URL("./user-mention.tsx", import.meta.url)).text();
-  expect(source).toContain("timing={TOOLTIP_TIMING.documentPopover}");
-  expect(source).toContain('placement="top-start"');
+  expect(source).toContain("rules={CARD_RULES.document}");
   expect(source).toContain('display="inline"');
 });
 

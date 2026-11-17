@@ -2,6 +2,7 @@ import { EntityIdentifier } from "@/client/components/entity-identifier";
 import type { ReactNode } from "react";
 import { Avatar } from "@/client/components/avatar";
 import { CardBody, CardProperties, CardProperty, HoverCard } from "@/client/components/hover-card";
+import type { CardRules } from "@/client/components/tooltip-rules";
 import { Icon, PriorityIcon, StatusIcon } from "@/client/components/icons";
 import { IssueKeyLink } from "@/client/features/navigation/app-link";
 import { get, statusOf } from "@/client/state/store";
@@ -15,19 +16,23 @@ import { epicName, epicOf } from "@/shared/epics";
 export function IssueHoverCard({
   relation,
   issue,
-  placement = "top",
+  placement,
+  rules,
   display,
   children,
 }: {
   relation: Relation;
   issue?: Issue;
   placement?: "top" | "top-start" | "left" | "right";
+  /** A chip in a comment or description takes Linear's document popover (`Aa`, `CARD_RULES.document`). */
+  rules?: CardRules;
   display?: "inline-flex" | "inline";
   children: ReactNode;
 }) {
   return (
     <HoverCard
-      placement={placement}
+      rules={rules}
+      placement={placement ?? (rules ? undefined : "top")}
       display={display}
       label={relation.key}
       content={<IssueCard relation={relation} issue={issue} />}

@@ -1,6 +1,7 @@
 import { expect, test } from "bun:test";
 import {
   CARD_FALLBACKS,
+  CARD_RULES,
   choosePlacement,
   closeOnEscape,
   createTooltipStore,
@@ -202,4 +203,82 @@ test("the card's safe area spans from the card's edge to the trigger plus 24px, 
     right: -10,
     clipPath: "polygon(0 0, 100% 16%, 100% 84%, 0 100%)",
   });
+});
+
+test("a document's card waits 150ms after the pointer leaves its trigger, and stays once the pointer is on it (Linear's `Aa`)", () => {
+  const { store, advance } = setup();
+  const grace = CARD_RULES.document.leaveGraceMs;
+  store.enter("mention", CARD_RULES.document.timing);
+  advance(450);
+  expect(store.isOpen("mention")).toBe(true);
+  store.leave("mention", grace);
+  advance(149);
+  expect(store.isOpen("mention")).toBe(true);
+  advance(1);
+  expect(store.isOpen("mention")).toBe(false);
+
+  // Onto the card within the grace: it stays.
+  store.enter("mention", CARD_RULES.document.timing);
+  advance(450);
+  store.leave("mention", grace);
+  advance(100);
+  store.stay("mention");
+  advance(1000);
+  expect(store.isOpen("mention")).toBe(true);
+});
+
+test("an interactive tooltip's card closes the moment the pointer leaves (Linear's `Rwe`), with no grace", () => {
+  const { store, advance } = setup();
+  store.enter("row", CARD_RULES.tooltip.timing);
+  advance(550);
+  store.leave("row", CARD_RULES.tooltip.leaveGraceMs);
+  expect(store.isOpen("row")).toBe(false);
+});
+
+test("a document's card the pointer left before it opened never opens (`HUn`'s mouseout clears its timer)", () => {
+  const { store, advance } = setup();
+  store.enter("mention", CARD_RULES.document.timing);
+  advance(300);
+  store.leave("mention", CARD_RULES.document.leaveGraceMs);
+  advance(1000);
+  expect(store.isOpen("mention")).toBe(false);
+});
+
+test("back on the trigger within the grace, the card closes and opens again 450ms after the pointer came back, as Linear's does", () => {
+  const { store, advance } = setup();
+  store.enter("mention", CARD_RULES.document.timing);
+  advance(450);
+  store.leave("mention", CARD_RULES.document.leaveGraceMs);
+  advance(50);
+  store.enter("mention", CARD_RULES.document.timing);
+  advance(100);
+  expect(store.isOpen("mention")).toBe(false);
+  advance(350);
+  expect(store.isOpen("mention")).toBe(true);
+});
+
+test("another card opening ends a card's grace at once (one open at a time)", () => {
+  const { store, advance } = setup();
+  store.enter("a", CARD_RULES.document.timing);
+  advance(450);
+  store.leave("a", CARD_RULES.document.leaveGraceMs);
+  store.enter("b", CARD_RULES.document.timing);
+  expect(store.openId).toBe("b");
+  advance(200);
+  expect(store.openId).toBe("b");
+});
+
+test("Linear's two cards: `Rwe`'s interactive tooltip and a document's popover `Aa` (a link's below it)", () => {
+  expect(CARD_RULES.tooltip).toMatchObject({ placement: "top-start", containerPadding: 12, pad: 8, leaveGraceMs: 0, closeOnPress: true });
+  expect(CARD_RULES.document).toEqual({
+    timing: { delay: 450, restartOnMove: false },
+    placement: "top-start",
+    fallbacks: ["top", "top-start", "bottom-start", "bottom"],
+    containerPadding: 8,
+    pad: 4,
+    leaveGraceMs: 150,
+    closeOnPress: false,
+    minWidth: 0,
+  });
+  expect(CARD_RULES.documentLink).toMatchObject({ placement: "bottom-start", fallbacks: ["bottom", "bottom-start", "top-start", "top"] });
 });

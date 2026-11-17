@@ -97,7 +97,16 @@ type RootValue = {
   /** The open surface (a card's whole box), for the pointer-out rule and the safe area. */
   surfaceRef: RefObject<HTMLDivElement | null>;
   /** The trigger's reports to the store. */
-  actions: { enter: () => void; move: () => void; leave: () => void; focus: () => void; close: () => void };
+  actions: {
+    enter: () => void;
+    move: () => void;
+    /** With `graceMs`, an open card waits that long before it closes (a document's card). */
+    leave: (graceMs?: number) => void;
+    /** The pointer came onto the open card. */
+    stay: () => void;
+    focus: () => void;
+    close: () => void;
+  };
 };
 const RootContext = createContext<RootValue | null>(null);
 
@@ -128,7 +137,8 @@ function TooltipRoot({ timing, children }: { timing: Timing; children: ReactNode
   const actions: RootValue["actions"] = {
     enter: () => store.enter(id, timing),
     move: () => store.move(id),
-    leave: () => store.leave(id),
+    leave: (graceMs) => store.leave(id, graceMs),
+    stay: () => store.stay(id),
     focus: () => store.focus(id),
     close: () => store.close(id),
   };

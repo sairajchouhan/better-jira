@@ -1,6 +1,6 @@
 import { Avatar } from "@/client/components/avatar";
 import { HoverCard } from "@/client/components/hover-card";
-import { TOOLTIP_TIMING } from "@/client/components/tooltip-rules";
+import { CARD_RULES } from "@/client/components/tooltip-rules";
 import { personAt } from "@/client/features/navigation/app-navigation";
 import { AppLink } from "@/client/features/navigation/app-link";
 import { usePeople } from "@/client/state/store";
@@ -14,15 +14,15 @@ export const mentionedUser = (people: readonly User[], id: string, label: string
  * A person mentioned in a comment or description, as Linear's user mention in an issue (startup-root `att` → `dtt`): "@Name" in
  * labelTitle at weight 500 (600 inside a heading or bold, `sx-w8d4cr`), with no chip, background or pointer, and no click of its
  * own. Its card opens 450ms after the pointer reaches it, moves or not (the editor's `linkPopovers`, `HUn`), above it from its
- * start (`Aa`: a User popover is top-start). One control for the read-only document and the editor (`smartLinkNodeView`).
+ * start (`Aa`: a User popover is top-start), and stays 150ms after the pointer leaves it, so the pointer can reach it (`Aa`'s `h`). One control for the read-only document and the editor (`smartLinkNodeView`).
  */
 export function UserMention({ id, label }: { id: string; label: string }) {
   return (
     <HoverCard
       label="User"
       display="inline"
-      placement="top-start"
-      timing={TOOLTIP_TIMING.documentPopover}
+      // Linear's document popover (`Aa`): top-start, 450ms after the pointer arrives, 150ms after it leaves.
+      rules={CARD_RULES.document}
       // `HUn` opens a card only for a mention node with an id.
       isDisabled={!id}
       content={<UserCard id={id} label={label} />}
