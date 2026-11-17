@@ -128,9 +128,10 @@ test("BJ-16: smart links render as Linear's mention chip: issue status, key and 
     ["external", "https://example.com/handbook", "example.com/handbook"],
   ]);
   // The issue's status icon (Doing's in-progress colour) and the sites' icons through this server, never the sites. A GitHub pull
-  // request wears its state icon (open, in labelBase, while its state is unread), never GitHub's black favicon.
+  // request wears GitHub's logo while its state is unread (its state icon once read), never GitHub's black favicon or a guessed state.
   expect(html).toContain("var(--st-progress)");
-  expect(html).toMatch(/href="https:\/\/github.com\/acme\/widgets\/pull\/42"[^>]*><span class="smart-link-image"><svg[^>]*data-pr-status="unknown"/);
+  expect(html).toMatch(/href="https:\/\/github.com\/acme\/widgets\/pull\/42"[^>]*><span class="smart-link-image"><svg[^>]*data-github-logo/);
+  expect(html).not.toContain("data-pr-status");
   expect(html).not.toContain("origin=https%3A%2F%2Fgithub.com");
   expect(html).toContain('src="/api/favicon?origin=https%3A%2F%2Fdocs.google.com"');
   expect(html).not.toMatch(/<img[^>]+src="https?:/);

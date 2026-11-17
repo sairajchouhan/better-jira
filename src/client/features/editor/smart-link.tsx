@@ -77,14 +77,16 @@ function PageLink({ link }: { link: Extract<Target, { kind: "confluence" }> }) {
   return <MentionChip kind="confluence" href={link.url} image={<Icon name="file" />} label={details?.title || link.title} />;
 }
 
-/** A link's image in its chip: a GitHub pull request's state icon when this app has read its state (an issue's pull requests), as
- *  Linear's PR mention shows it; else its site's icon (GitHub's logo, or a favicon). The state colours are GitHub's own (Primer's
- *  open green, merged purple, closed red), the user's choice over Linear's palette; unread, it is the open icon in labelBase. */
+/** A link's image in its chip: a GitHub pull request's state icon once this app has read its state (an issue's pull requests), as
+ *  Linear's PR mention shows it; else its site's icon (GitHub's logo, or a favicon), so a pull request whose state is unread wears
+ *  GitHub's logo, not a state it may not have. The state colours are GitHub's own (Primer's open green, merged purple, closed
+ *  red), the user's choice over Linear's palette. */
 const ExternalLinkImage = ({ url }: { url: string }) => (githubPullRequest(url) ? <PullRequestImage url={url} /> : <SiteIcon url={url} />);
 
 /** Only a pull request link watches the query cache for its state. */
 function PullRequestImage({ url }: { url: string }) {
-  return <PullRequestStatusIcon status={usePullRequestStatus(url)} />;
+  const status = usePullRequestStatus(url);
+  return status ? <PullRequestStatusIcon status={status} /> : <SiteIcon url={url} />;
 }
 
 function ExternalLink({ link }: { link: Extract<Target, { kind: "external" }> }) {
