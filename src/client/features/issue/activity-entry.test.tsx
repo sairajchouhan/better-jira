@@ -285,7 +285,9 @@ test("3.7: a link row reads Linear's \"linked [source icon] title\" with the Res
   const linked = { ...issue, resources: [{ id: "r1", kind: "link", title: url, url, updated: "", preview: { title: "acme/widgets#1" } }] } as Issue;
   const html = renderToStaticMarkup(<>{describeActivity(event("weblink", null, { id: "7", name: url }), linked)}</>);
   expect(html.replace(/<[^>]+>/g, "").replace(/\s+/g, " ").trim()).toBe("linked acme/widgets#1");
-  expect(html).toContain(`src="/api/favicon?origin=${encodeURIComponent("https://github.com")}"`);
+  // GitHub's source icon is Linear's GitHub logo (`HT`), never GitHub's black favicon (SiteIcon).
+  expect(html).toContain("data-github-logo");
+  expect(html).not.toContain("<img");
   expect(html).toContain(`href="${url}"`);
   expect(html).not.toContain("Web Link");
   const [row] = activityRows([event("weblink", null, { id: "7", name: url })]);

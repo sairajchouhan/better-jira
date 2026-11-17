@@ -6,7 +6,7 @@ import { Badge } from "@/client/components/badge";
 import { Text } from "@/client/components/text";
 import { HoverCard, MoreList } from "@/client/components/hover-card";
 import { Icon, PullRequestStatusIcon, ReviewStatusIcon } from "@/client/components/icons";
-import { LinkIcon } from "@/client/components/link-icon";
+import { SiteIcon } from "@/client/components/link-icon";
 import { ActionMenu, ContextMenu, type ActionEntry } from "@/client/components/action-menu";
 import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { COPY_FAILED, showNotification } from "@/client/state/app-notifications";
@@ -22,7 +22,7 @@ import {
   reviewDecision,
   type PullRequest,
 } from "@/shared/pull-requests";
-import { externalTitle, faviconSrc, linkBadgeText } from "@/shared/smart-link";
+import { externalTitle, linkBadgeText } from "@/shared/smart-link";
 import { SubIssueProgressButton } from "@/client/components/sub-issue-progress-button";
 import { shortcutTitle } from "@/client/components/keycap";
 import { IssueHoverCard } from "./issue-hover-card";
@@ -42,9 +42,7 @@ export const linkOf = (url: string, title?: string): Link => {
   const parsed = new URL(url);
   return { url, title: title ?? externalTitle(parsed), subtitle: url, origin: parsed.origin };
 };
-const LinkImage = ({ link }: { link: Link }) => (
-  <LinkIcon src={link.origin && faviconSrc(link.origin)} size={14} className="rounded-[3px]" />
-);
+const LinkImage = ({ link }: { link: Link }) => <SiteIcon url={link.url} />;
 
 /** Linear's link card (`gt`): up to five links, each its icon, its title (opens it) and a muted subtitle of two lines at most. */
 function LinksCard({ links }: { links: Link[] }) {

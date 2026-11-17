@@ -16,8 +16,7 @@ import { truncate } from "@/shared/view-model";
 import { Avatar } from "@/client/components/avatar";
 import { Icon, type IconName, PriorityIcon, RelationIcon, StatusIcon, TypeDot, hue } from "@/client/components/icons";
 import { AppLink } from "@/client/features/navigation/app-link";
-import { LinkIcon } from "@/client/components/link-icon";
-import { faviconSrc } from "@/shared/smart-link";
+import { SiteIcon } from "@/client/components/link-icon";
 import { linkTitle } from "@/shared/issue-resource";
 import { epicName } from "@/shared/epics";
 import { boardOf, get, issueBoardId } from "@/client/state/store";
@@ -108,11 +107,10 @@ function RelationTarget({ relation }: { relation: Relation }) {
 /** Linear's link entry (`ds`): the link's source icon, then its title, which opens the link. One control for a link
  *  added here and one from Jira's history; both take the title the issue's Resources row shows. */
 export function LinkedTarget({ title, url }: { title: string; url?: string }) {
-  const origin = url && URL.canParse(url) ? new URL(url).origin : undefined;
   return (
     <>
       <span className="inline-flex align-[-2px]">
-        <LinkIcon src={origin && faviconSrc(origin)} size={14} className="rounded-[3px]" />
+        <SiteIcon url={url} />
       </span>{" "}
       {url ? (
         <a href={url} target="_blank" rel="noreferrer" className="font-medium">
