@@ -25,11 +25,13 @@ export function LinkIcon({ src, size = 16, className = "rounded-full" }: { src?:
 export const isGitHub = (url: string | undefined) =>
   !!url && URL.canParse(url) && new URL(url).hostname.replace(/^www\./, "") === "github.com";
 
-/** The 14px icon of the site a link points at: one control for a smart link in a comment or description, a link badge and its
- *  card, and an Activity link entry. GitHub gets Linear's GitHub logo (`HT`) in its labelMuted colour, since GitHub's favicon is a
- *  black mark that disappears on the dark theme; every other site its favicon through our server, rounded 3px. */
-export function SiteIcon({ url }: { url?: string }) {
-  if (isGitHub(url)) return <GitHubLogo />;
+/** The icon of the site a link points at: one control for a smart link in a comment or description, a link badge and its card, an
+ *  Activity link entry, and an issue's link row. GitHub gets Linear's GitHub logo (`HT`) in its labelMuted colour, since GitHub's
+ *  favicon is a black mark that disappears on the dark theme; every other site its favicon (`icon`, the page's own when it was
+ *  unfurled, else through our server). Inline it is 14px, rounded 3px; in a resource row 16px and round, as Linear's attachment
+ *  row draws it (live RAJ-66: a GitHub link's row shows the 16px logo in labelMuted, another site's unfurled icon radius 8px). */
+export function SiteIcon({ url, icon, size = 14 }: { url?: string; icon?: string; size?: 14 | 16 }) {
+  if (isGitHub(url)) return <GitHubLogo size={size} />;
   const origin = url && URL.canParse(url) ? new URL(url).origin : undefined;
-  return <LinkIcon src={origin && faviconSrc(origin)} size={14} className="rounded-[3px]" />;
+  return <LinkIcon src={icon || (origin && faviconSrc(origin))} size={size} className={size === 16 ? "rounded-full" : "rounded-[3px]"} />;
 }

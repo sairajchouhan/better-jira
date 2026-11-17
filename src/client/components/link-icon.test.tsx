@@ -18,3 +18,16 @@ test("any other site's icon is its favicon through this server, 14px and rounded
   expect(html).toContain("rounded-[3px]");
   expect(html).not.toContain("data-github-logo");
 });
+
+test("an issue's link row draws the same site icon at 16px and round: GitHub's logo, else the page's unfurled icon (Linear's attachment row)", async () => {
+  const github = renderToStaticMarkup(<SiteIcon url="https://github.com/acme/widgets/pull/42" icon="https://github.com/favicon.ico" size={16} />);
+  expect(github).toContain("data-github-logo");
+  expect(github).toContain('width="16"');
+  expect(github).not.toContain("<img");
+  const page = renderToStaticMarkup(<SiteIcon url="https://example.com/a" icon="https://example.com/icon.png" size={16} />);
+  expect(page).toContain('src="https://example.com/icon.png"');
+  expect(page).toContain("rounded-full");
+  const source = await Bun.file(new URL("../features/issue/issue-resources.tsx", import.meta.url)).text();
+  expect(source).toContain("<SiteIcon url={resource.url} icon={resource.preview?.icon} size={16} />");
+  expect(source).not.toContain("<LinkIcon");
+});

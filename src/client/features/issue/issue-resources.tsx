@@ -10,7 +10,7 @@ import { Button, IconButton } from "@/client/components/button";
 import { SectionDisclosure } from "@/client/components/section-disclosure";
 import { lazy, Suspense, useEffect, useState } from "react";
 import { Icon } from "@/client/components/icons";
-import { LinkIcon } from "@/client/components/link-icon";
+import { SiteIcon } from "@/client/components/link-icon";
 
 import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { normalizeDocument } from "@/shared/document";
@@ -347,7 +347,7 @@ export function IssueResources({ issue }: { issue: Issue }) {
               className="resource-row group/resource"
             >
               {resource.kind === "link" ? (
-                <LinkIcon src={resource.preview?.icon} />
+                <SiteIcon url={resource.url} icon={resource.preview?.icon} size={16} />
               ) : resource.kind === "document" ? (
                 <DocumentGlyph resource={resource} size={14} />
               ) : (
