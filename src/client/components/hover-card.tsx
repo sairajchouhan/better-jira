@@ -128,6 +128,9 @@ function ElementTrigger({ element }: { element: HTMLElement }) {
   const leave = useEffectEvent((to: EventTarget | null) => {
     if (!keepsCardOpen(inCard(surfaceRef, to) ? "card" : "elsewhere")) actions.leave(rules.leaveGraceMs);
   });
+  // A trigger going away is the pointer leaving it, so the Root's close as it unmounts doesn't hold the card shut for a
+  // remount (StrictMode's) that enters again.
+  const release = useEffectEvent(() => actions.leave());
   useLayoutEffect(() => {
     triggerRef.current = element;
     enter();
@@ -141,6 +144,7 @@ function ElementTrigger({ element }: { element: HTMLElement }) {
       element.removeEventListener("pointerenter", onEnter);
       element.removeEventListener("pointermove", onMove);
       element.removeEventListener("pointerleave", onLeave);
+      release();
     };
   }, [element, triggerRef]);
   return null;

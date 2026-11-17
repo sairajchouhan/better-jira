@@ -63,6 +63,7 @@ import { history, redo, undo } from "prosemirror-history";
 import { splitListItem } from "prosemirror-schema-list";
 import { moveColumn, moveRow, tableResizing } from "./editor-table";
 import { TableControls } from "./table-controls";
+import { DocumentLinkCards } from "./document-link-cards";
 import { tableEditing } from "prosemirror-tables";
 import {
   codeDown,
@@ -865,6 +866,7 @@ export function RichEditor(props: EditorEngineProps) {
       )}
       <EditorArea ref={frame} placeholder={empty && props.placeholder}>
         <div ref={host} />
+        <DocumentLinkCards root={host} />
         {view.current && <TableControls view={view.current} frame={frame} />}
       </EditorArea>
       {slash && (

@@ -282,3 +282,14 @@ test("Linear's two cards: `Rwe`'s interactive tooltip and a document's popover `
   });
   expect(CARD_RULES.documentLink).toMatchObject({ placement: "bottom-start", fallbacks: ["bottom", "bottom-start", "top-start", "top"] });
 });
+
+test("a trigger that leaves as it unmounts can be entered again after its Root's close (StrictMode's remount of a link's card)", () => {
+  const { store, advance } = setup();
+  store.enter("link", TOOLTIP_TIMING.documentPopover);
+  // Unmount: the trigger's cleanup reports the pointer gone, then the Root closes.
+  store.leave("link");
+  store.close("link");
+  store.enter("link", TOOLTIP_TIMING.documentPopover);
+  advance(450);
+  expect(store.openId).toBe("link");
+});

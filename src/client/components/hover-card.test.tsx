@@ -61,3 +61,9 @@ test("an issue chip in a document opens Linear's document popover, as a mention 
   const source = await Bun.file(new URL("../features/editor/smart-link.tsx", import.meta.url)).text();
   expect(source).toContain("rules={CARD_RULES.document}");
 });
+
+test("a card on a page element reports the pointer gone as its trigger unmounts, so a remount's first hover opens it", async () => {
+  const source = await Bun.file(new URL("./hover-card.tsx", import.meta.url)).text();
+  expect(source).toContain("const release = useEffectEvent(() => actions.leave());");
+  expect(source).toMatch(/element\.removeEventListener\("pointerleave", onLeave\);\s*release\(\);/);
+});

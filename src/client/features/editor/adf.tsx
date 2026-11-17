@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useRef, type ReactNode } from "react";
 import { MediaView } from "@/client/features/media/media-loader";
 import type { Attachment } from "@/shared/attachment-media";
 import { jiraDate, safeLink } from "@/shared/document";
@@ -7,6 +7,7 @@ import { ReadonlyCodeBlock } from "./code-block";
 import { embedFrame, embedSource } from "./embed";
 import { SmartLink, smartLinkWrapper } from "./smart-link";
 import { UserMention } from "./user-mention";
+import { DocumentLinkCards } from "./document-link-cards";
 import { preservedLabel } from "./editor-shape";
 export { adfToText } from "./document-text";
 
@@ -32,7 +33,7 @@ export function Adf({
   const a = node.attrs ?? {};
   switch (node.type) {
     case "doc":
-      return <div className="rich-doc flow-root">{kids}</div>;
+      return <DocumentRoot>{kids}</DocumentRoot>;
     case "paragraph":
       return (
         <p data-media-caret={a.mediaBoundary ? "true" : undefined}>
@@ -294,3 +295,14 @@ export function withTaskToggled(node: any, task: any): any {
 }
 
 /** Text projection for search and previews. Rich editing retains the original document. */
+
+/** A read-only document's root, where its links' cards are found (`DocumentLinkCards`). */
+function DocumentRoot({ children }: { children: ReactNode }) {
+  const root = useRef<HTMLDivElement>(null);
+  return (
+    <div ref={root} className="rich-doc flow-root">
+      {children}
+      <DocumentLinkCards root={root} />
+    </div>
+  );
+}
