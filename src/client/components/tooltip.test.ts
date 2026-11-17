@@ -43,6 +43,8 @@ test("tooltips, hover cards and the edge tooltip take Linear's `Rwe` and `B_` ti
     plain: { delay: 450, restartOnMove: true },
     card: { delay: 550, restartOnMove: true },
     edge: { delay: 450, restartOnMove: false },
+    // A mention's card in a document: `HUn`'s one 450ms `setTimeout` from mouseover, cancelled by mouseout, not moved by a move.
+    documentPopover: { delay: 450, restartOnMove: false },
   });
   // `Lwe.schedule(…, 100)`, `Nwe`, `Fwe`, `Pwe`, `Vwe`'s 500ms, `rTe delay: 10`, `j_ = Pwe * 2.5`, `qwe`.
   expect(TOOLTIP).toEqual({

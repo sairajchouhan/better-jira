@@ -22,6 +22,7 @@ import {
   TOOLTIP,
   TOOLTIP_TIMING,
   type Placement,
+  type Timing,
 } from "./tooltip-rules";
 
 /**
@@ -44,7 +45,7 @@ export function HoverCard({
   placement = "top-start",
   label,
   display = "inline-flex",
-  delay = TOOLTIP_TIMING.card.delay,
+  timing = TOOLTIP_TIMING.card,
   isDisabled = false,
   children,
 }: {
@@ -56,15 +57,16 @@ export function HoverCard({
   /** `block` is a full-width row's trigger (the sidebar's `_$.tooltipBlock`): the row keeps its whole width. `fill` takes the
    *  room left in its flex row and lays its children out with the row's own gap (a team favorite's toggle button, `m5n`). */
   display?: "inline-flex" | "inline" | "block" | "fill";
-  /** Linear's `transitionDelay`: how long the pointer rests before the card opens (550ms unless the trigger says otherwise; an issue
-   *  sidebar's pull request row says 150). */
-  delay?: number;
+  /** When the card opens: Linear's interactive tooltip rule (550ms of rest, every move restarting it) unless the trigger says
+   *  otherwise. An issue sidebar's pull request row rests 150ms; a mention in a document opens 450ms after the pointer comes onto
+   *  it, moves or not (`TOOLTIP_TIMING.documentPopover`). */
+  timing?: Timing;
   /** No card while this holds (a favorite row while any favorite is dragged, `d5n`), and an open one closes. */
   isDisabled?: boolean;
   children: ReactNode;
 }) {
   return (
-    <Tooltip.Root timing={{ ...TOOLTIP_TIMING.card, delay }}>
+    <Tooltip.Root timing={timing}>
       <HoverCardTrigger display={display} isDisabled={isDisabled}>
         {children}
       </HoverCardTrigger>

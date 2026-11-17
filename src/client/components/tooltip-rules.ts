@@ -13,6 +13,9 @@ export const TOOLTIP_TIMING = {
   card: { delay: 550, restartOnMove: true },
   /** A resize handle's tooltip (`B_`): one 450ms timer from `mouseenter`, never restarted by a move. */
   edge: { delay: 450, restartOnMove: false },
+  /** A user mention's card in a comment or description (the editor's `linkPopovers`, startup-root `HUn`): one 450ms timer from the
+   *  `mouseover` that reached it, cancelled by `mouseout`, never restarted by a move. */
+  documentPopover: { delay: 450, restartOnMove: false },
 } as const satisfies Record<string, Timing>;
 
 export const TOOLTIP = {

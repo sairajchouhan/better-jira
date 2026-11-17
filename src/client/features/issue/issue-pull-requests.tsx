@@ -3,6 +3,7 @@
  *  (that list filters `isPullRequest` out), so this is the issue view's only pull request list. */
 import { ContextMenu } from "@/client/components/action-menu";
 import { HoverCard } from "@/client/components/hover-card";
+import { TOOLTIP_TIMING } from "@/client/components/tooltip-rules";
 import { Icon, PullRequestStatusIcon, ReviewStatusIcon } from "@/client/components/icons";
 import { PropertyTrigger } from "@/client/components/property-trigger";
 import { Text } from "@/client/components/text";
@@ -76,13 +77,14 @@ export function PullRequestList({ prs, collapseKey }: { prs: PullRequest[]; coll
  *  a review outside Linear); right-click is Linear's pull request menu (`Bl` = `lhn`); a 150ms rest shows its card on the left. */
 /** IssueDetailsPaneSidebar's row tooltip: `transitionDelay: 150` beside `position: "left"`, `interactive: true`. */
 export const PULL_REQUEST_ROW_CARD_DELAY = 150;
+const PULL_REQUEST_ROW_CARD_TIMING = { ...TOOLTIP_TIMING.card, delay: PULL_REQUEST_ROW_CARD_DELAY };
 
 export function IssuePullRequestRow({ pr }: { pr: PullRequest }) {
   const review = reviewDecision(pr);
   return (
     <div className="issue-pull-request-row" data-pull-request-row={pr.number || pr.url}>
       <ContextMenu label="Pull request options" entries={() => pullRequestActions(pr)}>
-        <HoverCard label="Pull request" placement="left" delay={PULL_REQUEST_ROW_CARD_DELAY} content={<PullRequestCard pr={pr} />}>
+        <HoverCard label="Pull request" placement="left" timing={PULL_REQUEST_ROW_CARD_TIMING} content={<PullRequestCard pr={pr} />}>
           <PropertyTrigger.Link
             href={pr.url}
             target="_blank"
