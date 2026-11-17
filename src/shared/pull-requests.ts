@@ -1,4 +1,5 @@
 import { shortDuration } from "./duration";
+import { githubPullRequest } from "./smart-link";
 
 /** A pull request linked to the issue: by Jira's development panel (`/rest/dev-status/latest/issue/detail`, dataType pullrequest),
  *  or read straight from GitHub (`src/server/github-pull-requests.ts`). */
@@ -240,3 +241,11 @@ export function reviewDecision(pr: PullRequest): ReviewDecision | undefined {
   if (pr.status === "approved") return { label: "Approved", status: "approved" };
   return undefined;
 }
+
+/** The state of the pull request `url` names, from any issue's list already read (an issue's Diffs, a badge's card), so a link to
+ *  it in a comment or description wears GitHub's state colour; undefined when no list read holds it. It reads nothing itself. */
+export const pullRequestStatusIn = (lists: readonly (readonly [unknown, PullRequest[] | undefined])[], url: string) => {
+  const name = githubPullRequest(url);
+  if (!name) return;
+  for (const [, list] of lists) for (const pr of list ?? []) if (githubPullRequest(pr.url) === name) return pr.status;
+};

@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { linkBadgeText, smartLink, smartLinkText, tinyCode, tinyPageId } from "./smart-link";
+import { githubPullRequest, linkBadgeText, smartLink, smartLinkText, tinyCode, tinyPageId } from "./smart-link";
 
 // Made-up URLs in the shapes the BJ-16 survey of work Jira found in smart-link nodes.
 const title = (url: string, data?: unknown) => {
@@ -83,4 +83,12 @@ test("link badge text follows Linear's `vt`: GitHub #n or tag, GitLab !n, Bitbuc
   expect(linkBadgeText("https://docs.google.com/document/d/1")).toBe("Google Doc");
   expect(linkBadgeText("https://example.test/a/long/path")).toBe("example.test/...");
   expect(linkBadgeText("https://example.test/a/long/path")).toHaveLength(16);
+});
+
+test("a GitHub pull request link is named by its repository and number, any case, so a chip finds its state", () => {
+  expect(githubPullRequest("https://github.com/Acme/Widgets/pull/42")).toBe("acme/widgets#42");
+  expect(githubPullRequest("https://www.github.com/acme/widgets/pull/42/files")).toBe("acme/widgets#42");
+  expect(githubPullRequest("https://github.com/acme/widgets/issues/42")).toBeUndefined();
+  expect(githubPullRequest("https://gitlab.com/acme/widgets/pull/42")).toBeUndefined();
+  expect(githubPullRequest("not a url")).toBeUndefined();
 });

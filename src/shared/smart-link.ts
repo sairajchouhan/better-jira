@@ -91,6 +91,14 @@ export function githubName(value: string | URL): string | undefined {
   if (path.length === 2) return repo;
 }
 
+/** A GitHub pull request's `owner/repo#1`, lower-cased so two links to it match (`/pull/1/files` is the same pull request), else
+ *  undefined: an issue, a commit or any other URL. */
+export function githubPullRequest(value: string): string | undefined {
+  if (!URL.canParse(value)) return;
+  const url = new URL(value);
+  return url.pathname.split("/")[3] === "pull" ? githubName(url)?.toLowerCase() : undefined;
+}
+
 /** A readable name for a link to any other site: what the URL itself says, never fetched. */
 export function externalTitle(url: URL): string {
   const host = url.hostname.replace(/^www\./, ""),
