@@ -134,9 +134,11 @@ test("BJ-224: no control hovers with bgShadeHover, and no blanket open-menu rule
     const text = await Bun.file(`${dir}/${file}`).text();
     if (/\bbg-hover\b|hover:bg-hover|var\(--hover\)/.test(text)) users.push(file);
   }
-  // Only the two fills that are no hover: the image-comment avatar and the upload pill's button (index.css).
+  // Only the two fills that are no hover (the image-comment avatar and the upload pill's button), and a description's chip, which
+  // Linear hovers with its editor's shade hover, bgShadeHover on the page (`--editor-bg-shade-hover`, live RAJ-66) (index.css).
   expect(users).toEqual(["index.css"]);
-  expect(index.match(/var\(--hover\)/g)).toHaveLength(2);
+  expect(index.match(/var\(--hover\)/g)).toHaveLength(3);
+  expect(index).toContain("--editor-shade-hover: var(--hover);");
   expect(index).not.toContain("--color-hover");
   expect(index).not.toMatch(/\[data-menu-open\] > :first-child/);
 });

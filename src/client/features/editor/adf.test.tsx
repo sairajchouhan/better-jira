@@ -177,3 +177,21 @@ test("a smart link chip is Linear's `ME.chip`: labelBase (`det`) at the text's o
   expect(rule(".mention-chip.smart-link")).toContain("color: var(--fg-2) !important;");
   expect(rule(":is(h1, h2, h3, h4, h5, h6, strong, b) .mention-chip")).toContain("font-weight: 600;");
 });
+
+test("a chip rests on the editor's shade with a 0.5px line and darkens to its shade hover, both read off its surface (live `dE.chip` + `uE`)", async () => {
+  const css = await Bun.file(new URL("../../index.css", import.meta.url)).text();
+  const rules = (selector: string) =>
+    [...css.matchAll(new RegExp(`\\n\\s*${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\{([^}]*)\\}`, "g"))].map((m) => m[1]).join("");
+  expect(rules(".mention-chip")).toContain("background-color: var(--editor-shade);");
+  expect(rules(".mention-chip")).toContain("border: 0.5px solid var(--editor-line);");
+  expect(rules(".mention-chip:hover")).toContain("background-color: var(--editor-shade-hover);");
+  // A description sits on the page: bgShade, bgShadeHover and bgBorder (light bgBorderFaint), live RAJ-66.
+  expect(css).toContain("--editor-shade: var(--col);");
+  expect(css).toContain("--editor-line: var(--bg-border);");
+  // A comment and the comment composer sit on a card, whose shade Linear lifts: 11.033 / 11.933 / 22.193 dark, 94.5 / 93 / 91.9 light.
+  const card = rules(":is(.comment-thread, .rich-editor:not([data-inline]))");
+  expect(card).toContain("--editor-shade: var(--card-editor-shade);");
+  expect(card).toContain("--editor-line: var(--card-editor-line);");
+  for (const value of ["--card-editor-shade: lch(11.033% 1.3 272);", "--card-editor-shade-hover: lch(11.933% 1.75 272);", "--card-editor-line: lch(22.193% 1.93 272);", "--card-editor-shade: lch(94.5% 0 282);", "--card-editor-shade-hover: lch(93% 0 282);", "--card-editor-line: lch(91.9% 0 282);"])
+    expect(css).toContain(value);
+});

@@ -121,6 +121,15 @@
   /* Linear's board badge (QB) hovered or with its menu open, read live on linear.app 2026-11-13:
      elevated bgShade, bgBorderSolidThin and labelTitle; light keeps the resting border. */
   --chip-hover: lch(94.5% 0 282);
+  /* Linear's editor shade (`--editor-bg-shade`, `-hover`, and the chip's bgBorderFaint in light, bgBorder in dark): a chip's
+     resting fill, its hover and its 0.5px line, read off the surface the document sits on. On the page (a description) they are
+     bgShade, bgShadeHover and the border; on a card (a comment or the comment composer) the card's (live RAJ-66). */
+  --editor-shade: var(--col);
+  --editor-shade-hover: var(--hover);
+  --editor-line: var(--bg-border);
+  --card-editor-shade: lch(94.5% 0 282);
+  --card-editor-shade-hover: lch(93% 0 282);
+  --card-editor-line: lch(91.9% 0 282);
   --chip-line-hover: var(--chip-line);
   --chip-fg-hover: lch(10% 0 282);
   /* brighteningIconLight/Dark: a status icon or avatar trigger's filter while hovered, pressed or open. */
@@ -209,6 +218,9 @@
       lch(0 0 0 / 0.125) 0 3px 8px, lch(0 0 0 / 0.125) 0 2px 5px, lch(0 0 0 / 0.125) 0 1px 1px;
     --chip-line: lch(20.032% 1.93 272);
     --chip-hover: lch(11.033% 1.3 272);
+    --card-editor-shade: lch(11.033% 1.3 272);
+    --card-editor-shade-hover: lch(11.933% 1.75 272);
+    --card-editor-line: lch(22.193% 1.93 272);
     --chip-line-hover: lch(30.833% 1.93 272);
     --chip-fg-hover: lch(100% 0 272);
     --icon-brighten: brightness(1.32);
@@ -1086,7 +1098,8 @@ body.loaded #loading {
 .ProseMirror-focused .ProseMirror-selectednode .user-mention {
   background-color: color-mix(in lch, var(--accent) 40%, transparent);
 }
-/* ._mentionChip_i34q1_15: the chip's colour (`det`: labelBase), no background at rest, bgShadeHover on hover, the selection colour
+/* ._mentionChip_1b36w_15 (live startup-root `dE.chip` + `uE`): the chip's colour (`det`: labelBase), the editor's shade at rest
+   (sx-15y765q) with a 0.5px line (sx-1onz0r3, sx-1y0btm7, sx-yrevxs / sx-1qj378p), its shade hover on hover, the selection colour
    when selected. Its weight is the text's (`ME.chip` sx-cno3ow: `--sx-3446h1`, `inherit` at :root), 600 in a heading or bold
    (sx-w8d4cr). */
 .mention-chip {
@@ -1098,7 +1111,7 @@ body.loaded #loading {
 }
 @media (any-hover: hover) and (any-pointer: fine) {
   .mention-chip:hover {
-    background-color: var(--card-pressed);
+    background-color: var(--editor-shade-hover);
   }
 }
 .ProseMirror-focused .mention-chip.ProseMirror-selectednode,
@@ -1118,6 +1131,16 @@ body.loaded #loading {
   box-decoration-break: clone;
   padding-block: clamp(0px, 1000000 * max(0px, 16.001px - 1em), 1.5px);
   padding-inline: 0.2em 0.3em;
+}
+.mention-chip {
+  background-color: var(--editor-shade);
+  border: 0.5px solid var(--editor-line);
+}
+/* A document on a card (a comment, the comment composer) shades its chips from the card. */
+:is(.comment-thread, .rich-editor:not([data-inline])) {
+  --editor-shade: var(--card-editor-shade);
+  --editor-shade-hover: var(--card-editor-shade-hover);
+  --editor-line: var(--card-editor-line);
 }
 .smart-link-image {
   white-space: nowrap;
