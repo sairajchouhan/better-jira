@@ -17,10 +17,10 @@ import { useMemo, useState, type ReactNode } from "react";
 import { navigationChoices, type NavigationChoice } from "./quick-navigation";
 import { ActionLabel, ActionMenu, hoistedChildren, type ActionEntry } from "@/client/components/action-menu";
 import { Icon, LabelDot, PriorityIcon, StatusIcon, TypeDot, type IconName } from "@/client/components/icons";
-import { get, set, timed, useStore, statusOf, ME, issueBoardId } from "@/client/state/store";
+import { get, set, timed, useStore, statusOf, issueBoardId } from "@/client/state/store";
 import { Text } from "@/client/components/text";
 import { currentKey } from "@/client/state/jira-sync";
-import { navigate, openIssueByKey, openSavedView, placeURL, preloadOnHover, ui } from "./app-navigation";
+import { navigate, openIssueByKey, openSavedView, personAt, placeURL, preloadOnHover, ui } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
 import { peopleOf } from "@/shared/people";
 import { equalOperators, filterCount, type Display } from "@/shared/view-model";
@@ -304,7 +304,7 @@ function usePageRows(page: PalettePage): Cmd[] {
       name: u.name,
       icon: <Avatar user={u} size={16} />,
       // A user's issues (BJ-77); choosing myself is My issues.
-      run: () => (close(), navigate({ mine: true, person: u.id === ME.id ? null : u.id, selected: null, panel: false })),
+      run: () => (close(), navigate(personAt(u.id))),
     }));
   if (page === "help")
     return [{ name: "Keyboard shortcuts", keys: hotkeyOf("shortcuts"), icon: commandIcon("shortcuts"), run: () => ui.send({ type: "overlay.open", overlay: "shortcuts" }) }];

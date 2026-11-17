@@ -4,7 +4,8 @@ import { flushSync } from "react-dom";
 import { createRoot } from "react-dom/client";
 import type { Node as EditorNode } from "prosemirror-model";
 import type { NodeView } from "prosemirror-view";
-import { MentionChip, SmartLink, smartLinkWrapper } from "./smart-link";
+import { SmartLink, smartLinkWrapper } from "./smart-link";
+import { UserMention } from "./user-mention";
 import { embedSource } from "./embed";
 
 /** A smart link in the editor: the same chip as the read-only document, an atom whose URL and Jira node never change here,
@@ -19,7 +20,7 @@ export function smartLinkNodeView(node: EditorNode): NodeView | undefined {
   dom.contentEditable = "false";
   const root = createRoot(dom);
   const render = () => root.render(<RouterContextProvider router={router}>{node.type.name === "mention"
-    ? <MentionChip kind="person" id={String(data?.attrs?.id ?? "")} label={String(data?.attrs?.text || "@Unknown")} />
+    ? <UserMention id={String(data?.attrs?.id ?? "")} label={String(data?.attrs?.text || "@Unknown")} />
     : <SmartLink url={url} data={data?.attrs?.data} />}</RouterContextProvider>);
   // Rendered before the browser paints (the view is built in a layout effect, so not inside React's own render), so the
   // editor's first frame has the chip at its size and swapping the stand-in for the editor moves nothing (BJ-198).

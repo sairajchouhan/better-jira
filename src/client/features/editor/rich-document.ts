@@ -213,7 +213,7 @@ export const richSchema = new Schema({
         "span",
         {
           contenteditable: "false",
-          class: "mention-chip",
+          class: "user-mention",
           "data-mention-id": String(node.attrs.original?.data.attrs?.id ?? ""),
         },
         String(node.attrs.original?.data.attrs?.text || "@Unknown"),

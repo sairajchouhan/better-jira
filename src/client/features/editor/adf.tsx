@@ -5,7 +5,8 @@ import { jiraDate, safeLink } from "@/shared/document";
 import { Icon } from "@/client/components/icons";
 import { ReadonlyCodeBlock } from "./code-block";
 import { embedFrame, embedSource } from "./embed";
-import { MentionChip, SmartLink, smartLinkWrapper } from "./smart-link";
+import { SmartLink, smartLinkWrapper } from "./smart-link";
+import { UserMention } from "./user-mention";
 import { preservedLabel } from "./editor-shape";
 export { adfToText } from "./document-text";
 
@@ -122,9 +123,7 @@ export function Adf({
     case "rule":
       return <hr />;
     case "mention":
-      return (
-        <MentionChip kind="person" id={a.id} label={a.text || "@Unknown"} />
-      );
+      return <UserMention id={a.id} label={a.text || "@Unknown"} />;
     case "emoji":
       return <span className="rich-emoji">{a.text ?? a.shortName}</span>;
     case "status":

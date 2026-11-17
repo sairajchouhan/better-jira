@@ -10,19 +10,10 @@ import { faviconSrc, smartLink, type SmartLink as Target } from "@/shared/smart-
 
 /** Linear's mention chip (startup-root `jE`): an image kept on the first line with its text, then a muted prefix (an issue's
  *  key) and the label. One chip for every smart link kind, in read-only documents and the editor alike. */
-export function MentionChip(props: { kind: "person"; id: string; label: string } | {
+export function MentionChip({ kind, href, image, prefix, label, onClick }: {
   kind: Target["kind"]; href: string; image: ReactNode; prefix?: string; label?: string;
   onClick?: (event: MouseEvent<HTMLAnchorElement>) => void;
 }) {
-  if (props.kind === "person") return <span className="mention-chip" data-mention-id={props.id}>{props.label}</span>;
-  const {
-  kind,
-  href,
-  image,
-  prefix,
-  label,
-  onClick,
-} = props;
   return (
     <a
       className="mention-chip smart-link"

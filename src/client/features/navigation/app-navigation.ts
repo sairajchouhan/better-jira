@@ -8,7 +8,7 @@ import { createActor } from "xstate";
 import { createBrowserHistory, createMemoryHistory, redirect, type ParsedLocation } from "@tanstack/react-router";
 import { uiMachine, inspector, type UiContext } from "@/client/state/machines";
 import { MACHINE_FIELDS, placeOf, restoredTrail, transition, type Destination, type NavigationEvent, type Place, type Screen } from "./navigation";
-import { commit, get, set, subscribe, type State, type View, issueBoardId } from "@/client/state/store";
+import { commit, get, set, subscribe, type State, type View, issueBoardId, ME } from "@/client/state/store";
 import { currentKey } from "@/client/state/jira-sync";
 import { createViewDraft, editViewDraft, updateSavedView, viewError } from "@/client/features/views/saved-views";
 import { emptyOverlay, viewForRoute, type SavedView, type ViewDraft } from "@/shared/saved-view-model";
@@ -106,6 +106,8 @@ export const issueAt = (key: string, s: State = get()): Destination => ({
   selected: key,
   panel: true,
 });
+/** A person's page: their issues (BJ-77), and My issues for me. Where the palette's Users page and a mention's card go. */
+export const personAt = (id: string): Destination => ({ mine: true, person: id === ME.id ? null : id, selected: null, panel: false });
 /** Escape on an issue page opened from the inbox's pane: back to that pane, as Linear's page with `backOnEsc` goes back (`co`). The
  *  entry before it is the pane it opened from; with none before it, the pane opens in its place. */
 export function backToInbox() {

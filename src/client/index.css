@@ -1072,6 +1072,20 @@ body.loaded #loading {
   background: var(--sel);
   padding: 0 3px;
 }
+/* A person mentioned in an issue's comment or description: Linear's `dtt` (startup-root), labelTitle (`sx-hfnvfx`) at weight 500
+   (`sx-11mg1s0`), 600 inside a heading or bold (`sx-w8d4cr`). Plain text: no chip, padding, background or pointer (the chip with an
+   avatar, `stt`, is only Linear's Documents', behind `peopleMentionChips`). Its card opens on hover (user-mention.tsx). */
+.user-mention {
+  color: var(--fg);
+  font-weight: 500;
+}
+:is(h1, h2, h3, h4, h5, h6, strong, b) .user-mention {
+  font-weight: 600;
+}
+.ProseMirror-focused .user-mention.ProseMirror-selectednode,
+.ProseMirror-focused .ProseMirror-selectednode .user-mention {
+  background-color: color-mix(in lch, var(--accent) 40%, transparent);
+}
 /* ._mentionChip_i34q1_15: the text colour, no background at rest, bgShadeHover on hover, the selection colour when
    selected. */
 .mention-chip {

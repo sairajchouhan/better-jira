@@ -41,7 +41,7 @@ test("I7: bare URLs in comments and descriptions render as links", () => {
   ).not.toContain("<a");
 });
 
-test("Jira mentions render as mention chips", () => {
+test("a Jira mention renders as Linear's user mention (`dtt`): plain labelTitle text in a hover card's inline trigger, no chip", () => {
   const html = renderToStaticMarkup(
     <Adf
       node={doc({
@@ -50,7 +50,16 @@ test("Jira mentions render as mention chips", () => {
       })}
     />,
   );
-  expect(html).toContain('<span class="mention-chip" data-mention-id="acc-1">@Priya</span>');
+  expect(html).toContain(
+    '<span class="inline" data-hover-card-trigger=""><span class="user-mention" data-mention-id="acc-1">@Priya</span></span>',
+  );
+  expect(html).not.toContain("mention-chip");
+  // The editor's own DOM for the node is the same class.
+  const view = toEditorDocument(doc({ type: "paragraph", content: [{ type: "mention", attrs: { id: "acc-1", text: "@Priya" } }] }));
+  expect((view.child(0).child(0).type.spec.toDOM!(view.child(0).child(0)) as [string, Record<string, string>])[1]).toMatchObject({
+    class: "user-mention",
+    "data-mention-id": "acc-1",
+  });
 });
 
 test("BJ-176: the read-only view renders the editor's DOM, so one stylesheet styles both", () => {
