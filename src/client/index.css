@@ -1086,14 +1086,15 @@ body.loaded #loading {
 .ProseMirror-focused .ProseMirror-selectednode .user-mention {
   background-color: color-mix(in lch, var(--accent) 40%, transparent);
 }
-/* ._mentionChip_i34q1_15: the text colour, no background at rest, bgShadeHover on hover, the selection colour when
-   selected. */
+/* ._mentionChip_i34q1_15: the chip's colour (`det`: labelBase), no background at rest, bgShadeHover on hover, the selection colour
+   when selected. Its weight is the text's (`ME.chip` sx-cno3ow: `--sx-3446h1`, `inherit` at :root), 600 in a heading or bold
+   (sx-w8d4cr). */
 .mention-chip {
   border-radius: 4px;
-  color: inherit;
-  font-weight: 500;
-  padding: 0 3px;
   white-space: nowrap;
+}
+:is(h1, h2, h3, h4, h5, h6, strong, b) .mention-chip {
+  font-weight: 600;
 }
 @media (any-hover: hover) and (any-pointer: fine) {
   .mention-chip:hover {
@@ -1109,7 +1110,7 @@ body.loaded #loading {
    clone, padding-inline .2em/.3em, padding-block clamp(…1.5px)); the image stays with its first word (ME.noWrap) and an
    issue's key is muted (ME.affix). */
 .mention-chip.smart-link {
-  color: var(--fg) !important;
+  color: var(--fg-2) !important;
   cursor: pointer !important;
   text-decoration-line: none !important;
   white-space: normal;

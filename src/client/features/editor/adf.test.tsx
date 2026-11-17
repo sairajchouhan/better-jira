@@ -169,3 +169,11 @@ test("a GitHub pull request link wears the state an issue's pull request list re
     queryClient.removeQueries({ queryKey: ["pull-requests", "TEST-9"] });
   }
 });
+
+test("a smart link chip is Linear's `ME.chip`: labelBase (`det`) at the text's own weight, 600 in a heading or bold", async () => {
+  const css = await Bun.file(new URL("../../index.css", import.meta.url)).text();
+  const rule = (selector: string) => css.match(new RegExp(`\\n${selector.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")} \\{([^}]*)\\}`))?.[1] ?? "";
+  expect(rule(".mention-chip")).not.toContain("font-weight");
+  expect(rule(".mention-chip.smart-link")).toContain("color: var(--fg-2) !important;");
+  expect(rule(":is(h1, h2, h3, h4, h5, h6, strong, b) .mention-chip")).toContain("font-weight: 600;");
+});
