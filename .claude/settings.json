@@ -1,6 +1,9 @@
 {
   "autoMemoryEnabled": false,
   "disableBundledSkills": true,
+  "enabledPlugins": {
+    "pstack@cursor-plugins": true
+  },
   "skillOverrides": {
     "anthropic-skills:contentstack-brand-guidelines": "off",
     "anthropic-skills:docs": "off",
