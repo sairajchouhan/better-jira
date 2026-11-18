@@ -100,7 +100,7 @@ export type InboxPush = {
 
 /** One write the app sent to Jira: the ops for one issue, as `GET /__fixture` lists them. */
 export type JiraWrite = { key: string; ops: Op[] };
-/** One request the fixture answered, as `GET /__fixture` lists them. */
+/** One API request the fixture answered, as `GET /__fixture` lists them (not saved views, events, avatars or board edits). */
 export type FixtureRequest = { method: string; path: string; status: number };
 /** One file Jira received from the app, as `GET /__fixture` lists them. */
 export type FixtureUpload = { key: string; id: string; mediaId: string; name: string; type: string; size: number; client?: string };

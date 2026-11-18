@@ -18,7 +18,8 @@ type App = {
   seed(settings?: FixtureSettings): Promise<void>;
   /** Every write the app has sent to Jira since the last seed (a resend shows twice). */
   jiraWrites(): Promise<JiraWrite[]>;
-  /** Every request the fake Jira answered since the last seed. */
+  /** Every API request the fake Jira answered since the last seed, except saved views, the event stream, avatars and
+   *  adding or removing a board. */
   requests(): Promise<FixtureRequest[]>;
   /** Every file the app uploaded to Jira since the last seed. */
   uploads(): Promise<FixtureUpload[]>;

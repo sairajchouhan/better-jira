@@ -34,6 +34,38 @@ test("a title and a comment changed in Jira show in the open issue without a rel
   await expect(page.getByText("Posted in Jira")).toBeVisible();
 });
 
+test("a comment deleted in Jira leaves the open issue without a reload", async ({ page, app }) => {
+  await app.seed({ writable: true });
+  await openIssue(page, "TEST-2", "Browser fixture 2");
+  const { commentId } = await app.changeInJira({ key: "TEST-2", comment: { body: "Short-lived comment" } });
+  await expect(page.getByText("Short-lived comment")).toBeVisible();
+
+  await app.changeInJira({ key: "TEST-2", deleteComment: commentId });
+
+  await expect(page.getByText("Short-lived comment")).toHaveCount(0);
+});
+
+test("a status changed in Jira moves the issue to its new column without a reload", async ({ page, app }) => {
+  await app.seed({ writable: true });
+  const row = (grid: string) =>
+    page.getByRole("grid", { name: grid }).getByRole("row", { name: "TEST-2 Browser fixture 2", exact: true });
+  await expect(row("Todo")).toBeVisible();
+
+  await app.changeInJira({ key: "TEST-2", status: "done" });
+
+  await expect(row("Done")).toBeVisible();
+  await expect(row("Todo")).toHaveCount(0);
+});
+
+test("an issue made in Jira shows on the board without a reload", async ({ page, app }) => {
+  await app.seed({ writable: true });
+  await expect(page.getByRole("grid", { name: "Todo" }).getByRole("row").first()).toBeVisible();
+
+  await app.changeInJira({ key: "TEST-50", summary: "Made in Jira" });
+
+  await expect(page.getByRole("grid", { name: "Todo" }).getByRole("row", { name: "TEST-50 Made in Jira", exact: true })).toBeVisible();
+});
+
 test("a comment whose answer Jira lost is sent again and lands once", async ({ page, app }) => {
   await app.seed({ writable: true, jiraComments: true });
   await openIssue(page, "TEST-2", "Browser fixture 2");
@@ -70,6 +102,7 @@ test("subscribing writes a watcher Jira keeps, so it survives a reload", async (
   await page.getByRole("button", { name: "Subscribe to issue" }).click();
   await expect(page.getByRole("button", { name: "Unsubscribe from issue" })).toBeVisible();
   await expect(page.getByRole("status", { name: "Jira save status" })).toHaveText("Saved to Jira");
+  expect((await app.jiraIssue("TEST-2")).issue.watching).toBe(true);
   await page.reload();
   await expect(page.getByRole("button", { name: "Unsubscribe from issue" })).toBeVisible();
 });
@@ -190,4 +223,29 @@ test("an upload Jira refuses offers Retry, which lands it once Jira accepts it",
   await app.refuse([]);
   await page.getByRole("button", { name: "Retry" }).click();
   await expect.poll(app.uploads).toEqual([expect.objectContaining({ key: "TEST-2", name: "media-image.png" })]);
+});
+
+test("a file whose upload answer was lost is found by its id on a later load and removed from Jira", async ({ page, app }) => {
+  await app.seed({ writable: true });
+  await openIssue(page, "TEST-2", "Browser fixture 2");
+  // Jira keeps the file, but the answer never reaches the app.
+  await page.route("**/api/issues/TEST-2/attachments", async (route) => {
+    await route.fetch();
+    await route.abort();
+  });
+
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Attach images, files, or videos" }).last().click();
+  await (await chooser).setFiles(image);
+  await expect.poll(app.uploads).toHaveLength(1);
+  await page.unrouteAll();
+
+  // The user comes back after the upload has settled.
+  await page.clock.install({ time: Date.now() + 3 * 60_000 });
+  await page.reload();
+
+  const files = async () => (await app.jiraIssue("TEST-2")).full.fields.attachment.map((a: any) => a.filename);
+  await expect.poll(files).not.toContain("media-image.png");
+  const asked = (await app.requests()).filter((r) => r.path.startsWith("/api/uploads/"));
+  expect(asked.map((r) => r.status)).toEqual([200]);
 });

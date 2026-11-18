@@ -1378,6 +1378,7 @@ async function handle(req: Request) {
   const uploaded = path.match(/^\/api\/uploads\/([^/]+)$/);
   if (uploaded) {
     const id = made.get(`upload:${decodeURIComponent(uploaded[1]!)}`);
+    requests.push({ method: req.method, path, status: id ? 200 : 404 });
     return id ? Response.json({ id }) : Response.json({ error: "No such upload" }, { status: 404 });
   }
   // Stands in for the server's addBoard: board 2 exists on the fixture site, nothing else does.
