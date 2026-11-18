@@ -1,64 +1,39 @@
 import { test as base } from "@playwright/test";
 import { spawn, type ChildProcess } from "node:child_process";
-import type { Op } from "../src/shared/jira-ops";
+import type {
+  FixtureRequest,
+  FixtureSettings,
+  FixtureUpload,
+  InboxPush,
+  JiraChange,
+  JiraWrite,
+} from "../scripts/fixture-controls";
+
+export type { FixtureSettings, JiraWrite } from "../scripts/fixture-controls";
 
 export { expect } from "@playwright/test";
-
-/** What `POST /__fixture` reads (scripts/fixture-server.ts). Every field left out resets to its default. */
-export type FixtureSettings = Partial<{
-  /** Jira accepts writes; without it every op answers 405 and none is recorded. */
-  writable: boolean;
-  /** Jira keeps field edits, so the mirror reads them back. */
-  jiraEdits: boolean;
-  /** Jira keeps comments posted, edited and deleted from the app. */
-  jiraComments: boolean;
-  /** Jira accepts new issues. */
-  createSuccess: boolean;
-  /** Jira refuses ops of these kinds ("fields", "comment", "create"...) or fields ops naming these fields, with `refuseText`. */
-  refuse: string[];
-  refuseText: string;
-  clientFailures: number;
-  detailFailures: number;
-  syncErrors: string[];
-  syncingReads: number;
-  streaming: number;
-  includeMedia: boolean;
-  mediaInComment: boolean;
-  mediaFailure: number;
-  contentFailure: number;
-  unmappedMedia: boolean;
-  mediaDelay: number;
-  mediaVariant: string;
-  threadedComments: boolean;
-  distinctCreator: boolean;
-  subtask: boolean;
-  epics: boolean;
-  crossLinks: boolean;
-  bulk: number;
-  bulkVariety: number;
-  sharedBoards: boolean;
-  history: Record<string, unknown[]>;
-  historyDelay: number;
-  smartLinks: boolean;
-  pullRequests: boolean;
-  pullRequestDelay: number;
-  catalog: Partial<{ priorities: string[]; labels: string[]; users: string[] }>;
-  inboxExtra: number;
-  inboxExtraUnread: boolean;
-  inboxRichOutside: boolean;
-  inboxFail: boolean;
-  inboxDelay: number;
-  inboxWriteDelays: number[];
-}>;
-
-/** One write the app sent to Jira: the ops for one issue, as `GET /__fixture` lists them. */
-export type JiraWrite = { key: string; ops: Op[] };
 
 type App = {
   /** Resets the fake Jira with these settings, then opens the app. */
   seed(settings?: FixtureSettings): Promise<void>;
-  /** Every write the app has sent to Jira since the last seed. */
+  /** Every write the app has sent to Jira since the last seed (a resend shows twice). */
   jiraWrites(): Promise<JiraWrite[]>;
+  /** Every request the fake Jira answered since the last seed. */
+  requests(): Promise<FixtureRequest[]>;
+  /** Every file the app uploaded to Jira since the last seed. */
+  uploads(): Promise<FixtureUpload[]>;
+  /** What Jira holds for `key` now: its slim and full records, both null once deleted or never made. */
+  jiraIssue(key: string): Promise<{ issue: any; full: any }>;
+  /** Every issue Jira holds now. */
+  jiraIssues(): Promise<any[]>;
+  /** Jira refuses ops of these kinds or fields from now on (none: stops refusing), with `text`. */
+  refuse(kinds: string[], text?: string): Promise<void>;
+  /** The next `count` writes get no answer from Jira (503 retry); `applied`: Jira made them and only the answer was lost. */
+  unanswered(count: number, options?: { applied?: boolean }): Promise<void>;
+  /** Someone changes an issue in Jira, and open tabs are told. Answers the id of a comment it added. */
+  changeInJira(change: JiraChange): Promise<{ commentId?: string }>;
+  /** A new notification lands in Jira's bell, and open tabs are told. */
+  pushInbox(notification: InboxPush): Promise<void>;
 };
 
 /** Starts the built fixture server on `port`; resolves once this child, not another process, is listening. */
@@ -110,16 +85,29 @@ export const test = base.extend<{ app: App }, { fixtureUrl: string }>({
     { scope: "worker", timeout: 60_000 },
   ],
   app: async ({ page, fixtureUrl }, use) => {
+    /** A control endpoint's JSON answer; anything else (an unrouted path answers the app's HTML) fails the test. */
+    const call = async <T>(path: string, body?: unknown): Promise<T> => {
+      const response = await fetch(`${fixtureUrl}${path}`, body === undefined ? {} : { method: "POST", body: JSON.stringify(body) });
+      if (!response.ok || !response.headers.get("content-type")?.includes("json"))
+        throw new Error(`Fixture ${path} answered ${response.status}`);
+      return response.json() as Promise<T>;
+    };
+    const log = () =>
+      call<{ writes: JiraWrite[]; requests: FixtureRequest[]; uploads: FixtureUpload[] }>("/__fixture");
     await use({
       async seed(settings = {}) {
-        const reset = await fetch(`${fixtureUrl}/__fixture`, { method: "POST", body: JSON.stringify(settings) });
-        if (!reset.ok) throw new Error(`Fixture reset failed: ${reset.status}`);
+        await call("/__fixture", settings);
         await page.goto(fixtureUrl);
       },
-      async jiraWrites() {
-        const log = (await (await fetch(`${fixtureUrl}/__fixture`)).json()) as { writes: JiraWrite[] };
-        return log.writes;
-      },
+      jiraWrites: async () => (await log()).writes,
+      requests: async () => (await log()).requests,
+      uploads: async () => (await log()).uploads,
+      jiraIssue: (key) => call(`/__fixture/jira?key=${encodeURIComponent(key)}`),
+      jiraIssues: async () => (await call<{ issues: any[] }>("/__fixture/jira")).issues,
+      refuse: async (kinds, text) => void (await call("/__fixture/refuse", { refuse: kinds, refuseText: text })),
+      unanswered: async (count, { applied } = {}) => void (await call("/__fixture/retry", { count, applied })),
+      changeInJira: (change) => call("/__fixture/jira", change),
+      pushInbox: async (notification) => void (await call("/__fixture/inbox", notification)),
     });
   },
 });

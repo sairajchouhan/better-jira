@@ -1,7 +1,8 @@
 import { Database } from "bun:sqlite";
 import { viewRepository } from "../src/server/view-repository";
 const viewDb = new Database(":memory:");
-const views = viewRepository(viewDb);
+// Like the server, a saved view tells every open tab ("views").
+const views = viewRepository(viewDb, () => push("views"));
 /** Disposable browser-test data. No Jira client, credentials, or cache are imported. */
 import index from "../src/client/index.html";
 import editorMediaFixture from "./editor-media-fixture.html";
@@ -13,6 +14,11 @@ import { markGroup } from "./fixture-inbox";
 import { boardOps } from "./fixture-ops";
 import { boardFromInput } from "../src/server/config";
 import { avatarProxy, memoryAvatarCache } from "../src/shared/avatar-proxy";
+import { DESCRIPTION_CONFLICT } from "../src/shared/jira-ops";
+import { descriptionBases, textToAdf } from "../src/shared/document";
+import { TITLE_MAX, TITLE_TOO_LONG } from "../src/shared/issue-title";
+import { inverseKind } from "../src/shared/relations";
+import type { FixtureSettings, FixtureUpload, InboxPush, JiraChange, Refusal, Unanswered } from "./fixture-controls";
 
 /** A file in scripts/fixtures, from the repo root, so the built copy in dist/ finds it too. */
 const fixtureFile = (name: string) => Bun.file(`scripts/fixtures/${name}`);
@@ -232,7 +238,14 @@ let clientFailures = 0,
   pullRequests = false,
   pullRequestDelay = 0,
   /** The site's priority, label and user catalog (/api/options), beyond the values the issues hold. */
-  catalog: { priorities: string[]; labels: string[]; users: string[] } = { priorities: [], labels: [], users: [] };
+  catalog: { priorities: string[]; labels: string[]; users: string[]; versions: string[] } = {
+    priorities: [],
+    labels: [],
+    users: [],
+    versions: [],
+  };
+/** Project TEST's fix versions (Linear's milestones), as `/api/options` and the mirror name them. */
+const versions = () => catalog.versions.map((name, i) => ({ id: String(10000 + i), name }));
 /** TEST-1's links as the mirror projects them: made-up keys and text in the shape work Jira sends. */
 const crossRelations = [
   {
@@ -262,7 +275,34 @@ const writes: { key: string; ops: any[] }[] = [],
   moved = new Map<string, string>(),
   ranked = new Map<string, string>(),
   /** `jiraEdits`: field edits Jira kept on existing issues, in the mirror's shape, as live Jira answers with them. */
-  edited = new Map<string, Record<string, unknown>>();
+  edited = new Map<string, Record<string, unknown>>(),
+  /** Watchers of issues whose watchers changed, as Jira's /watchers answers. */
+  watchers = new Map<string, { id: string; name: string }[]>(),
+  /** Issue links the app added, by `from kind target`, read back on both ends as Jira's issuelinks are. */
+  addedLinks = new Map<string, { from: string; target: string; kind: string }>(),
+  /** Each issue's remote ("web") links, as the server reads them with the issue's details. */
+  remoteLinks = new Map<string, { url: string; title: string }[]>(),
+  /** Files Jira received, with their bytes, and the attachments the app deleted (uploaded or `includeMedia` ones). */
+  uploads: (FixtureUpload & { blob: Blob })[] = [],
+  removedAttachments = new Set<string>(),
+  /** Issues deleted, by the app or in Jira: gone from every read, their detail answers 404. */
+  deletedKeys = new Set<string>(),
+  /** Jira's `updated` for issues changed since the reset, so a tab sees its open issue is stale. */
+  stamped = new Map<string, string>(),
+  /** The server's ledger (src/server/jira-writes.ts `once`): what each `client` id made, so a resend after a lost answer gets
+   *  the same issue, comment or file. */
+  made = new Map<string, string>();
+/** `/__fixture/retry`: how many op sends still answer 503, and whether Jira applies them anyway (a lost answer). */
+let unanswered: Required<Unanswered> = { count: 0, applied: false },
+  attachmentId = 20000;
+/** The server's refusal when a write clears a priority (src/server/jira-writes.ts, not exported there). */
+const PRIORITY_REQUIRED = "Jira keeps a priority on every saved issue. Pick one instead of clearing it.";
+const stamp = (key: string) => void stamped.set(key, new Date().toISOString());
+/** The links the app added that end at `key`, seen from `key`. */
+const addedRelations = (key: string) =>
+  [...addedLinks.values()].flatMap((l) =>
+    l.from === key ? [{ key: l.target, kind: l.kind }] : l.target === key ? [{ key: l.from, kind: inverseKind(l.kind) }] : [],
+  );
 /** `jiraEdits` opts into Jira keeping field edits; `refuse` makes Jira refuse a write: every op of that kind ("fields",
  *  "comment", "create"...), or a fields op naming that field ("summary", "parent"), answered with `refuseText`. */
 let jiraEdits = false,
@@ -272,15 +312,19 @@ let jiraEdits = false,
 let jiraComments = false;
 const posted = new Map<string, any[]>();
 let commentId = 9000;
-/** A comment op as Jira would apply it; a new comment's id, for `created[ref]`. */
-function postComment(key: string, op: any): string | undefined {
+/** A comment op as Jira would apply it; a new comment's id, for `created[ref]`. A resend of a `client`'s comment gets the
+ *  comment the first send made. */
+function postComment(key: string, op: any, author = { accountId: user.id, displayName: user.name }): string | undefined {
   const list = posted.get(key) ?? [];
   posted.set(key, list);
   if (op.op === "comment") {
+    const ledger = op.client && `comment:${op.client}`;
+    if (ledger && made.has(ledger)) return made.get(ledger);
     const id = String(commentId++);
+    if (ledger) made.set(ledger, id);
     list.push({
       id,
-      author: { accountId: user.id, displayName: user.name },
+      author,
       created: new Date().toISOString(),
       updated: new Date().toISOString(),
       body: op.body,
@@ -307,7 +351,33 @@ function mirrored(key: string, fields: Record<string, any>) {
       ...((before?.labels ?? []) as string[]).filter((l) => !fields.labelEdits.remove.includes(l)),
       ...fields.labelEdits.add,
     ];
+  if (fields.milestones !== undefined)
+    out.milestones = versions().filter((v) => fields.milestones.includes(v.id));
   return out;
+}
+/** A new issue as Jira keeps it: only the fields the create set, on Jira's defaults otherwise. */
+function newIssue(key: string, fields: Record<string, any>, creator: { id: string; name: string } = user) {
+  const { description: _, status, project, parent, type, ...rest } = fields,
+    now = new Date().toISOString(),
+    above = parent ? (listed().find((i) => i.key === parent) as any) : undefined;
+  return {
+    ...issues[1]!,
+    key,
+    summary: "",
+    status: status ?? "backlog",
+    rank: `0|i9${String(createdIssues.size).padStart(4, "0")}:`,
+    type: type ?? "Task",
+    priority: "Normal",
+    assignee: null,
+    labels: [],
+    due: null,
+    creator,
+    created: now,
+    updated: now,
+    project: { key: project ?? "TEST", name: "Audit" },
+    ...(parent ? { parent, parentLevel: above?.level ?? 0 } : {}),
+    ...mirrored(key, rest),
+  };
 }
 /** Jira's development panel pull requests as the server projects them (src/shared/pull-requests.ts), made up. */
 const fixturePullRequests: Record<string, unknown[]> = {
@@ -401,42 +471,129 @@ const listed = () =>
       : {}),
     ...(pullRequests ? fixturePullRequestFields[issue.key] : {}),
     ...edited.get(issue.key),
-    comments: threadedComments ? thread.length : mediaInComment || (smartLinks && issue.key === "TEST-2") ? 1 : 0, // the mirror list counts the same Jira comments the detail returns
-  }));
+    ...(stamped.has(issue.key) ? { updated: stamped.get(issue.key) } : {}),
+    ...(watchers.has(issue.key)
+      ? {
+          watchers: watchers.get(issue.key),
+          watchersComplete: true,
+          watching: watchers.get(issue.key)!.some((p) => p.id === user.id),
+        }
+      : {}),
+  }))
+    .filter((issue: any) => !deletedKeys.has(issue.key))
+    .map((issue: any) => {
+      const relations = [...(issue.relations ?? []), ...addedRelations(issue.key)];
+      return {
+        ...issue,
+        ...(relations.length ? { relations } : {}),
+        // The mirror list counts the same Jira comments the detail returns.
+        comments:
+          (threadedComments ? thread.length : mediaInComment || (smartLinks && issue.key === "TEST-2") ? 1 : 0) +
+          (posted.get(issue.key)?.length ?? 0),
+      };
+    });
+/** The real server's refusals (src/server/jira-writes.ts), after the ones a test asked for with `refuse`. */
+function refusal(key: string, ops: any[]): string | undefined {
+  if (
+    ops.some(
+      (op) => refuse.includes(op.op) || (op.op === "fields" && Object.keys(op.fields).some((f) => refuse.includes(f))),
+    )
+  )
+    return refuseText;
+  const squash = (text: string) => text.replace(/\s+/g, " ").trim();
+  for (const op of ops) {
+    if (op.op !== "fields" && op.op !== "create") continue;
+    const fields = op.fields;
+    if (fields.summary !== undefined && fields.summary.length > TITLE_MAX) return TITLE_TOO_LONG;
+    if (op.op === "create") continue;
+    if (fields.project !== undefined) return "Jira's API cannot move an issue to another project.";
+    if (fields.priority === null) return PRIORITY_REQUIRED;
+    // Someone changed the description in Jira since this edit started from it.
+    if (
+      fields.descriptionBase !== undefined &&
+      !descriptionBases(full(key).fields.description).some((text) => squash(text) === squash(fields.descriptionBase))
+    )
+      return DESCRIPTION_CONFLICT;
+  }
+}
+/** Jira's copy of an issue, as a write's answer carries it: null for one Jira deleted. */
+const jiraIssue = (key: string) =>
+  deletedKeys.has(key) ? { issue: null, full: null } : { issue: listed().find((i) => i.key === key), full: full(key) };
 /** Stands in for the server's applyOps: type changes follow live Jira, which refuses Subtask ↔ standard types. */
 function applyOps(key: string, ops: any[]) {
   writes.push({ key, ops });
-  const refused = ops.find(
-    (op) => refuse.includes(op.op) || (op.op === "fields" && Object.keys(op.fields).some((f) => refuse.includes(f))),
-  );
+  const refused = refusal(key, ops);
   if (refused)
     return Response.json(
-      { key, created: {}, others: [], error: refuseText, issue: listed().find((i) => i.key === key) ?? null, full: full(key) },
+      { key, created: {}, others: [], error: refused, issue: listed().find((i) => i.key === key) ?? null, full: full(key) },
       { status: 422 },
     );
   const create = ops.find((op) => op.op === "create");
   const created: Record<string, string> = {};
   if (create) {
     if (!createSuccess) return Response.json({ key, created, others: [], error: "Jira refused the new issue." }, { status: 422 });
-    const next = `TEST-${90 + createdIssues.size}`;
+    // A resend of a create whose answer was lost gets the issue the first send made.
+    const ledger = create.client && `create:${create.client}`,
+      next = (ledger && made.get(ledger)) || `TEST-${90 + createdIssues.size}`;
     created[key] = next;
     key = next;
-    const { description, ...fields } = create.fields;
-    createdIssues.set(key, { ...issues[1]!, ...fields, key });
-    if (description) descriptions.set(key, description);
+    if (!createdIssues.has(key)) {
+      if (ledger) made.set(ledger, key);
+      createdIssues.set(key, newIssue(key, create.fields));
+      if (create.fields.description) descriptions.set(key, create.fields.description);
+    }
   }
+  const touched = new Set<string>();
   for (const op of ops) {
     if (jiraComments && op.op.startsWith("comment")) {
       const id = postComment(key, op);
       if (id) created[op.ref] = id;
     }
-    if (jiraEdits && op.op === "fields" && !createdIssues.has(key))
-      edited.set(key, { ...edited.get(key), ...mirrored(key, op.fields) });
-    if (jiraEdits && op.op === "status") edited.set(key, { ...edited.get(key), status: op.status });
     if (op.op === "fields" && createdIssues.has(key))
-      createdIssues.set(key, { ...createdIssues.get(key), ...op.fields });
+      createdIssues.set(key, { ...createdIssues.get(key), ...mirrored(key, op.fields) });
+    else if (jiraEdits && op.op === "fields") edited.set(key, { ...edited.get(key), ...mirrored(key, op.fields) });
+    if (jiraEdits && op.op === "status") edited.set(key, { ...edited.get(key), status: op.status });
     if (op.op === "fields" && op.fields.description) descriptions.set(key, op.fields.description);
+    if (op.op === "watcher") {
+      const list = (watchers.get(key) ?? []).filter((p) => p.id !== op.id),
+        person = people.find((p) => p.id === op.id) ?? { id: op.id, name: op.id };
+      watchers.set(key, op.add ? [...list, person] : list);
+    }
+    if (op.op === "attachment.delete") removedAttachments.add(op.id);
+    if (op.op === "link") {
+      touched.add(op.target);
+      if (!op.remove) addedLinks.set(`${key} ${op.kind} ${op.target}`, { from: key, target: op.target, kind: op.kind });
+      else {
+        unlinked.add(pair(key, op.target));
+        for (const [id, l] of addedLinks)
+          if (
+            (l.from === key && l.target === op.target && l.kind === op.kind) ||
+            (l.from === op.target && l.target === key && l.kind === inverseKind(op.kind))
+          )
+            addedLinks.delete(id);
+      }
+    }
+    // Matched by URL, as the server does: a new title edits the link in place.
+    if (op.op === "weblink") {
+      const list = remoteLinks.get(key) ?? [],
+        link = { url: op.url, title: op.title || op.url };
+      remoteLinks.set(
+        key,
+        op.remove
+          ? list.filter((l) => l.url !== op.url)
+          : list.some((l) => l.url === op.url)
+            ? list.map((l) => (l.url === op.url ? link : l))
+            : [...list, link],
+      );
+    }
+    // Jira deletes the issue's subtasks with it.
+    if (op.op === "delete")
+      for (const gone of listed().filter((i: any) => i.key === key || i.parent === key)) deletedKeys.add(gone.key);
   }
+  stamp(key);
+  for (const other of touched) stamp(other);
+  const others = () => [...touched].flatMap((other) => listed().find((i) => i.key === other) ?? []);
+  if (deletedKeys.has(key)) return Response.json({ key, created, others: others(), ...jiraIssue(key) });
   const issue = listed().find((i) => i.key === key)!,
     type = ops.find((op) => op.op === "fields" && op.fields.type)?.fields.type;
   if (type && (issue.type === "Subtask") !== (type === "Subtask"))
@@ -451,20 +608,11 @@ function applyOps(key: string, ops: any[]) {
       { status: 422 },
     );
   if (type) types.set(key, type);
-  for (const op of ops)
-    if (op.op === "fields" && "parent" in op.fields && !createdIssues.has(key)) parents.set(key, op.fields.parent);
-  for (const op of ops)
-    if (op.op === "link" && op.remove) unlinked.add(pair(key, op.target));
+  for (const op of ops) if (op.op === "fields" && "parent" in op.fields) parents.set(key, op.fields.parent);
   const board = boardOps(key, ops, new Map(listed().flatMap((i: any) => (i.rank ? [[i.key, i.rank] as const] : []))));
   if (board.status !== undefined) moved.set(key, board.status);
   if (board.rank !== undefined) ranked.set(key, board.rank);
-  return Response.json({
-    key,
-    created,
-    others: [],
-    full: full(key),
-    issue: listed().find((i) => i.key === key),
-  });
+  return Response.json({ key, created, others: others(), ...jiraIssue(key) });
 }
 // Jira's bell feed in the gateway's own shape (from a live cloudsairaj dump), so the fixture runs the real mapping.
 const notification = (
@@ -819,13 +967,28 @@ const naturalLayoutNodes = [
     content: [{ type: "text", text: "Text beside a naturally sized image. ".repeat(20) }],
   },
 ];
-/** The issue's full record, with the comments `jiraComments` kept. */
+/** The issue's full record as the server reads it: with the comments Jira kept, the files uploaded and not deleted, and its
+ *  remote links. An issue made in the app or in Jira has only the description it was given. */
 function full(key: string): any {
   const record = jiraFull(key),
-    kept = posted.get(key);
-  if (!kept?.length) return record;
-  const { total, comments } = record.fields.comment;
-  return { ...record, fields: { ...record.fields, comment: { total: total + kept.length, comments: [...comments, ...kept] } } };
+    kept = posted.get(key) ?? [],
+    { total, comments } = record.fields.comment;
+  const attachment = [
+    ...(record.fields.attachment ?? []),
+    ...uploads
+      .filter((u) => u.key === key)
+      .map((u) => ({ id: u.id, filename: u.name, mimeType: u.type, size: u.size, mediaId: u.mediaId })),
+  ].filter((a) => !removedAttachments.has(a.id));
+  return {
+    ...record,
+    fields: {
+      ...record.fields,
+      ...(createdIssues.has(key) ? { description: descriptions.get(key) ?? null } : {}),
+      attachment,
+      comment: { total: total + kept.length, comments: [...comments, ...kept] },
+    },
+    remotelinks: remoteLinks.get(key) ?? [],
+  };
 }
 function jiraFull(key: string): any {
   const nestedContent = [
@@ -934,9 +1097,12 @@ function jiraFull(key: string): any {
   };
 }
 const gateway = attachmentGateway({
-  readIssue: async (key) => (issues.some((i) => i.key === key) ? full(key) : undefined),
+  readIssue: async (key) => (listed().some((i) => i.key === key) ? full(key) : undefined),
   read: async (id, options) => {
-    const asset = [...mediaAssets, longAsset].find((a) => a.id === id);
+    const upload = uploads.find((u) => u.id === id);
+    const asset = upload
+      ? { mediaId: upload.mediaId, mimeType: upload.type, file: upload.blob }
+      : [...mediaAssets, longAsset].map((a) => ({ ...a, file: fixtureFile(a.filename) })).find((a) => a.id === id);
     if (!asset) return new Response(null, { status: 404 });
     if (options.redirect) {
       requests.push({
@@ -952,7 +1118,7 @@ const gateway = attachmentGateway({
       });
     }
     if (contentFailure) return new Response(null, { status: contentFailure });
-    const file = fixtureFile(asset.filename);
+    const file = asset.file;
     let start = 0,
       end = file.size - 1,
       status = 200;
@@ -991,13 +1157,89 @@ const gateway = attachmentGateway({
     });
   },
 });
+/** Someone else's change in Jira (`/__fixture/jira`), kept the way the mirror would read it back. */
+function changeInJira(change: JiraChange) {
+  const { key } = change,
+    alexAuthor = { accountId: alex.id, displayName: alex.name };
+  if (!listed().some((i) => i.key === key) && !deletedKeys.has(key) && change.summary !== undefined)
+    createdIssues.set(key, newIssue(key, { summary: change.summary, status: change.status ?? "todo" }, alex));
+  const fields = mirrored(key, {
+    summary: change.summary,
+    priority: change.priority,
+    assignee: change.assignee,
+    labels: change.labels,
+  });
+  if (createdIssues.has(key)) createdIssues.set(key, { ...createdIssues.get(key), ...fields });
+  else edited.set(key, { ...edited.get(key), ...fields });
+  if (change.status !== undefined) {
+    moved.set(key, change.status);
+    if (edited.get(key)?.status !== undefined) edited.get(key)!.status = change.status;
+    if (createdIssues.has(key)) createdIssues.get(key).status = change.status;
+  }
+  if (change.description !== undefined)
+    descriptions.set(key, typeof change.description === "string" ? textToAdf(change.description) : change.description);
+  let comment: string | undefined;
+  if (change.comment)
+    comment = postComment(key, { op: "comment", body: textToAdf(change.comment.body) }, {
+      accountId: change.comment.author ? change.comment.author.toLowerCase() : alexAuthor.accountId,
+      displayName: change.comment.author ?? alexAuthor.displayName,
+    });
+  if (change.deleteComment) postComment(key, { op: "comment.delete", id: change.deleteComment });
+  if (change.delete)
+    for (const gone of listed().filter((i: any) => i.key === key || i.parent === key)) deletedKeys.add(gone.key);
+  stamp(key);
+  if (!change.unseen) push("changed");
+  return { ok: true, ...(comment ? { commentId: comment } : {}) };
+}
+/** `POST /api/issues/:key/attachments` as the server answers it (src/server/index.ts): once per `client`, with a media id. */
+async function upload(req: Request, key: string) {
+  const form = await req.formData(),
+    file = form.get("file"),
+    client = form.get("client"),
+    ledger = typeof client === "string" && client ? `upload:${client}` : undefined;
+  if (!(file instanceof File)) return Response.json({ error: "Choose a file." }, { status: 400 });
+  if (refuse.includes("upload")) return Response.json({ error: refuseText }, { status: 422 });
+  if (!listed().some((i) => i.key === key))
+    return Response.json({ error: "Issue does not exist or you do not have permission to see it." }, { status: 422 });
+  let done = ledger ? uploads.find((u) => u.id === made.get(ledger)) : undefined;
+  if (!done) {
+    done = {
+      key,
+      id: String(attachmentId++),
+      mediaId: crypto.randomUUID(),
+      name: file.name,
+      type: file.type || "application/octet-stream",
+      size: file.size,
+      ...(ledger ? { client: client as string } : {}),
+      blob: new Blob([await file.arrayBuffer()]),
+    };
+    uploads.push(done);
+    if (ledger) made.set(ledger, done.id);
+    stamp(key);
+  }
+  return Response.json({
+    attachment: {
+      id: done.id,
+      name: done.name,
+      type: done.type,
+      size: done.size,
+      url: `/api/issues/${encodeURIComponent(key)}/attachments/${done.id}`,
+      mediaId: done.mediaId,
+    },
+    collection: `jira-${10000 + Number(key.split("-").at(-1))}`,
+  });
+}
+/** Tells every open tab's event stream `kind`, as the server does ("changed", "inbox", "views"). */
+function push(kind: string) {
+  for (const listener of eventListeners) listener.enqueue(new TextEncoder().encode(`data: ${kind}\n\n`));
+}
 async function handle(req: Request) {
   const url = new URL(req.url),
     path = url.pathname;
   if (path === "/__fixture" && req.method === "POST") {
     viewDb.run("DELETE FROM saved_views");
     viewDb.run("DELETE FROM view_imports");
-    const settings = await req.json();
+    const settings: FixtureSettings = await req.json();
     clientFailures = settings.clientFailures ?? 0;
     syncErrors = settings.syncErrors ?? [];
     syncingReads = settings.syncingReads ?? 0;
@@ -1038,6 +1280,7 @@ async function handle(req: Request) {
       priorities: settings.catalog?.priorities ?? [],
       labels: settings.catalog?.labels ?? [],
       users: settings.catalog?.users ?? [],
+      versions: settings.catalog?.versions ?? [],
     };
     inbox = freshInbox(settings.inboxExtra ?? 0, settings.inboxExtraUnread ?? false, settings.inboxRichOutside ?? false);
     inboxFail = settings.inboxFail ?? false;
@@ -1050,38 +1293,49 @@ async function handle(req: Request) {
     unlinked.clear();
     moved.clear();
     ranked.clear();
+    watchers.clear();
+    addedLinks.clear();
+    remoteLinks.clear();
+    uploads.length = 0;
+    removedAttachments.clear();
+    deletedKeys.clear();
+    stamped.clear();
+    made.clear();
+    unanswered = { count: 0, applied: false };
+    attachmentId = 20000;
+    commentId = 9000;
     return Response.json({ ok: true });
   }
   // Turns Jira's refusals on or off mid-test, keeping everything else the fixture holds.
   if (path === "/__fixture/refuse" && req.method === "POST") {
-    const settings = await req.json();
+    const settings: Refusal = await req.json();
     refuse = settings.refuse ?? [];
     refuseText = settings.refuseText ?? "Jira refused the change.";
     return Response.json({ ok: true });
   }
+  if (path === "/__fixture/retry" && req.method === "POST") {
+    const next: Unanswered = await req.json();
+    unanswered = { count: next.count, applied: next.applied ?? false };
+    return Response.json({ ok: true });
+  }
+  if (path === "/__fixture/jira" && req.method === "POST") return Response.json(changeInJira(await req.json()));
+  // What Jira holds now: every issue, or one issue's slim and full records (null once deleted).
+  if (path === "/__fixture/jira" && req.method === "GET") {
+    const key = url.searchParams.get("key"),
+      issue = key && listed().find((i) => i.key === key);
+    return Response.json(key ? { issue: issue || null, full: issue ? full(key) : null } : { issues: listed() });
+  }
   if (path === "/__fixture" && req.method === "GET")
-    return Response.json({ requests, rich, writes });
+    return Response.json({ requests, rich, writes, uploads: uploads.map(({ blob: _, ...u }) => u) });
   // A new notification lands in Jira's bell as its issue's group head, and the server tells open tabs, as its poll does.
   if (path === "/__fixture/inbox" && req.method === "POST") {
-    const n: {
-      n: number;
-      key: string;
-      title: string;
-      type?: string;
-      message: string;
-      category?: "direct" | "watching";
-      read?: boolean;
-      /** Who acted, when not the message's first word. */
-      actor?: string;
-      comment?: string;
-      commentId?: string;
-    } = await req.json();
+    const n: InboxPush = await req.json();
     let node = notification(n.n, n.key, n.title, n.type ?? "updated", n.message, n.category ?? "direct", n.read ?? false, 0, n.comment);
     if (n.commentId) node = onComment(node, n.commentId);
     if (n.actor) node.headNotification.content.actor.displayName = n.actor;
     inbox.nodes = [node, ...inbox.nodes.filter((g) => g.groupId !== node.groupId)];
     if (!n.read) inbox.unseen += 1;
-    for (const listener of eventListeners) listener.enqueue(new TextEncoder().encode("data: inbox\n\n"));
+    push("inbox");
     return Response.json({ ok: true });
   }
   if (path === "/api/inbox") return inboxRoute(req, url);
@@ -1098,8 +1352,34 @@ async function handle(req: Request) {
   let status = 200,
     body: unknown;
   const ops = path.match(/^\/api\/issues\/([^/]+)\/ops$/);
-  if (writable && ops && req.method === "POST")
-    return applyOps(decodeURIComponent(ops[1]!), (await req.json()).ops);
+  if (writable && ops && req.method === "POST") {
+    const key = decodeURIComponent(ops[1]!),
+      sent = (await req.json()).ops;
+    let answer: Response;
+    // Jira didn't answer, or its answer was lost (`applied`): the server says to send again later (src/server/jira-writes.ts).
+    if (unanswered.count > 0) {
+      unanswered.count--;
+      if (unanswered.applied) applyOps(key, sent);
+      answer = Response.json(
+        { error: "Jira didn't answer. The change will be sent again shortly.", retry: true, key, created: {}, others: [] },
+        { status: 503 },
+      );
+    } else answer = applyOps(key, sent);
+    requests.push({ method: req.method, path, status: answer.status });
+    return answer;
+  }
+  const attachments = path.match(/^\/api\/issues\/([^/]+)\/attachments$/);
+  if (writable && attachments && req.method === "POST") {
+    const answer = await upload(req, decodeURIComponent(attachments[1]!));
+    requests.push({ method: req.method, path, status: answer.status });
+    return answer;
+  }
+  // The attachment an upload made, by the app's id for it.
+  const uploaded = path.match(/^\/api\/uploads\/([^/]+)$/);
+  if (uploaded) {
+    const id = made.get(`upload:${decodeURIComponent(uploaded[1]!)}`);
+    return id ? Response.json({ id }) : Response.json({ error: "No such upload" }, { status: 404 });
+  }
   // Stands in for the server's addBoard: board 2 exists on the fixture site, nothing else does.
   if (path === "/api/boards" && req.method === "POST") {
     try {
@@ -1149,7 +1429,7 @@ async function handle(req: Request) {
       priorities: catalog.priorities.map((name, i) => ({ id: String(i + 1), name })),
       users: catalog.users.map((name, i) => ({ id: `catalog-${i}`, name })),
       labels: catalog.labels,
-      versions: {},
+      versions: { TEST: versions() },
       types: { TEST: issueTypes },
     };
   else if (path === "/api/view-defaults") body = {};
@@ -1162,7 +1442,17 @@ async function handle(req: Request) {
     ].filter((person) => person.name.toLowerCase().includes(query));
   } else if (path === "/api/properties")
     body = {
-      entries: {},
+      // Like the server, every mirrored issue (with its remote links' URLs), so changes made in Jira reach open tabs; none
+      // while the first sync still runs.
+      entries:
+        syncingReads > 0
+          ? {}
+          : Object.fromEntries(
+              listed().map((i: any) => [
+                i.key,
+                { ...i, links: [...(i.links ?? []), ...(remoteLinks.get(i.key) ?? []).map((l) => l.url)] },
+              ]),
+            ),
       progress: { total: 0, pending: 0, completed: 0, errors: 0 },
       sync: { errors: syncErrors, syncing: streaming-- > 0 ? [{ board: board.id, loaded: 100, total: 900 }] : [] },
     };
@@ -1206,7 +1496,10 @@ async function handle(req: Request) {
     if (historyDelay) await Bun.sleep(historyDelay);
     body = history[decodeURIComponent(path.split("/").at(-2)!)] ?? [];
   } else if (path.startsWith("/api/issues/")) {
-    if (detailFailures-- > 0) {
+    if (deletedKeys.has(decodeURIComponent(path.split("/").at(-1)!))) {
+      status = 404;
+      body = { error: "not found" };
+    } else if (detailFailures-- > 0) {
       status = 503;
       body = { error: "Test unavailable" };
     } else body = full(decodeURIComponent(path.split("/").at(-1)!));
@@ -1256,7 +1549,7 @@ async function splitFixture(req: Request) {
     ? new Response(file, { headers: { "Content-Type": file.type } })
     : new Response(null, { status: 404 });
 }
-/** Open event streams, told "inbox" when `/__fixture/inbox` adds a notification. */
+/** Open event streams, told what changed (`push`). */
 const eventListeners = new Set<ReadableStreamDefaultController>();
 const server = Bun.serve({
   hostname: "127.0.0.1",
@@ -1286,8 +1579,7 @@ const server = Bun.serve({
     "/__split-media-assets/*": splitFixture,
     "/api/*": handle,
     "/__fixture": handle,
-    "/__fixture/inbox": handle,
-    "/__fixture/refuse": handle,
+    "/__fixture/*": handle,
     "/api/avatar": avatar,
     "/__avatar/alex.png": () => new Response(fixtureFile("media-image.png")),
     "/__link-icon.svg": () =>
