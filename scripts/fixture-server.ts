@@ -261,7 +261,7 @@ const crossRelations = [
   },
   { key: "TEST-2", kind: "outward:Cloners", label: "clones" },
 ];
-const requests: { method: string; path: string; status: number }[] = [];
+const requests: { method: string; path: string; status: number; body?: unknown }[] = [];
 /** Writable mode: ops the app sent, and the types they changed (reset with the fixture). */
 const writes: { key: string; ops: any[] }[] = [],
   types = new Map<string, string>(),
@@ -807,7 +807,8 @@ function fixtureGroupPage(raw: unknown[], start: number) {
 }
 async function inboxRoute(req: Request, url: URL) {
   let status = 200,
-    body: unknown = { ok: true };
+    body: unknown = { ok: true },
+    sent: unknown;
   if (req.method === "GET") {
     await Bun.sleep(inboxDelay);
     const category = url.searchParams.get("category"),
@@ -832,7 +833,8 @@ async function inboxRoute(req: Request, url: URL) {
       writable: true,
     };
   } else {
-    const { action, groups = [] } = await req.json();
+    sent = await req.json();
+    const { action, groups = [] } = sent as { action: string; groups?: string[] };
     if (action === "read" || action === "unread") await Bun.sleep(inboxWriteDelays.shift() ?? 0);
     if (inboxFail && action !== "seen") {
       status = 502;
@@ -850,7 +852,7 @@ async function inboxRoute(req: Request, url: URL) {
       body = { error: "Unknown inbox action" };
     }
   }
-  requests.push({ method: req.method, path: url.pathname + url.search, status });
+  requests.push({ method: req.method, path: url.pathname + url.search, status, ...(sent ? { body: sent } : {}) });
   return Response.json(body, { status });
 }
 const mediaAssets = [
@@ -1366,7 +1368,7 @@ async function handle(req: Request) {
         { status: 503 },
       );
     } else answer = applyOps(key, sent);
-    requests.push({ method: req.method, path, status: answer.status });
+    requests.push({ method: req.method, path, status: answer.status, body: { ops: sent } });
     return answer;
   }
   const attachments = path.match(/^\/api\/issues\/([^/]+)\/attachments$/);

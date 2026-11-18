@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, test } from "./app";
+import { expect, test, type App } from "./app";
 
 /** The groups Jira's bell holds unread now, as the fixture's feed lists them. */
 const jiraUnread = async (fixtureUrl: string) => {
@@ -7,21 +7,17 @@ const jiraUnread = async (fixtureUrl: string) => {
   return feed.unread.map((u) => u.id).sort();
 };
 const group = (n: number) => `ari:cloud:jira:fixture:issue/${n}`;
-/** Every inbox write the app sends to Jira, in order. */
-const inboxWrites = (page: Page) => {
-  const sent: { action: string; groups?: string[] }[] = [];
-  page.on("request", (r) => {
-    if (r.method() === "POST" && new URL(r.url()).pathname === "/api/inbox") sent.push(r.postDataJSON());
-  });
-  return sent;
-};
+/** Every inbox write Jira received from the app since the seed, in order. */
+const inboxWrites = async (app: App) =>
+  (await app.requests())
+    .filter((r) => r.method === "POST" && r.path === "/api/inbox")
+    .map((r) => r.body as { action: string; groups?: string[] });
 const inboxLink = (page: Page) => page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: /^Inbox/ });
 const row = (page: Page, state: "Read" | "Unread", key: string) =>
   page.getByRole("region", { name: "Inbox" }).getByRole("link", { name: new RegExp(`^${state} ${key} `) });
 
 test("52. the inbox lists notifications, and opening one marks it read in Jira", async ({ page, app, fixtureUrl }) => {
   await app.seed({ writable: true });
-  const sent = inboxWrites(page);
   await inboxLink(page).click();
 
   for (const key of ["TEST-2", "TEST-1", "TEST-3", "TEST-6", "OUT-9"]) await expect(row(page, "Unread", key)).toBeVisible();
@@ -35,7 +31,7 @@ test("52. the inbox lists notifications, and opening one marks it read in Jira",
   await expect(row(page, "Read", "TEST-1")).toBeVisible();
   await expect(inboxLink(page)).toHaveAccessibleName("Inbox 4");
   await expect.poll(() => jiraUnread(fixtureUrl)).toEqual([2, 3, 6, 9].map(group).sort());
-  expect(sent).toContainEqual({ action: "read", groups: [group(1)] });
+  expect(await inboxWrites(app)).toContainEqual({ action: "read", groups: [group(1)] });
 
   await page.reload();
   await expect(row(page, "Read", "TEST-1")).toBeVisible();
@@ -45,7 +41,6 @@ test("52. the inbox lists notifications, and opening one marks it read in Jira",
 
 test("53. mark all as read, then undo, and Jira receives both", async ({ page, app, fixtureUrl }) => {
   await app.seed({ writable: true });
-  const sent = inboxWrites(page);
   const before = [1, 2, 3, 6, 9].map(group).sort();
   await inboxLink(page).click();
   await expect(row(page, "Unread", "TEST-1")).toBeVisible();
@@ -57,14 +52,14 @@ test("53. mark all as read, then undo, and Jira receives both", async ({ page, a
   for (const key of ["TEST-2", "TEST-1", "TEST-3", "TEST-6", "OUT-9"]) await expect(row(page, "Read", key)).toBeVisible();
   await expect(inboxLink(page)).toHaveAccessibleName("Inbox");
   await expect.poll(() => jiraUnread(fixtureUrl)).toEqual([]);
-  expect(sent).toContainEqual({ action: "read-all" });
+  expect(await inboxWrites(app)).toContainEqual({ action: "read-all" });
 
   await page.keyboard.press("z");
 
   for (const key of ["TEST-2", "TEST-1", "TEST-3", "TEST-6", "OUT-9"]) await expect(row(page, "Unread", key)).toBeVisible();
   await expect(inboxLink(page)).toHaveAccessibleName("Inbox 5");
   await expect.poll(() => jiraUnread(fixtureUrl)).toEqual(before);
-  expect(sent.filter((s) => s.action === "unread").flatMap((s) => s.groups!).sort()).toEqual(before);
+  expect((await inboxWrites(app)).filter((s) => s.action === "unread").flatMap((s) => s.groups!).sort()).toEqual(before);
 
   await page.reload();
   for (const key of ["TEST-2", "TEST-1", "TEST-3", "TEST-6", "OUT-9"]) await expect(row(page, "Unread", key)).toBeVisible();

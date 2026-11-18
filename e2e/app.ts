@@ -13,7 +13,7 @@ export type { FixtureSettings, JiraWrite } from "../scripts/fixture-controls";
 
 export { expect } from "@playwright/test";
 
-type App = {
+export type App = {
   /** Resets the fake Jira with these settings, then opens the app. */
   seed(settings?: FixtureSettings): Promise<void>;
   /** Every write the app has sent to Jira since the last seed (a resend shows twice). */
