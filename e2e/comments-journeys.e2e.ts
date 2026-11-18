@@ -116,7 +116,7 @@ test("40. deleting my comment waits out the undo window: undo keeps it, letting 
 
 // The fixture keeps a posted reply's parentId as a number; the real mirror serves it as a string (threadParent), so once
 // Jira answers, the reply here falls out of its thread as "Original comment removed".
-test.fixme("NEEDS FIXTURE: 41. a reply joins the thread it answers, in the app and in Jira", async ({ page, app }) => {
+test("41. a reply joins the thread it answers, in the app and in Jira", async ({ page, app }) => {
   await app.seed({ writable: true, jiraComments: true, threadedComments: true });
   await openIssue(page, "TEST-2", "Browser fixture 2");
   const root = thread(page, "Thread root from Jira");

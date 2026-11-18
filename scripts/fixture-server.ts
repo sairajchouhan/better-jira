@@ -328,7 +328,8 @@ function postComment(key: string, op: any, author = { accountId: user.id, displa
       created: new Date().toISOString(),
       updated: new Date().toISOString(),
       body: op.body,
-      ...(op.parentId && /^\d+$/.test(op.parentId) ? { parentId: Number(op.parentId) } : {}),
+      // Kept as the mirror serves it: Jira's numeric parent read back through threadParent, as a string.
+      ...(op.parentId && /^\d+$/.test(op.parentId) ? { parentId: op.parentId } : {}),
     });
     return id;
   }
