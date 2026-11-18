@@ -17,9 +17,9 @@ This applies to every bug fix, every behaviour question, and whenever the user s
 - Before building any component from scratch, check react-aria-components (https://react-aria.adobe.com) for one that does the job, and build on it. Write our own only when React Aria has nothing that fits, and say why in the code.
 - React Aria provides the behaviour (focus, keyboard, ARIA, overlays, collections, drag and drop). Linear still sets the look, values and timing: style and tune React Aria to match Linear's bundle.
 
-# Skills: this project's only
+# Skills: none
 
-- This project is isolated from global skills. Use only the skills in this project's `.claude/skills/` (vercel-composition-patterns, vercel-react-best-practices). Any other skill (from `~/.claude`, `~/.agents`, a plugin, claude.ai or Claude Code's bundled set) stays unused, even when a global instruction, a skill list or a brief names it: do that work directly with the tools.
+- This project uses no skills. Every skill (from `~/.claude`, `~/.agents`, a plugin, claude.ai or Claude Code's bundled set) stays unused, even when a global instruction, a skill list or a brief names it: do that work directly with the tools.
 - `.claude/settings.json` enforces this with `disableBundledSkills` and `skillOverrides` set to "off". When a new global skill appears in the skill list, add its name there as "off".
 
 # Rules for the lead and every delegate
@@ -32,9 +32,6 @@ This applies to every bug fix, every behaviour question, and whenever the user s
 - Notifications and activity must carry everything the production Jira web app shows, drawn in Linear's style.
 
 ## How to build
-- Apply both React skills on every edit, and say how in the report:
-  - `/Users/sairaj.chouhan/cs/better-jira/.claude/skills/vercel-composition-patterns/`
-  - `/Users/sairaj.chouhan/cs/better-jira/.claude/skills/vercel-react-best-practices/`
 - One component per repeated control. Reuse what exists in `src/` first. Never add a dependency. TanStack: only Query, Pacer, Hotkeys and Router.
 - Every behaviour gets a unit regression test (`bun test`) that fails when it is removed.
 - Writes go to Jira when the checkout's `.better-jira.local.json` says `writes: true` for its site, or `JIRA_WRITES=<site>` names it. A launch that must not write passes `JIRA_WRITES=off`. Never edit `.better-jira.local.json` in the main checkout.
@@ -59,7 +56,6 @@ This applies to every bug fix, every behaviour question, and whenever the user s
 ## Delegate report
 - Commits table (sha, title).
 - Each brief item: done, or skipped with the reason.
-- How each React skill was applied.
 - Counts from check, lint and tests.
 - "Inferred, not confirmed": Linear behaviour not read directly in the bundle.
 - "New issues found": one line each.
