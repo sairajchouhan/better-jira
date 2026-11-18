@@ -32,6 +32,8 @@ We are cloning Linear on a Jira backend: the app should look and work exactly li
 # Skills
 
 - Use only pstack (the `pstack@cursor-plugins` plugin) and skills in this project's `.claude/skills/`. Every other skill (from `~/.claude`, `~/.agents`, another plugin, claude.ai or Claude Code's bundled set) stays unused, even when a global instruction, a skill list or a brief names it: do that work directly with the tools.
+- `deslop` in `.claude/skills/` is a copy from Cursor's `cursor-team-kit`, which has no Claude Code build. When pstack names `/deslop`, use it.
+- When pstack names `control-ui`, drive the app with the browse MCP. For CPU profiles, heap snapshots or network throttling, which browse lacks, use a one-off Playwright script with CDP.
 - `.claude/settings.json` enforces this with `disableBundledSkills` and `skillOverrides` set to "off". When a new global skill appears in the skill list, add its name there as "off".
 - Start every subagent with T3 Code's `delegate_task`, never the built-in Agent tool, even when a pstack skill says `Task` or `Agent`. Map the pstack model rule to `target` (e.g. `opus high` → provider `claudeAgent`, model `claude-opus-5-5`, effort `high`).
 
