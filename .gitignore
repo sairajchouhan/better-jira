@@ -12,3 +12,5 @@ dist
 !/.claude/
 /.claude/settings.local.json
 !/.claude/**/AGENTS.md
+test-results
+playwright-report

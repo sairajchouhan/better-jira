@@ -12,7 +12,8 @@
     "setup": "bun scripts/setup.ts",
     "dev:personal": "bun --env-file=.env.personal --hot src/server/index.ts",
     "lint": "oxlint",
-    "lint:fix": "oxlint --fix"
+    "lint:fix": "oxlint --fix",
+    "test:e2e": "playwright test"
   },
   "dependencies": {
     "@internationalized/date": "3.12.4",
