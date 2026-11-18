@@ -8,3 +8,8 @@ node_modules
 dist
 
 !/AGENTS.md
+
+# Track this project's Claude config (the global gitignore ignores .claude/)
+!/.claude/
+/.claude/settings.local.json
+!/.claude/**/AGENTS.md

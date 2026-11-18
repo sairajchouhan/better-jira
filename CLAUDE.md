@@ -17,6 +17,11 @@ This applies to every bug fix, every behaviour question, and whenever the user s
 - Before building any component from scratch, check react-aria-components (https://react-aria.adobe.com) for one that does the job, and build on it. Write our own only when React Aria has nothing that fits, and say why in the code.
 - React Aria provides the behaviour (focus, keyboard, ARIA, overlays, collections, drag and drop). Linear still sets the look, values and timing: style and tune React Aria to match Linear's bundle.
 
+# Skills: this project's only
+
+- This project is isolated from global skills. Use only the skills in this project's `.claude/skills/` (vercel-composition-patterns, vercel-react-best-practices). Any other skill (from `~/.claude`, `~/.agents`, a plugin, claude.ai or Claude Code's bundled set) stays unused, even when a global instruction, a skill list or a brief names it: do that work directly with the tools.
+- `.claude/settings.json` enforces this with `disableBundledSkills` and `skillOverrides` set to "off". When a new global skill appears in the skill list, add its name there as "off".
+
 # Rules for the lead and every delegate
 
 ## Product
