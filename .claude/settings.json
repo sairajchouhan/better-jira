@@ -1,4 +1,5 @@
 {
+  "autoMemoryEnabled": false,
   "disableBundledSkills": true,
   "skillOverrides": {
     "anthropic-skills:contentstack-brand-guidelines": "off",
