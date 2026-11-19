@@ -312,6 +312,36 @@ test("57 an image is placed in the description and lands once even when the page
   expect(((await app.jiraIssue("TEST-2")).full.fields.attachment as any[]).map((a) => String(a.id))).toContain(upload!.id);
 });
 
+test("57 an image placed before a reload still shows when Jira's copy, read as the page loads, answers after the image's write", async ({
+  page,
+  app,
+}) => {
+  // Known failure: the late read replaces the description the write just placed the image in.
+  test.fail();
+  await app.seed({ writable: true });
+  await app.changeInJira({ key: "TEST-2", description: "Steps to reproduce" });
+  await openIssue(page, "TEST-2", "Browser fixture 2");
+  await expect(description(page)).toHaveText("Steps to reproduce");
+  await holdUploadAnswer(page);
+  await attachImage(page, "first");
+  await expect(page.locator("body[data-upload-reached]")).toHaveCount(1);
+
+  // After the reload, each read of TEST-2 asks Jira at once but answers only once the replayed write has landed.
+  let landed!: () => void;
+  const written = new Promise<void>((resolve) => (landed = resolve));
+  page.on("response", (response) => void (response.url().endsWith("/api/issues/TEST-2/ops") && landed()));
+  await page.route("**/api/issues/TEST-2", async (route) => {
+    if (route.request().method() !== "GET") return route.fallback();
+    const response = await route.fetch();
+    await written;
+    await route.fulfill({ response });
+  });
+  page.on("dialog", (dialog) => void dialog.accept());
+  await page.reload();
+
+  await expectPlacedOnce(page, app);
+});
+
 /** TEST-2's uploads reach Jira, but their answers never reach the page; `body[data-upload-reached]` marks one sent
  *  (route.fetch would send the upload without its file). */
 async function holdUploadAnswer(page: Page) {
