@@ -12,7 +12,8 @@ import {
   resumeSync,
   unsentWrites,
 } from "./jira-sync";
-import { fetchJson, loadFull, onServerEvent, preloadFound, preloadFull, queryClient, startPoll } from "./server-data";
+import { fetchJson, loadFull, onServerEvent, preloadFound, preloadFull, startPoll } from "./server-data";
+import { queryClient } from "./query-client";
 import {
   flushLocalChanges,
   localDataBlocked,

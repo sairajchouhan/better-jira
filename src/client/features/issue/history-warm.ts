@@ -2,7 +2,8 @@ import { AsyncQueuer, Debouncer } from "@tanstack/pacer";
 import type { QueryClient } from "@tanstack/query-core";
 import { isAppKey } from "@/shared/jira-ops";
 import { get } from "@/client/state/store";
-import { loadFull, queryClient } from "@/client/state/server-data";
+import { loadFull } from "@/client/state/server-data";
+import { queryClient } from "@/client/state/query-client";
 import { historyOptions } from "./use-issue-history";
 
 /**

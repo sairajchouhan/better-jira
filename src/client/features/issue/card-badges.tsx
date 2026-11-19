@@ -12,7 +12,7 @@ import { hotkeyOf } from "@/client/features/navigation/shortcuts";
 import { COPY_FAILED, showNotification } from "@/client/state/app-notifications";
 import { useStore } from "@/client/state/store";
 import { run, useCommand } from "@/client/features/navigation/commands";
-import { queryClient } from "@/client/state/server-data";
+import { queryClient } from "@/client/state/query-client";
 import type { Issue } from "@/shared/issue-model";
 import {
   leadingStatus,

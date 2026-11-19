@@ -1,6 +1,6 @@
 import { QueryObserver, type Query, type QueryClient, type QueryObserverResult } from "@tanstack/query-core";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
-import { queryClient } from "@/client/state/server-data";
+import { queryClient } from "@/client/state/query-client";
 import type { HistoryEntry } from "@/shared/jira-history";
 import { isAppKey } from "@/shared/jira-ops";
 

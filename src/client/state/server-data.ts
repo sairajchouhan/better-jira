@@ -5,7 +5,8 @@ import type { KeptOutcome } from "@/shared/inbox-model";
  * merges Jira's changes into the issues (keeping local edits on top, see local-edits.ts) and runs at once when the
  * server's event stream says Jira changed. Boards are added and removed here too, for every tab.
  */
-import { QueryClient, QueryObserver } from "@tanstack/query-core";
+import { QueryObserver } from "@tanstack/query-core";
+import { queryClient } from "./query-client";
 import { defaultPreferences, parsePreferences } from "@/shared/view-model";
 import { mergeFull, mergeProperties, needsFull } from "./local-edits";
 import { navigate } from "@/client/features/navigation/app-navigation";
@@ -14,11 +15,6 @@ import { get, set, subscribe } from "./store";
 import { firstSyncNote, syncProblem } from "./sync-problem";
 import { rejoinBoards } from "@/shared/board-membership";
 
-/** Server data goes through TanStack Query: it dedupes loads in flight, schedules the poll and refetches on focus. Invalidate a key to refetch it. */
-export const queryClient = new QueryClient({
-  // "always": a read made offline fails at once instead of pausing and running unseen when the network returns (sync check 6).
-  defaultOptions: { queries: { retry: false, staleTime: 0, networkMode: "always" } },
-});
 /** Next property poll: soon while Jira is still syncing, every 30 s once settled, 10 s after a failure. */
 export const pollDelay = (failed: boolean, pending = 0) =>
   failed ? 10000 : pending ? 3000 : 30000;

@@ -5,7 +5,7 @@
  */
 import { useCallback, useState, useSyncExternalStore } from "react";
 import { InfiniteQueryObserver, type InfiniteData } from "@tanstack/query-core";
-import { queryClient } from "@/client/state/server-data";
+import { queryClient } from "@/client/state/query-client";
 import { Avatar } from "@/client/components/avatar";
 import { Button } from "@/client/components/button";
 import { Text } from "@/client/components/text";

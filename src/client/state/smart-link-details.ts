@@ -1,6 +1,6 @@
 import { useEffect, useState, useSyncExternalStore } from "react";
 import { QueryObserver } from "@tanstack/query-core";
-import { queryClient } from "@/client/state/server-data";
+import { queryClient } from "@/client/state/query-client";
 import type { SmartLinkDetails } from "@/shared/smart-link";
 
 type Key = readonly ["smart-link", string];

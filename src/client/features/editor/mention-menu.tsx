@@ -13,7 +13,7 @@ import { CaretPeek, groupStep } from "./caret-peek";
 import { IssuePeek } from "@/client/features/issue/issue-peek";
 import type { Keys } from "@/client/components/keycap";
 import { get, statusOf } from "@/client/state/store";
-import { queryClient } from "@/client/state/server-data";
+import { queryClient } from "@/client/state/query-client";
 import { recentIssues } from "@/client/features/navigation/recents";
 
 const peopleKey = (query: string, issue?: string) => [
