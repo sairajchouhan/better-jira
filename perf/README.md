@@ -23,6 +23,3 @@ Omit `--cpu` to run both 1x and 4x. Each iteration uses a fresh Chromium context
 
 ## Company A/B driver
 
-`bun perf/ab.ts` runs only one server at a time, alternating A/B for five blocks of two runs each at each CPU. It sets JIRA_WRITES=off, verifies company site plus writable:false before every block, and closes each server in finally. Build B first with `bun run build:server`. Use `bun perf/ab.ts --resume` to skip fully saved blocks after an aborted attempt. The driver contains task-specific checkout/output paths. It launches only ports 3061 and 3062 and never invokes `bun start`. The two builds use the same checkout/cache DB; no app source edits are made.
-
-`bun perf/compare.ts` requires all 20 blocks (80 sessions). It validates zero errors/blocked writes, recording any end-of-session pending enrichment, read-only footer, distinct issue count, and both scroll end positions. It emits a combined JSON plus comparison Markdown with per-group median/p95, percentage differences and non-overlapping IQR noise screen. Add a data-driven three-line verdict after generation. IQR separation is descriptive, not an inferential significance claim; ten-run p95 is the maximum. Live Jira detail/avatar reads, SSE, polling, JIT, scheduling and thermal drift remain sources of noise. Store measured artifacts outside VCS.
