@@ -12,7 +12,8 @@
     "setup": "bun scripts/instance.ts setup",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "scan:documents": "bun scripts/scan-documents.ts"
   },
   "dependencies": {
     "@internationalized/date": "3.12.4",
