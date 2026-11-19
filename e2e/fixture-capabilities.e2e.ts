@@ -19,9 +19,16 @@ test("an image uploaded into a description on a writable site is in Jira and sho
   await (await chooser).setFiles(image);
 
   await expect.poll(app.uploads).toEqual([expect.objectContaining({ key: "TEST-2", name: "media-image.png" })]);
+  // The upload lands before the description write that shows it is queued, so wait for Jira's description to hold it.
+  const [upload] = await app.uploads();
+  await expect
+    .poll(async () => JSON.stringify((await app.jiraIssue("TEST-2")).full.fields.description))
+    .toContain(`"id":"${upload!.mediaId}"`);
   await expect(page.getByRole("status", { name: "Jira save status" })).toHaveText("Saved to Jira");
   await page.reload();
-  await expect(page.getByRole("textbox", { name: "Issue description" }).getByRole("img")).toBeVisible();
+  await expect(
+    page.getByRole("textbox", { name: "Issue description" }).getByRole("img", { name: "media-image.png", exact: true }),
+  ).toBeVisible();
 });
 
 test("a title and a comment changed in Jira show in the open issue without a reload", async ({ page, app }) => {
