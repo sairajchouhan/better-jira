@@ -35,8 +35,6 @@ test("48. a web link added to an issue is a remote link in Jira, and removing it
 });
 
 test("48. Issue options › Add link… opens the link form, and the link it adds lands in Jira", async ({ page, app }) => {
-  // BUG: the menu closes and no Add link form opens (Ctrl+L opens it).
-  test.fail();
   await app.seed({ writable: true });
   await page
     .getByRole("grid", { name: "Todo" })
@@ -56,4 +54,19 @@ test("48. Issue options › Add link… opens the link form, and the link it add
   await expect
     .poll(async () => (await app.jiraIssue("TEST-2")).full.remotelinks)
     .toEqual([expect.objectContaining({ url: "https://example.com/from-menu" })]);
+});
+
+test("48. Issue options › Add pull request… opens the pull request form", async ({ page, app }) => {
+  await app.seed({ writable: true });
+  await page
+    .getByRole("grid", { name: "Todo" })
+    .getByRole("row", { name: "TEST-2 Browser fixture 2", exact: true })
+    .getByText("Browser fixture 2", { exact: true })
+    .click();
+  await expect(page.getByRole("textbox", { name: "Issue title" })).toHaveValue("Browser fixture 2");
+
+  await page.getByRole("button", { name: "Issue options" }).click();
+  await page.getByRole("menuitem", { name: "Add pull request…" }).click();
+
+  await expect(page.getByRole("dialog", { name: "Add pull request" })).toBeVisible();
 });
