@@ -68,7 +68,13 @@ function NavigationLink({ routeLocation, go, onClick, onKeyDown, ...props }: { r
       current={props["aria-current"]}
       onKeyDown={(event) => {
         onKeyDown?.(event);
-        if (!event.defaultPrevented && event.key === " " && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
+        if (event.defaultPrevented) return;
+        // Linear's Link (`jst`): Enter without ⌘ goes there and lets go of focus, so a later Enter doesn't open it again.
+        if (event.key === "Enter" && !event.metaKey) {
+          event.preventDefault();
+          event.currentTarget.click();
+          event.currentTarget.blur();
+        } else if (event.key === " " && !event.metaKey && !event.ctrlKey && !event.altKey && !event.shiftKey) {
           event.preventDefault();
           event.currentTarget.click();
         }

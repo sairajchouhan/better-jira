@@ -129,6 +129,25 @@ test("14. a saved view is made with its filter, and its link reopens it after a 
   await other.close();
 });
 
+test("14. Enter on a sidebar link opens it and lets go of focus, as Linear's links do", async ({ page, app }) => {
+  await app.seed();
+  await createView(page, "Urgent work", "Priority", /^Urgent/);
+  const link = sidebar(page).getByRole("link", { name: "Urgent work", exact: true });
+  await link.click();
+  await expect(link).toBeFocused();
+
+  // G then M leaves focus where it was, as in Linear, so Enter opens the view again.
+  await page.keyboard.press("g");
+  await page.keyboard.press("m");
+  await expect(page).toHaveURL(/\/my-issues/);
+  await expect(link).toBeFocused();
+  await page.keyboard.press("Enter");
+  await expect(viewHeading(page, "Urgent work")).toBeVisible();
+  // Linear's Link blurs itself after Enter, so a second Enter does nothing.
+  await expect(link).not.toBeFocused();
+  expect(await page.evaluate(() => document.activeElement === document.body)).toBe(true);
+});
+
 test("15. a filter added to a saved view is saved into it, for this browser and others", async ({ page, app, browser }) => {
   await app.seed();
   const link = await createView(page, "Test work", "Labels", /^test/);
