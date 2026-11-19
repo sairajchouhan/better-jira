@@ -132,6 +132,60 @@ test("57 an edit made offline before the app finished loading is still sent once
   await expect(issueTitle(page)).toHaveValue("Renamed offline");
 });
 
+const description = (page: Page) => page.getByRole("textbox", { name: "Issue description" });
+const descriptionImage = (page: Page) => description(page).getByRole("img", { name: "media-image.png" });
+/** The text of an ADF document, its blocks one per line. */
+const plain = (node: any): string =>
+  node?.type === "text" ? node.text : (node?.content ?? []).map(plain).join(node?.type === "doc" ? "\n" : "");
+/** Every media id an ADF document shows. */
+const mediaIds = (node: any): string[] => [
+  ...(node?.type === "media" && node.attrs?.id ? [String(node.attrs.id)] : []),
+  ...(node?.content ?? []).flatMap(mediaIds),
+];
+
+test("57 an image and text put into a description offline reach Jira once back online, exactly once", async ({ page, app }) => {
+  // An existing issue's file uploads before it is placed (jira-media uploadNow), not through the outbox: offline it shows
+  // Retry and Discard, stays failed back online, and is gone after navigating away or a reload.
+  test.fail();
+  await app.seed({ writable: true });
+  await app.changeInJira({ key: "TEST-2", description: "Steps to reproduce" });
+  await openIssue(page, "TEST-2", "Browser fixture 2");
+  await expect(description(page)).toHaveText("Steps to reproduce");
+  await expect(description(page)).not.toHaveAttribute("aria-busy", "true");
+
+  await page.context().setOffline(true);
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Attach images, files, or videos" }).first().click();
+  await (await chooser).setFiles("scripts/fixtures/media-image.png");
+  await expect(descriptionImage(page)).toBeVisible();
+  await description(page).getByText("Steps to reproduce", { exact: true }).click();
+  await page.keyboard.press("End");
+  await page.keyboard.type(" while offline");
+  await expect(saveStatus(page)).toContainText("Can't reach the better-jira server. Retrying…");
+  expect(await app.uploads()).toEqual([]);
+
+  await page.context().setOffline(false);
+
+  await expect(saveStatus(page)).toHaveText("Saved to Jira", RESEND);
+  await expect.poll(app.uploads, RESEND).toEqual([expect.objectContaining({ key: "TEST-2", name: "media-image.png" })]);
+  const [upload] = await app.uploads();
+  await expect
+    .poll(async () => {
+      const doc = (await app.jiraIssue("TEST-2")).full.fields.description;
+      return { text: plain(doc), media: mediaIds(doc) };
+    }, RESEND)
+    .toEqual({ text: expect.stringContaining("Steps to reproduce while offline"), media: [upload!.mediaId] });
+  const sent = await app.jiraWrites();
+
+  // A reload replays anything still unsent: nothing goes twice.
+  await page.reload();
+  await expect(description(page)).toContainText("Steps to reproduce while offline");
+  await expect(descriptionImage(page)).toBeVisible();
+  await sendSentinel(page, app);
+  expect(await app.jiraWrites()).toEqual([...sent, SENTINEL]);
+  expect(await app.uploads()).toHaveLength(1);
+});
+
 /** Fills the composer with a new issue and an image picked through its paperclip; the file uploads once Jira has made the
  *  issue. Answers the composer's Create issue button. */
 async function composeWithFile(page: Page) {
