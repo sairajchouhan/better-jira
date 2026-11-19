@@ -25,10 +25,14 @@ export {
 type Original = { data: Record<string, unknown>; hadContent: boolean };
 const original = { default: null };
 const attrs = { original };
+/** The marks a node's children may carry. Text takes any; a block takes only Jira's block marks (alignment, indentation,
+ * breakout), kept as opaqueMark. Were formatting allowed, pasting `<li><b>a</b> b</li>` would bold the paragraph the
+ * parser opens for it, not its text, and Jira would get the text plain. */
+const BLOCK_MARKS = "opaqueMark";
 const block = (tag: string, content = "block+"): NodeSpec => ({
   group: "block",
   content,
-  marks: "_",
+  marks: content === "inline*" ? "_" : BLOCK_MARKS,
   attrs,
   toDOM: () => [tag, 0],
   parseDOM: [{ tag }],
@@ -64,7 +68,7 @@ function tableNode(name: keyof typeof table, role: string): NodeSpec {
   return {
     ...spec,
     attrs: { ...spec.attrs, original },
-    marks: "_",
+    marks: BLOCK_MARKS,
     content: spec.content
       ?.replaceAll("table_row", "tableRow")
       .replaceAll("table_cell", "tableCell")
@@ -110,7 +114,7 @@ const card = (block: boolean): NodeSpec => ({
 
 export const richSchema = new Schema({
   nodes: {
-    doc: { content: "(block|expand)+", marks: "_", attrs },
+    doc: { content: "(block|expand)+", marks: BLOCK_MARKS, attrs },
     paragraph: {
       ...block("p", "inline*"),
       group: "block",
@@ -144,7 +148,7 @@ export const richSchema = new Schema({
     },
     listItem: {
       content: LIST_ITEM,
-      marks: "_",
+      marks: BLOCK_MARKS,
       attrs,
       defining: true,
       toDOM: () => ["li", 0],
@@ -200,7 +204,7 @@ export const richSchema = new Schema({
     },
     expand: {
       content: EXPAND,
-      marks: "_",
+      marks: BLOCK_MARKS,
       attrs: { ...attrs, title: { default: "" } },
       defining: true,
       isolating: true,
@@ -447,7 +451,7 @@ function fromEditorNode(node: EditorNode): AdfNode {
       });
     }
   }
-  // Jira rejects formatting marks on anything but text (a table that inherited a link) and any mark but a link beside code.
+  // Jira rejects formatting marks on anything but text (a mention in bold text) and any mark but a link beside code.
   const code = node.isText && node.marks.some((m) => m.type.name === "code");
   const marks = node.marks.flatMap((mark) => {
     const name = mark.type.name;

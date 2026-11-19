@@ -237,8 +237,6 @@ test("35. pasted Markdown becomes headings, formatting, lists and code in Jira",
 });
 
 test("35. a pasted Markdown list item that starts with formatting keeps it in Jira", async ({ page, app }) => {
-  // BUG: the editor puts the leading mark on the item's paragraph node, so Jira gets the item as plain text.
-  test.fail();
   await app.seed({ writable: true });
   await app.changeInJira({ key: "TEST-2", description: "Notes" });
   await openIssue(page, "TEST-2", "Browser fixture 2");
@@ -246,22 +244,43 @@ test("35. a pasted Markdown list item that starts with formatting keeps it in Ji
   await caretAfter(page, "Notes");
   await page.keyboard.press("Enter");
 
-  await paste(description, "- **Owner** decides\n- [Spec](https://example.com/spec) is final");
+  await paste(
+    description,
+    [
+      "- **Owner** decides",
+      "- [Spec](https://example.com/spec) is final",
+      "- `flag` stays on, then *more* text",
+      "",
+      "1. *First* step",
+      "2. ~~Old~~ step",
+      "",
+      "* [ ] **Ship** it",
+    ].join("\n"),
+  );
 
   const text = (value: string, marks?: unknown[]) => ({ type: "text", text: value, ...(marks ? { marks } : {}) });
+  const item = (...content: unknown[]) => ({ type: "listItem", content: [{ type: "paragraph", content }] });
   await expect.poll(async () => (await jiraDescription(app)).content.slice(1)).toEqual([
     {
       type: "bulletList",
       content: [
-        { type: "listItem", content: [{ type: "paragraph", content: [text("Owner", [{ type: "strong" }]), text(" decides")] }] },
+        item(text("Owner", [{ type: "strong" }]), text(" decides")),
+        item(text("Spec", [{ type: "link", attrs: { href: "https://example.com/spec" } }]), text(" is final")),
+        item(text("flag", [{ type: "code" }]), text(" stays on, then "), text("more", [{ type: "em" }]), text(" text")),
+      ],
+    },
+    expect.objectContaining({
+      type: "orderedList",
+      content: [item(text("First", [{ type: "em" }]), text(" step")), item(text("Old", [{ type: "strike" }]), text(" step"))],
+    }),
+    {
+      type: "taskList",
+      attrs: { localId: expect.any(String) },
+      content: [
         {
-          type: "listItem",
-          content: [
-            {
-              type: "paragraph",
-              content: [text("Spec", [{ type: "link", attrs: { href: "https://example.com/spec" } }]), text(" is final")],
-            },
-          ],
+          type: "taskItem",
+          attrs: { state: "TODO", localId: expect.any(String) },
+          content: [text("Ship", [{ type: "strong" }]), text(" it")],
         },
       ],
     },
