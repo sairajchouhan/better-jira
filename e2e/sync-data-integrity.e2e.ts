@@ -389,6 +389,58 @@ test("57 a new issue's file Jira refuses is not sent again, and says why", async
   expect((await app.jiraIssue("TEST-90")).full.fields.attachment).toEqual([]);
 });
 
+test("57 a file picked offline in the new-issue composer is refused as Linear refuses it, and the issue is made without it", async ({
+  page,
+  app,
+}) => {
+  // Known failure: the composer keeps the file and uploads it once the issue is made, whenever that is.
+  test.fail();
+  await app.seed({ writable: true, createSuccess: true });
+  await expect(page.getByRole("grid", { name: "Todo" }).getByRole("row").first()).toBeVisible();
+  await page.keyboard.press("c");
+  const composer = page.getByRole("dialog", { name: "Create issue" });
+  await composer.getByRole("textbox", { name: "Issue title", exact: true }).fill("Made offline");
+
+  // Linear's composer uploads a file the moment it is picked, so offline it can't: the file stays out and a toast says why.
+  await page.context().setOffline(true);
+  const chooser = page.waitForEvent("filechooser");
+  await composer.getByRole("button", { name: "Attach images, files, or videos" }).click();
+  await (await chooser).setFiles("scripts/fixtures/media-image.png");
+  await expect(uploadFailed(page)).toContainText("Cannot upload files while being offline.");
+  await expect(composer.getByRole("img", { name: "media-image.png" })).toHaveCount(0);
+
+  await page.context().setOffline(false);
+  await composer.getByRole("button", { name: "Create issue" }).click();
+  await expect(saveStatus(page)).toHaveText("Saved to Jira", RESEND);
+  expect((await app.jiraIssue("TEST-90")).issue.summary).toBe("Made offline");
+  expect((await app.jiraIssue("TEST-90")).full.fields.attachment).toEqual([]);
+  expect(await app.uploads()).toEqual([]);
+});
+
+test("57 a file put into a new sub-issue's description offline is refused as Linear refuses it", async ({ page, app }) => {
+  // Known failure: the sub-issue composer keeps the file and uploads it once the sub-issue is made.
+  test.fail();
+  await app.seed({ writable: true, createSuccess: true });
+  await openIssue(page, "TEST-2", "Browser fixture 2");
+  const subIssues = page.getByRole("region", { name: "Sub-issues" });
+  await subIssues.getByRole("button", { name: "Add sub-issues" }).click();
+  await subIssues.getByRole("textbox", { name: "Sub-issue title" }).fill("Child made offline");
+
+  await page.context().setOffline(true);
+  const chooser = page.waitForEvent("filechooser");
+  await subIssues.getByRole("button", { name: "Attach images, files, or videos" }).click();
+  await (await chooser).setFiles("scripts/fixtures/media-image.png");
+  await expect(uploadFailed(page)).toContainText("Cannot upload files while being offline.");
+  await expect(subIssues.getByRole("img", { name: "media-image.png" })).toHaveCount(0);
+
+  await page.context().setOffline(false);
+  await subIssues.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(subIssues.getByText("Child made offline", { exact: true })).toBeVisible();
+  await expect(saveStatus(page)).toHaveText("Saved to Jira", RESEND);
+  expect((await app.jiraIssue("TEST-90")).full.fields.attachment).toEqual([]);
+  expect(await app.uploads()).toEqual([]);
+});
+
 test("58 an edit whose send Jira never answered is sent again and lands once", async ({ page, app }) => {
   await app.seed({ writable: true, jiraEdits: true });
   await openIssue(page, "TEST-2", "Browser fixture 2");
