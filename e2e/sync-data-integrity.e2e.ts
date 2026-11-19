@@ -415,20 +415,43 @@ test("58 a new issue's file whose upload Jira didn't answer is sent again and at
   await expect(page.getByRole("alertdialog", { name: /Jira did not save/ })).toHaveCount(0);
 });
 
-test("58 an existing issue's file whose upload Jira didn't answer goes once on Retry", async ({ page, app }) => {
+test("58 an existing issue's file whose upload Jira didn't answer is sent again at once and lands once", async ({ page, app }) => {
+  // Known failure: the file shows "Jira didn't answer." with Retry and Discard.
+  test.fail();
   await app.seed({ writable: true, jiraEdits: true });
   await openIssue(page, "TEST-2", "Browser fixture 2");
   await app.unanswered(1, { applied: true, uploads: true });
 
+  // Linear's editor upload tries once more at once (`retryOnFailure`: one retry, no backoff); the server gives back the
+  // file the first send made.
   await attachImage(page, "first");
-  await expect(description(page).getByRole("alert")).toContainText("Jira didn't answer.");
-  await description(page).getByRole("button", { name: "Retry" }).click();
-
   await expect(descriptionImage(page)).toBeVisible();
-  expect(await uploadAnswers(app)).toEqual([503, 200]);
+  await expect.poll(() => uploadAnswers(app), RESEND).toEqual([503, 200]);
+  await expect(page.getByRole("button", { name: "Retry" })).toHaveCount(0);
   const [upload, ...more] = await app.uploads();
   expect(more).toEqual([]);
   await expect.poll(async () => (await jiraDescription(app, "TEST-2")).media, RESEND).toEqual([upload!.mediaId]);
+});
+
+test("58 an existing issue's file whose upload Jira didn't answer twice leaves the description with Linear's toast", async ({
+  page,
+  app,
+}) => {
+  // Known failure: the file shows "Jira didn't answer." with Retry and Discard.
+  test.fail();
+  await app.seed({ writable: true, jiraEdits: true });
+  await app.changeInJira({ key: "TEST-2", description: "Steps to reproduce" });
+  await openIssue(page, "TEST-2", "Browser fixture 2");
+  await expect(description(page)).toHaveText("Steps to reproduce");
+  await app.unanswered(2, { uploads: true });
+
+  await attachImage(page, "first");
+  await expect(uploadFailed(page)).toContainText("Jira didn't answer.");
+  await expect(descriptionImage(page)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Retry" })).toHaveCount(0);
+  expect(await uploadAnswers(app)).toEqual([503, 503]);
+  expect(await app.uploads()).toEqual([]);
+  await expect(description(page)).toHaveText("Steps to reproduce");
 });
 
 test("59 local edits survive a reload and replay only what Jira lacks", async ({ page, app }) => {

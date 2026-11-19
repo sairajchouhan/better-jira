@@ -216,19 +216,29 @@ test("a view saved in one tab shows in another tab's sidebar without a reload", 
   await expect(other.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: "Pushed view" })).toBeVisible();
 });
 
-test("an upload Jira refuses offers Retry, which lands it once Jira accepts it", async ({ page, app }) => {
+test("an upload Jira refuses leaves the description with Linear's toast, and goes in once Jira accepts it", async ({ page, app }) => {
+  // Known failure: the file stays in the description with Retry and Discard.
+  test.fail();
   await app.seed({ writable: true });
   await openIssue(page, "TEST-2", "Browser fixture 2");
   await app.refuse(["upload"], "Jira refused the file.");
+  const attach = async () => {
+    const chooser = page.waitForEvent("filechooser");
+    await page.getByRole("button", { name: "Attach images, files, or videos" }).first().click();
+    await (await chooser).setFiles(image);
+  };
+  const description = page.getByRole("textbox", { name: "Issue description" });
 
-  const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "Attach images, files, or videos" }).first().click();
-  await (await chooser).setFiles(image);
-  await expect(page.getByRole("button", { name: "Retry" })).toBeVisible();
+  // Linear's upload catch removes the file (`Cje`) and says why (`showAlert("File failed to upload", message, true)`).
+  await attach();
+  await expect(page.getByRole("alertdialog", { name: /File failed to upload/ })).toContainText("Jira refused the file.");
+  await expect(description.getByRole("img", { name: "media-image.png" })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Retry" })).toHaveCount(0);
   expect(await app.uploads()).toEqual([]);
 
   await app.refuse([]);
-  await page.getByRole("button", { name: "Retry" }).click();
+  await attach();
+  await expect(description.getByRole("img", { name: "media-image.png" })).toBeVisible();
   await expect.poll(app.uploads).toEqual([expect.objectContaining({ key: "TEST-2", name: "media-image.png" })]);
 });
 
