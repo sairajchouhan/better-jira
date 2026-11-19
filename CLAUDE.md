@@ -20,7 +20,7 @@ We are cloning Linear on a Jira backend: the app should look and work exactly li
 - **:3002** is `bun start personal`, a production app that writes to https://cloudsairaj.atlassian.net. **:3003** is `bun start second`, the same site as a second user, for two-user checks. These, cloudsairaj and live Linear are the user's personal sites: check and edit anything.
 - Servers run in Rex, never as background shells. Only the main session stops or restarts :3000, :3002 and :3003: after each finished change, run `.raj/restart-3000.sh` (all three; or `work`, `personal` or `second` for one). Neither reloads on its own. Never use port 6000.
 - Never write to work Jira, through any app instance, script or tool. Anything that writes uses the user's personal Jira (cloudsairaj) and personal Linear.
-- Browse MCP profiles: `work-chrome` (default) is for work Jira; `raj-chrome` is for personal Jira (cloudsairaj) and Linear. Pass `browser` when opening a tab.
+- Browse MCP profiles: `work-chrome` is for work Jira; `raj-chrome` is for personal Jira (cloudsairaj) and Linear. browse has no default setting (it picks whichever browser connected first), so always pass `browser` when opening a tab, and `work-chrome` when the task names no site.
 
 # Safety
 
