@@ -20,7 +20,6 @@ import { writeLedger } from "./write-ledger";
 const ledger = writeLedger(new Database(":memory:"));
 mock.module("./jira", () => ({
   JiraError: class extends Error {},
-  JiraTimeout: class extends Error {},
   jira: async (path: string, init?: RequestInit) => {
     calls.push(`${init?.method ?? "GET"} ${path}`);
     return turn(() => (path.endsWith("/remotelink") && !init?.method ? links : answer(path, init)));
@@ -358,8 +357,7 @@ test("an upload answers with Jira's attachment and the issue's id from the read 
   expect(await uploadAttachment("K-3", new File(["abcd"], "c.txt"), "f30")).toEqual({ id: "950", found: false });
 });
 
-// Known failure: the server answers every failed upload 422, a refusal (src/server/index.ts).
-test.failing("an upload Jira may have taken (no answer in time, a server error, a cut connection) answers retry; one Jira refused says why", async () => {
+test("an upload Jira may have taken (no answer in time, a server error, a cut connection) answers retry; one Jira refused says why", async () => {
   const { uploadAttachment, uploadFailure } = await import("./jira-writes");
   const { JiraError } = await import("./jira");
   const jiraSays = (status: number, reason: string) =>

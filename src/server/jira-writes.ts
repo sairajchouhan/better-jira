@@ -1,4 +1,4 @@
-import { jira, JiraError, JiraTimeout } from "./jira";
+import { jira, JiraError } from "./jira";
 import { ESTIMATES, ledger, refresh } from "./mirror";
 import { DESCRIPTION_CONFLICT, renameCommentIds, type Op } from "@/shared/jira-ops";
 import { descriptionBases } from "@/shared/document";
@@ -248,16 +248,15 @@ export async function uploadAttachment(
     ? { id: made.id, found: made.found }
     : { id: made.id, found: made.found, attachment: sent, issueId };
 }
-/** What the upload route answers when an upload failed. */
+/**
+ * What the upload route answers when an upload failed: Jira's refusal (nothing was attached), or `retry` when Jira may have
+ * the file (no answer in time, a 5xx, a cut connection). The tab sends the same upload again, and the ledger gives back what
+ * the first send made, as a write's resend does (applyOps).
+ */
 export function uploadFailure(e: unknown): { error: string; retry?: true } {
-  return {
-    error:
-      e instanceof JiraError
-        ? e.reason
-        : e instanceof JiraTimeout
-          ? "Jira didn't answer in time. Upload the file again."
-          : "Could not upload attachment.",
-  };
+  if (refusedOutright(e)) return { error: e instanceof JiraError ? e.reason : (e as UserError).message };
+  console.error("[upload]", String(e).slice(0, 300));
+  return { error: "Jira didn't answer.", retry: true };
 }
 /** An attachment as Jira names it. */
 export type JiraAttachment = { id: string | number; filename: string; mimeType: string; size: number };

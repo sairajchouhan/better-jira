@@ -31,6 +31,9 @@ export function remember(key: string, id: string, value?: Uploaded) {
 /** The server answered an upload with a refusal: nothing was attached. Any other failure (a reload cutting the send off)
  *  leaves the server to finish it. */
 export class UploadRefused extends Error {}
+/** The server answered 503: Jira didn't answer the upload, so it may have the file. The same upload (same client id) goes
+ *  again, and the server gives back what the first send made. */
+export class NoAnswer extends Error {}
 /** fetch's own failure: the better-jira server couldn't be reached, so the request got no answer and nothing reached Jira. */
 export class Unreachable extends Error {
   constructor(cause: unknown) {
@@ -65,11 +68,18 @@ async function postAttachment(
       body,
     });
     const result = await response.json().catch(() => ({}));
+    if (response.status === 503) throw new NoAnswer(result.error ?? "Jira didn't answer.");
     if (!response.ok) throw new UploadRefused(result.error ?? "Could not upload the file to Jira.");
     return result as Uploaded;
   } finally {
     uploading--;
   }
+}
+/** Each picked file keeps one client id, so Retry after an upload Jira didn't answer gets back the file the first send made. */
+const clientIds = new WeakMap<File, string>();
+function clientId(file: File) {
+  if (!clientIds.has(file)) clientIds.set(file, crypto.randomUUID());
+  return clientIds.get(file)!;
 }
 /** Uploads files to Jira at once and in parallel, before they are placed, so a refusal shows on the file with Retry and Discard
  * instead of a card that looks saved (a server it can't reach drops the file, as Linear's offline upload does); `keep` then
@@ -89,7 +99,7 @@ export async function uploadNow(
   try {
     const uploaded = await Promise.all(
       files.map((file, i) =>
-        postAttachment(key, file, file.name, clients[i] ?? crypto.randomUUID()),
+        postAttachment(key, file, file.name, clients[i] ?? clientId(file)),
       ),
     );
     const saved = await keep(files);

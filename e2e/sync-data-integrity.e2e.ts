@@ -371,8 +371,6 @@ const uploadAnswers = async (app: { requests(): Promise<{ path: string; status: 
   (await app.requests()).filter((r) => r.path.endsWith("/attachments")).map((r) => r.status);
 
 test("58 a new issue's file whose upload Jira didn't answer is sent again and attached once, not rolled back", async ({ page, app }) => {
-  // Today the server's 503 reads as a refusal: the outbox rolls the edit back and says Jira didn't save it.
-  test.fail();
   await app.seed({ writable: true, jiraEdits: true, createSuccess: true });
   await app.unanswered(1, { applied: true, uploads: true });
   await (await composeWithFile(page)).click();
@@ -388,8 +386,6 @@ test("58 a new issue's file whose upload Jira didn't answer is sent again and at
 });
 
 test("58 an existing issue's file whose upload Jira didn't answer goes once on Retry", async ({ page, app }) => {
-  // Today Retry sends the file under a new id, so Jira gets it twice.
-  test.fail();
   await app.seed({ writable: true, jiraEdits: true });
   await openIssue(page, "TEST-2", "Browser fixture 2");
   await app.unanswered(1, { applied: true, uploads: true });

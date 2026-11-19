@@ -1,6 +1,6 @@
 import { type Full, type Issue } from "@/shared/issue-model";
 import { DESCRIPTION_CONFLICT, mergeOps, opsFor, renameCommentIds, namesKey, renameIds, type Op, type Side } from "@/shared/jira-ops";
-import { Unreachable, withoutLocalMedia } from "./jira-media";
+import { NoAnswer, Unreachable, withoutLocalMedia } from "./jira-media";
 import type { LocalChange } from "./local-data";
 
 
@@ -56,7 +56,8 @@ export type OutboxPorts = {
   /** `POST /api/issues/:key/ops`. Rejects when the server can't be reached; a 503 means Jira couldn't settle the write yet. */
   post(key: string, body: object): Promise<Response>;
   /** Uploads the files a job places and returns the ops to send (jira-media's prepareOps). Rejects with `Unreachable` when
-   *  the server can't be reached, and with any other error when a file can't be sent (Jira refused it). */
+   *  the server can't be reached, with `NoAnswer` when Jira didn't answer an upload, and with any other error when a file
+   *  can't be sent (Jira refused it). */
   prepare(key: string, ops: Op[]): Promise<Op[]>;
   clock: {
     now(): number;
@@ -361,11 +362,23 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
               }).catch((cause) => {
                 throw new Unreachable(cause);
               });
+        // Jira didn't answer, or can't tell yet whether an earlier send went through. The same job (same client ids) goes
+        // again later, with backoff, behind other issues' writes; it is never dropped (sync review 2-2, 3-1, 3-2).
+        const later = (text: string) => {
+          job.tries = (job.tries ?? 0) + 1;
+          job.retryAt = clock.now() + Math.min(RETRY_WAIT * 2 ** (job.tries - 1), RETRY_WAIT_MAX);
+          events.retrying(job.key, text, job.tries >= RETRY_SHOWN);
+        };
         let result: WriteResult, ops: Op[] | undefined;
         try {
           // A server that can't be reached got none of the files: they go again, as a write to it does.
           ops = await reach(job.key, () => (job.cancelled ? Promise.resolve(job.ops) : ports.prepare(job.key, job.ops)));
         } catch (e) {
+          // Jira didn't answer an upload, so it may have the file: the job goes again, and the server matches it.
+          if (e instanceof NoAnswer) {
+            later(e.message);
+            continue;
+          }
           // A file can't be sent (Jira refused it): fetch Jira's copy to roll back to.
           result = {
             error: e instanceof Error ? e.message : "Could not upload the file to Jira.",
@@ -386,15 +399,9 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
         if (ops) {
           const prepared = ops;
           const response = await reach(job.key, () => post(prepared));
-          // 503: Jira didn't answer, or can't tell yet whether an earlier send went through. The same job (same client ids)
-          // goes again later, with backoff, behind other issues' writes; it is never dropped (sync review 2-2, 3-1, 3-2).
           if (response.status === 503) {
             const { error } = await response.json().catch(() => ({}));
-            const text = error ?? "Jira didn't answer. The change will be sent again shortly.";
-            job.tries = (job.tries ?? 0) + 1;
-            job.retryAt =
-              clock.now() + Math.min(RETRY_WAIT * 2 ** (job.tries - 1), RETRY_WAIT_MAX);
-            events.retrying(job.key, text, job.tries >= RETRY_SHOWN);
+            later(error ?? "Jira didn't answer. The change will be sent again shortly.");
             continue;
           }
           result = await response

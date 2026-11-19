@@ -282,12 +282,12 @@ const server = serve({
             { error: "Jira writes are disabled for this site." },
             { status: 403 },
           );
+        // A body that isn't a file never reached Jira: a refusal, not one to send again.
+        const form = await req.formData().catch(() => undefined),
+          file = form?.get("file"),
+          client = form?.get("client");
+        if (!(file instanceof File)) return Response.json({ error: "Choose a file." }, { status: 400 });
         try {
-          const form = await req.formData(),
-            file = form.get("file"),
-            client = form.get("client");
-          if (!(file instanceof File))
-            return Response.json({ error: "Choose a file." }, { status: 400 });
           const made = await uploadAttachment(
             req.params.key,
             file,
