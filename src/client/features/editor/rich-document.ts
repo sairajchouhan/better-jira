@@ -54,7 +54,7 @@ const inlineAtom = (name: string, tag = "span"): NodeSpec => ({
 // opaqueBlock keeps unfamiliar Jira blocks editable around; only Jira can put one there.
 const QUOTE = "(paragraph|bulletList|orderedList|codeBlock|mediaSingle|mediaGroup|opaqueBlock)+";
 const LIST_ITEM =
-  "paragraph (paragraph|bulletList|orderedList|taskList|codeBlock|mediaSingle|opaqueBlock)*";
+  "(paragraph|mediaSingle|codeBlock|opaqueBlock) (paragraph|bulletList|orderedList|taskList|codeBlock|mediaSingle|opaqueBlock)*";
 const PANEL =
   "(paragraph|heading|bulletList|orderedList|taskList|codeBlock|rule|blockCard|mediaSingle|mediaGroup|opaqueBlock)+";
 const CELL =

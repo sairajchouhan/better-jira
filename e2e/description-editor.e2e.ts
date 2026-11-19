@@ -422,3 +422,56 @@ test("37. Issue options › Show description history opens the history", async (
 
   await expect(page.getByRole("dialog", { name: "Issue description" })).toBeVisible();
 });
+
+test("33. a numbered list whose item starts with an image shows as a list, and an edit keeps its shape in Jira", async ({ page, app }) => {
+  await app.seed({ writable: true, includeMedia: true });
+  const item = (...content: object[]) => ({ type: "listItem", content });
+  const line = (text: string) => ({ type: "paragraph", content: [{ type: "text", text }] });
+  const image = {
+    type: "mediaSingle",
+    attrs: { layout: "align-start", width: 320, widthType: "pixel" },
+    content: [
+      {
+        type: "media",
+        attrs: { type: "file", id: "22222222-2222-4222-8222-222222222222", collection: "", alt: "media-image.png", width: 320, height: 480 },
+      },
+    ],
+  };
+  await app.changeInJira({
+    key: "TEST-2",
+    description: {
+      type: "doc",
+      version: 1,
+      content: [
+        {
+          type: "orderedList",
+          attrs: { order: 1 },
+          content: [item(line("Create a draft entry")), item(image, line("Assign the role")), item(line("Save the entry"))],
+        },
+      ],
+    },
+  });
+  await openIssue(page, "TEST-2", "Browser fixture 2");
+  const description = descriptionOf(page);
+  await editorReady(description);
+
+  const items = description.getByRole("list").getByRole("listitem");
+  await expect(items).toHaveCount(3);
+  await expect(items.nth(1).getByRole("img", { name: "media-image.png" })).toBeVisible();
+  await expect(items.nth(1)).toContainText("Assign the role");
+  await expect(description).not.toContainText("[orderedList]");
+  // Showing it changes nothing in Jira; only the edit below writes.
+  await page.waitForTimeout(1500);
+  expect(await app.jiraWrites()).toEqual([]);
+
+  await caretAfter(page, "Save the entry");
+  await page.keyboard.type(" again");
+  await expect.poll(async () => plain(await jiraDescription(app))).toBe("Create a draft entryAssign the roleSave the entry again");
+  const saved = (await jiraDescription(app)).content;
+  expect(saved.map((n: any) => n.type)).toEqual(["orderedList"]);
+  expect(saved[0].content.map((i: any) => i.content.map((n: any) => n.type).join(" "))).toEqual([
+    "paragraph",
+    "mediaSingle paragraph",
+    "paragraph",
+  ]);
+});
