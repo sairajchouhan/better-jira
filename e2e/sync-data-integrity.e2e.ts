@@ -510,6 +510,8 @@ test("57 a file put into a new sub-issue's description offline is refused as Lin
 });
 
 test("57 a document's image stays in Jira after the uploads settle", async ({ page, app }) => {
+  // Known failure: a held entry past its settle time has the cleaner read the issue every second, for good.
+  test.fail();
   await app.seed({ writable: true });
   await openIssue(page, "TEST-2", "Browser fixture 2");
   await page.getByRole("button", { name: "Issue options" }).click();
@@ -543,6 +545,11 @@ test("57 a document's image stays in Jira after the uploads settle", async ({ pa
   // The cleaner runs as the app loads; give it time to have removed the file if it were going to.
   await page.waitForTimeout(2_000);
   expect(((await app.jiraIssue("TEST-2")).full.fields.attachment as any[]).map((a) => String(a.id))).toContain(upload!.id);
+  // A file the document holds costs the cleaner no reads of the issue: it doesn't ask Jira about it again and again.
+  const reads = async () => (await app.requests()).filter((r) => r.method === "GET" && r.path === "/api/issues/TEST-2").length;
+  const before = await reads();
+  await page.waitForTimeout(3_000);
+  expect((await reads()) - before).toBeLessThan(2);
 });
 
 test("58 an edit whose send Jira never answered is sent again and lands once", async ({ page, app }) => {
