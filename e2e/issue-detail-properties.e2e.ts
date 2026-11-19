@@ -171,6 +171,18 @@ test("24 type: changing it from its pill and with ⇧T reaches Jira", async ({ p
   expect(fieldsSent(await app.jiraWrites(), "TEST-4").map((f) => f.type)).toEqual(["Story", "Task"]);
 });
 
+test("24 type: Issue options › Issue type opens the type picker, and the type picked reaches Jira", async ({ page, app }) => {
+  await app.seed({ writable: true, jiraEdits: true });
+  const detail = await openIssue(page, "TEST-4", "Browser fixture 4");
+
+  await detail.getByRole("button", { name: "Issue options" }).click();
+  await page.getByRole("dialog", { name: "Issue options" }).getByRole("menuitem", { name: "Issue type" }).click();
+  await page.getByRole("dialog", { name: "Change issue type" }).getByRole("menuitem", { name: "Story" }).click();
+
+  await expect(detail.getByRole("button", { name: /^Story/ })).toBeVisible();
+  await expect.poll(async () => (await app.jiraIssue("TEST-4")).issue.type).toBe("Story");
+});
+
 test("24 epic: adding the issue to an epic from its pill and taking it out with ⇧P reaches Jira", async ({ page, app }) => {
   await app.seed({ writable: true, jiraEdits: true, epics: true });
   const detail = await openIssue(page, "TEST-4", "Browser fixture 4");

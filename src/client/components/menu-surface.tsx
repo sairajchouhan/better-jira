@@ -279,14 +279,24 @@ export function useInitialFocus(ref: RefObject<HTMLElement | null>, initialFocus
  * (`surface.close(); run()`, as Linear runs its action and closes), and the focus it or the owner's close moves (Edit into the
  * comment editor, a table command back into its cell) lands on a live page instead of being refused, then kept (focusLost).
  * Escape, an outside press and a render error close as they are: nothing runs after them.
+ *
+ * Non-modal, React Aria's Popover also closes when focus leaves it, and focus goes back to the opener while the popup unmounts
+ * (useReturnFocus). That close would reach the owner after the row's action and undo a dialog it opened in the owner's own state
+ * (Delete's confirmation, Issue options › Add link…), so `onOpenChange` forwards no close once the popup is released. React Aria
+ * calls a handler from before the release, hence the ref.
  */
 function useRelease(close: () => void) {
   const [released, setReleased] = useState(false);
+  const closed = useRef(false);
   const release = () => {
+    closed.current = true;
     flushSync(() => setReleased(true));
     close();
   };
-  return { released, release };
+  const onOpenChange = (dismiss: () => void) => (open: boolean) => {
+    if (!open && !closed.current) dismiss();
+  };
+  return { released, release, onOpenChange };
 }
 
 /**
@@ -355,7 +365,7 @@ export function Popover({
   children: ReactNode;
 }) {
   const { keys } = usePopupFocus(popup, close, POPOVER_FOCUS, trigger);
-  const { released, release } = useRelease(close);
+  const { released, release, onOpenChange } = useRelease(close);
   const [anchor] = useState(() => trigger.current);
   // What a failure names: the trigger's name ("Display options").
   const label = anchor?.getAttribute("aria-label") || anchor?.textContent?.trim() || "Menu";
@@ -376,9 +386,7 @@ export function Popover({
       <AriaPopover
         isOpen
         isNonModal={released}
-        onOpenChange={(open) => {
-          if (!open) close();
-        }}
+        onOpenChange={onOpenChange(close)}
         triggerRef={trigger}
         shouldCloseOnInteractOutside={outsideOf}
         ref={popup}
@@ -475,7 +483,7 @@ export function MenuSurface({
   const ref = useRef<HTMLDivElement>(null);
   const elevation = useElevation("surface");
   const { keys, opener } = usePopupFocus(ref, close, MENU_FOCUS);
-  const { released, release } = useRelease(close);
+  const { released, release, onOpenChange } = useRelease(close);
   // The previously focused element is only a useful anchor when it is a real control, not <body> after keyboard navigation.
   const [fallback] = useState(
     () =>
@@ -563,9 +571,7 @@ export function MenuSurface({
       <AriaPopover
         isOpen
         isNonModal={released}
-        onOpenChange={(open) => {
-          if (!open) dismiss();
-        }}
+        onOpenChange={onOpenChange(dismiss)}
         triggerRef={trigger}
         shouldCloseOnInteractOutside={outsideOf}
         ref={ref}
