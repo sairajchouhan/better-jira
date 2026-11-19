@@ -158,22 +158,53 @@ test("15. a filter added to a saved view is saved into it, for this browser and 
   await other.close();
 });
 
-test("15. a saved view is deleted from its options menu after asking, and stays gone after a reload", async ({ page, app }) => {
-  // BUG: choosing Delete in a view's ⋯ menu (or its sidebar right-click menu) closes the menu and never asks or deletes.
-  test.fail();
-  await app.seed();
-  await createView(page, "Doomed view", "Priority", /^Urgent/);
-  const link = sidebar(page).getByRole("link", { name: "Doomed view", exact: true });
+/** The ways a user can ask to delete the open saved view "Doomed view"; each leads to the same confirmation.
+ *  BUG (`broken`): Delete in these menus closes the menu and never asks or deletes; the command menu works. */
+const deleteFrom: Record<string, { broken?: true; open(page: Page): Promise<void> }> = {
+  "its options menu": {
+    broken: true,
+    async open(page) {
+      await page.getByRole("button", { name: "Issue view options" }).click();
+      await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
+    },
+  },
+  "View details ⋯": {
+    broken: true,
+    async open(page) {
+      await page.getByRole("complementary", { name: "View details" }).getByRole("button", { name: "View details options" }).click();
+      await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
+    },
+  },
+  "its sidebar right-click menu": {
+    broken: true,
+    async open(page) {
+      await sidebar(page).getByRole("link", { name: "Doomed view", exact: true }).click({ button: "right" });
+      await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
+    },
+  },
+  "the command menu": {
+    async open(page) {
+      await page.keyboard.press("ControlOrMeta+k");
+      await page.keyboard.type("Delete view");
+      await page.keyboard.press("Enter");
+    },
+  },
+};
+for (const [entry, { broken, open }] of Object.entries(deleteFrom))
+  test(`15. a saved view is deleted from ${entry} after asking, and stays gone after a reload`, async ({ page, app }) => {
+    if (broken) test.fail();
+    await app.seed();
+    await createView(page, "Doomed view", "Priority", /^Urgent/);
+    const link = sidebar(page).getByRole("link", { name: "Doomed view", exact: true });
 
-  await page.getByRole("button", { name: "Issue view options" }).click();
-  await page.getByRole("menuitem", { name: "Delete", exact: true }).click();
-  const confirm = page.getByRole("dialog", { name: 'Delete the view "Doomed view"?' });
-  await expect(confirm).toBeVisible();
-  await confirm.getByRole("button", { name: "Delete", exact: true }).click();
+    await open(page);
+    const confirm = page.getByRole("dialog", { name: 'Delete the view "Doomed view"?' });
+    await expect(confirm).toBeVisible();
+    await confirm.getByRole("button", { name: "Delete", exact: true }).click();
 
-  await expect(confirm).toHaveCount(0);
-  await expect(link).toHaveCount(0);
-  await page.reload();
-  await expect(sidebar(page).getByRole("link", { name: "Browser audit", exact: true })).toBeVisible();
-  await expect(link).toHaveCount(0);
-});
+    await expect(confirm).toHaveCount(0);
+    await expect(link).toHaveCount(0);
+    await page.reload();
+    await expect(sidebar(page).getByRole("link", { name: "Browser audit", exact: true })).toBeVisible();
+    await expect(link).toHaveCount(0);
+  });

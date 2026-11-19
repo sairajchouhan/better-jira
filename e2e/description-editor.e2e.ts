@@ -397,7 +397,7 @@ test("37. restoring an earlier version from description history puts it back in 
 });
 
 test("37. Issue options › Show description history opens the history", async ({ page, app }) => {
-  // BUG: the menu closes and no history dialog opens (Issue options › Add link… does the same).
+  // BUG: the menu closes and no history dialog opens.
   test.fail();
   await app.seed({ writable: true });
   await openIssue(page, "TEST-2", "Browser fixture 2");
