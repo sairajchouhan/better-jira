@@ -229,6 +229,38 @@ test("57 a file put into a comment offline is refused as Linear refuses it, and 
   expect(posted.map((c) => mediaIds(c.body))).toEqual([[upload!.mediaId]]);
 });
 
+test("57 a file that failed to upload says so in Linear's error toast, its red icon 8px before the title", async ({ page, app }) => {
+  // Known failure: the toast has no icon.
+  test.fail();
+  await app.seed({ writable: true });
+  await openIssue(page, "TEST-2", "Browser fixture 2");
+  await page.context().setOffline(true);
+  await attachImage(page, "first");
+
+  // Linear's error toast (`showAlert(…, true)`, Toast `W[error]`): a 16px round icon in redBase, the text 8px after it.
+  const toast = uploadFailed(page);
+  await expect(toast).toContainText("Cannot upload files while being offline.");
+  const look = await toast.evaluate((card) => {
+    const svg = card.querySelector("svg"),
+      title = [...card.querySelectorAll("p")].find((p) => p.textContent?.includes("File failed to upload"));
+    const probe = document.createElement("i");
+    probe.style.color = "var(--red-base)";
+    document.body.append(probe);
+    const red = getComputedStyle(probe).color;
+    probe.remove();
+    if (!svg || !title) return null;
+    const icon = svg.getBoundingClientRect(),
+      text = document.createRange();
+    text.selectNodeContents(title.lastChild!);
+    return {
+      size: [icon.width, icon.height],
+      red: getComputedStyle(svg.querySelector("path")!).fill === red,
+      gap: Math.round(text.getBoundingClientRect().left - icon.right),
+    };
+  });
+  expect(look).toEqual({ size: [16, 16], red: true, gap: 8 });
+});
+
 test("57 an image whose upload Jira has is placed in the description even when the page reloads right after", async ({ page, app }) => {
   // Known failure: the page stops guarding the upload once it is answered and places the file only after keeping a local
   // copy and measuring it (jira-media uploadNow, editor-media-upload start). A reload in that gap loses the placement.
