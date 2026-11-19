@@ -1,4 +1,5 @@
 import { type Issue, type Full } from "@/shared/issue-model";
+import { textToAdf } from "@/shared/document";
 import { expect, test } from "bun:test";
 import { IDBFactory } from "fake-indexeddb";
 import {
@@ -205,6 +206,28 @@ test("R2-issue-fields-D1: a tab's later saves keep another tab's reminders and a
   expect(a?.issue?.activity?.map((r) => r.id).sort()).toEqual(["one", "two"]);
   one.close();
   two.close();
+});
+test("a refused description this tab cleared stays cleared after a reload, though no other field changed", async () => {
+  const database = await LocalDatabase.open("refused", new IDBFactory());
+  const change = (refused?: Pick<Full, "descriptionRejected" | "descriptionError">) => ({
+    key: "A-1",
+    issue: { ...issue, key: "A-1", descriptionHistory: [] },
+    full: { key: "A-1", fields: { description: textToAdf("Theirs") }, ...refused },
+    issueFields: ["descriptionHistory"],
+    fullFields: [],
+    created: false,
+  });
+  await database.load();
+  // Jira refused "Mine"; then Keep mine (or Use Jira's version) dropped the refused version and nothing else.
+  await database.save({
+    ...emptyLocalState(),
+    changes: [change({ descriptionRejected: textToAdf("Mine"), descriptionError: "Someone changed it" })],
+  });
+  await database.save({ ...emptyLocalState(), changes: [change()] });
+  const [saved] = (await database.load()).state.changes;
+  expect(saved?.full?.descriptionRejected).toBeUndefined();
+  expect(saved?.full?.descriptionError).toBeUndefined();
+  database.close();
 });
 test("R2-create-D1: a tab never writes back a create another tab already sent and dropped", async () => {
   const factory = new IDBFactory(),

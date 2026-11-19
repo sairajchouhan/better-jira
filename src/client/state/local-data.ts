@@ -296,10 +296,10 @@ const snapshotChanges = (changes: LocalChange[]) =>
   new Map(changes.map((c) => [c.key, structuredClone(c)]));
 
 // --- Merging another tab's saved changes with this tab's -------------------------------------------------------------
-// One three-way model. Each change is a set of fields it overrides ($deleted, $created, issue fields, full:description,
-// full:comment). `base` is this tab's own copy at its last load or save. Per field: a value only this tab changed since
-// `base` is this tab's; one it didn't change is the stored one (so another tab's edit, or its "Jira took it", wins);
-// where both changed, the field's rule below merges them, else this tab's wins.
+// One three-way model. Each change is a set of fields it overrides ($deleted, $created, $refused, issue fields,
+// full:description, full:comment). `base` is this tab's own copy at its last load or save. Per field: a value only this
+// tab changed since `base` is this tab's; one it didn't change is the stored one (so another tab's edit, or its "Jira took
+// it", wins); where both changed, the field's rule below merges them, else this tab's wins.
 
 /** A field a change doesn't override, told apart from one it clears (`parent: undefined`). */
 const NONE = Symbol("none");
@@ -364,6 +364,9 @@ function fieldsOf(change: LocalChange | undefined): Map<string, unknown> {
   if (change.created) fields.set("$created", true);
   for (const f of change.issueFields) fields.set(f, (change.issue as any)?.[f]);
   for (const f of change.fullFields) fields.set("full:" + f, change.full?.fields[f]);
+  // A description Jira refused sits on the record beside its fields, and is cleared without any field changing (Keep mine).
+  const { descriptionRejected, descriptionError } = change.full ?? {};
+  if (descriptionRejected !== undefined) fields.set("$refused", { descriptionRejected, descriptionError });
   return fields;
 }
 /**
@@ -448,8 +451,10 @@ function build(
   const issue = { ...(owner.issue ?? m?.issue ?? t?.issue)! } as Issue;
   for (const f of issueFields) (issue as any)[f] = values.get(f);
   const fullBase = owner.full ?? m?.full ?? t?.full;
+  const { descriptionRejected: _r, descriptionError: _e, ...record } = fullBase ?? ({} as Full);
   const full = fullBase && {
-    ...fullBase,
+    ...record,
+    ...(values.get("$refused") as Pick<Full, "descriptionRejected" | "descriptionError"> | undefined),
     fields: {
       ...fullBase.fields,
       ...Object.fromEntries(fullFields.map((f) => [f, values.get("full:" + f)])),
