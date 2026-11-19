@@ -230,8 +230,6 @@ test("57 a file put into a comment offline is refused as Linear refuses it, and 
 });
 
 test("57 a file that failed to upload says so in Linear's error toast, its red icon 8px before the title", async ({ page, app }) => {
-  // Known failure: the toast has no icon.
-  test.fail();
   await app.seed({ writable: true });
   await openIssue(page, "TEST-2", "Browser fixture 2");
   await page.context().setOffline(true);

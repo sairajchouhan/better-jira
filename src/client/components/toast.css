@@ -79,6 +79,23 @@
     > :is(.ui-toast-description, .ui-toast-subject, .ui-toast-actions) {
     padding-left: 23px;
   }
+  /* Toast `W[error]` in `styles.icon`: a 16px round box, the text 8px after it (the row's gap). */
+  .ui-toast-title:has(> .ui-toast-error) {
+    gap: 8px;
+  }
+  .ui-toast-error {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    color: var(--red-base);
+  }
+  .ui-toast-error > svg {
+    fill: currentColor;
+  }
+  .ui-toast:has(> .ui-toast-title > .ui-toast-error)
+    > :is(.ui-toast-description, .ui-toast-subject, .ui-toast-actions) {
+    padding-left: 24px;
+  }
   .ui-toast-subject {
     grid-column: 1;
     display: flex;

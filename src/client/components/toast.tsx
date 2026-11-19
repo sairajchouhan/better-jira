@@ -121,6 +121,18 @@ export const Toast = Object.assign(ToastRoot, {
       <Icon name="check" size={10} />
     </ToastIcon>
   ),
+  /** Linear's error image (Toast `W[error]`, startup-root `YCt`): a 16px redBase disc with the X cut out. */
+  Error: () => (
+    <ToastIcon className="ui-toast-error">
+      <svg width="16" height="16" viewBox="0 0 16 16">
+        <path
+          fillRule="evenodd"
+          clipRule="evenodd"
+          d="M8 15C11.866 15 15 11.866 15 8C15 4.13401 11.866 1 8 1C4.13401 1 1 4.13401 1 8C1 11.866 4.13401 15 8 15ZM6.53033 5.46967C6.23744 5.17678 5.76256 5.17678 5.46967 5.46967C5.17678 5.76256 5.17678 6.23744 5.46967 6.53033L6.93934 8L5.46967 9.46967C5.17678 9.76256 5.17678 10.2374 5.46967 10.5303C5.76256 10.8232 6.23744 10.8232 6.53033 10.5303L8 9.06066L9.46967 10.5303C9.76256 10.8232 10.2374 10.8232 10.5303 10.5303C10.8232 10.2374 10.8232 9.76256 10.5303 9.46967L9.06066 8L10.5303 6.53033C10.8232 6.23744 10.8232 5.76256 10.5303 5.46967C10.2374 5.17678 9.76256 5.17678 9.46967 5.46967L8 6.93934L6.53033 5.46967Z"
+        />
+      </svg>
+    </ToastIcon>
+  ),
   /** What the toast is about, under the title: an issue's icon, key and title, a view's icon and name. */
   Subject: ({ className = "", ...props }: ComponentProps<"p">) => (
     <p className={`ui-toast-subject ${className}`} {...props} />

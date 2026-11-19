@@ -214,6 +214,7 @@ export function mediaUploads(
         showNotification({
           text: "File failed to upload",
           detail: navigator.onLine ? error.message : "Cannot upload files while being offline.",
+          error: true,
         });
         return;
       }

@@ -27,9 +27,10 @@ export function confirmationId(signature: readonly unknown[]) {
 }
 export const INBOX_NOTIFICATION_ID = "inbox";
 /** Linear's error toast when a copy fails (`lM`, `wX`, `thn`: `new U(L.error, "Couldn’t copy to clipboard")`). */
-export const COPY_FAILED = { text: "Couldn’t copy to clipboard" } as const satisfies Notification;
-/** `icon` is the image before the text, as Linear's info toasts carry one (the copy icon on "Copied issue link to clipboard"). */
-export type Notification = { text: string; detail?: string; key?: string; undo?: () => void; icon?: IconName };
+export const COPY_FAILED = { text: "Couldn’t copy to clipboard", error: true } as const satisfies Notification;
+/** `icon` is the image before the text, as Linear's info toasts carry one (the copy icon on "Copied issue link to clipboard").
+ *  `error`: Linear's error toast (`L.error`), its red icon before the text. */
+export type Notification = { text: string; detail?: string; key?: string; undo?: () => void; icon?: IconName; error?: boolean };
 type ContentProps = { notice: Notification; id: string };
 
 /** View issue: opens the issue by the key it has now, so a key Jira has since replaced still finds it. */
@@ -53,6 +54,7 @@ function NotificationContent({ notice, id }: ContentProps) {
   return (
     <Toast data-toast>
       <Toast.Title>
+        {notice.error && <Toast.Error />}
         {notice.icon && (
           <Toast.Icon>
             <Icon name={notice.icon} size={14} />
@@ -120,7 +122,12 @@ export function showNotification(
 ) {
   if (notice.key) lastLink = notice.key;
   recordJiraMessages(`${notice.text} ${notice.detail ?? ""}`);
-  return toasts.show(<NotificationContent notice={notice} id={id} />, { id, duration: Infinity, expiresIn: 5000 });
+  // An error stays as long as Linear's toasts do by default (`_Ce`, 8.5 s).
+  return toasts.show(<NotificationContent notice={notice} id={id} />, {
+    id,
+    duration: Infinity,
+    expiresIn: notice.error ? 8500 : 5000,
+  });
 }
 /** "Issue created" for a new issue, a confirmation like the others so Open link from last toast finds it. */
 export function showIssueCreated(key: string) {
