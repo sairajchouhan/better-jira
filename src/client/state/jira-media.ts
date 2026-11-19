@@ -1,6 +1,6 @@
 import type { Op } from "@/shared/jira-ops";
 import { issueAttachments, type Attachment } from "@/shared/attachment-media";
-import { localFileURL, retainJiraFile } from "./local-database";
+import { localFile, localFileURL, retainJiraFile } from "./local-database";
 
 /** `found`: matched after a lost answer rather than answered by Jira (see uploadAttachment). */
 export type Uploaded = { attachment: Attachment & { found?: boolean }; collection: string };
@@ -46,7 +46,7 @@ const request = (url: string, init?: RequestInit) =>
   });
 
 let uploading = 0;
-// A reload mid-upload can't resume it, so the browser asks first (the file would miss its place in the description).
+// A reload mid-upload cuts the send off; the replayed write sends it again under the same client id, but the browser asks first.
 if (typeof window !== "undefined")
   addEventListener("beforeunload", (event) => {
     if (uploading) event.preventDefault();
@@ -75,52 +75,37 @@ async function postAttachment(
     uploading--;
   }
 }
-/** Uploads files to Jira at once and in parallel, before they are placed, so one Jira didn't take never looks saved; `keep`
- * then stores the local copies, which map to the Jira attachments. A failed send goes once more at once under the same
- * client id, as Linear's editor upload does (`retryOnFailure`: one retry, no backoff). */
-export async function uploadNow(
-  key: string,
-  files: File[],
-  keep: (files: File[]) => Promise<Attachment[]>,
-  clients: string[] = [],
-): Promise<Attachment[]> {
-  // Marked while it runs: a reload can't resume it, so the next page says the file wasn't placed (R2-D9).
-  const marker = `${UPLOADING}${key}:${crypto.randomUUID()}`;
-  ownMarkers.add(marker);
-  try {
-    localStorage.setItem(marker, JSON.stringify(files.map((file) => file.name)));
-  } catch {}
-  try {
-    const uploaded = await Promise.all(
-      files.map((file, i) => {
-        const client = clients[i] ?? crypto.randomUUID(),
-          send = () => postAttachment(key, file, file.name, client);
-        return send().catch(send);
-      }),
-    );
-    const saved = await keep(files);
-    saved.forEach((file, index) => remember(key, file.id, uploaded[index]));
-    return saved;
-  } finally {
-    ownMarkers.delete(marker);
-    try {
-      localStorage.removeItem(marker);
-    } catch {}
-  }
+/** Local files an editor is still placing (uploading, measuring): a write that places one waits for it (outbox `uploading`). */
+const placing = new Set<string>();
+/** Marks a local file an editor put in its document as still being placed until the returned function is called. Called
+ *  in the step that places it, so the write that step queues waits. */
+export function placingFile(id: string) {
+  placing.add(id);
+  return () => void placing.delete(id);
 }
-const UPLOADING = "better-jira:uploading:",
-  ownMarkers = new Set<string>();
-/** Names of files an earlier page was still uploading to this issue when it closed; reading clears them. */
-export function interruptedUploads(key: string): string[] {
-  const names: string[] = [];
+/** Local files whose upload failed after their editor placed them: it takes them out again, and no write sends them. */
+const dropped = new Set<string>();
+/** Whether `ops` place a file still uploading here. */
+export function uploadingIn(ops: Op[]) {
+  if (!placing.size) return false;
+  const text = JSON.stringify(ops);
+  return [...placing].some((id) => text.includes(`"${id}"`));
+}
+/**
+ * Uploads a file an editor placed in its document as a local copy (`id`), the way Linear's uploading node is in the
+ * document before its upload starts: a reload replays the write that places it, which sends it again under the same client
+ * id and gets back the attachment this send made. A failed send goes once more at once (Linear's `retryOnFailure`).
+ */
+export async function uploadPlaced(key: string, id: string, file: File): Promise<Uploaded> {
+  const send = () => postAttachment(key, file, file.name, id);
   try {
-    for (const name of Object.keys(localStorage))
-      if (name.startsWith(`${UPLOADING}${key}:`) && !ownMarkers.has(name)) {
-        names.push(...(JSON.parse(localStorage.getItem(name) ?? "[]") as string[]));
-        localStorage.removeItem(name);
-      }
-  } catch {}
-  return names;
+    const uploaded = await send().catch(send);
+    remember(key, id, uploaded);
+    return uploaded;
+  } catch (error) {
+    dropped.add(id);
+    throw error;
+  }
 }
 
 /** Walk every value, including future comment ops. Only local ADF media identities change. */
@@ -186,7 +171,17 @@ export function aliasAttachments(
   return files.map((file) => ({ ...file, ...aliases.get(file.id) }));
 }
 
-export async function prepareOps(key: string, ops: Op[]): Promise<Op[]> {
+/** `value` with the documents in it rid of the files their editor took out after a failed upload. */
+function withoutDropped<T>(value: T): T {
+  if (!dropped.size || !value || typeof value !== "object") return value;
+  if (Array.isArray(value)) return value.map(withoutDropped) as T;
+  if ((value as { type?: unknown }).type === "doc") return withoutLocalMedia(value, dropped);
+  return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, withoutDropped(v)])) as T;
+}
+
+export async function prepareOps(key: string, queued: Op[]): Promise<Op[]> {
+  // Written before the upload failed: the editor has since taken the file out.
+  const ops = withoutDropped(queued);
   const pending = new Map<string, Promise<Uploaded>>();
   // A file uploaded for a document node gets its name from the job's attachment op, not the blob.
   const names = new Map(
@@ -197,15 +192,14 @@ export async function prepareOps(key: string, ops: Op[]): Promise<Op[]> {
     if (cached) return Promise.resolve(cached);
     if (pending.has(id)) return pending.get(id)!;
     const job = (async () => {
-      const url = await localFileURL(id);
-      if (!url) throw new Error("This local file is unavailable.");
-      const blob = await (await fetch(url)).blob(),
-        result = await postAttachment(
-          key,
-          blob,
-          name ?? names.get(id) ?? (blob instanceof File ? blob.name : "Attachment"),
-          id,
-        );
+      const blob = await localFile(id);
+      if (!blob) throw new Error("This local file is unavailable.");
+      const result = await postAttachment(
+        key,
+        blob,
+        name ?? names.get(id) ?? (blob instanceof File ? blob.name : "Attachment"),
+        id,
+      );
       remember(key, id, result);
       return result;
     })();
@@ -244,14 +238,19 @@ export async function prepareOps(key: string, ops: Op[]): Promise<Op[]> {
   return out;
 }
 
-/** The document without media still stored only in this browser; used to create an issue before its files can attach. */
-export function withoutLocalMedia<T>(doc: T): T {
+/** The document without media still stored only in this browser (or only the `only` ones); used to create an issue before
+ *  its files can attach. */
+export function withoutLocalMedia<T>(doc: T, only?: Set<string>): T {
   const walk = (node: any): any => {
     if (!node || typeof node !== "object" || !Array.isArray(node.content)) return node;
     const content = node.content
       .filter(
         (child: any) =>
-          !(["media", "mediaInline"].includes(child?.type) && child.attrs?.collection === "local"),
+          !(
+            ["media", "mediaInline"].includes(child?.type) &&
+            child.attrs?.collection === "local" &&
+            (!only || only.has(String(child.attrs.id)))
+          ),
       )
       .map(walk)
       .filter(

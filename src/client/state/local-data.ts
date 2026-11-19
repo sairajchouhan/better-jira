@@ -706,6 +706,13 @@ export class LocalDatabase {
     tx.objectStore("files").put(file, id);
     await done;
   }
+  /** The file as it was kept, with its name and type. */
+  async file(id: string): Promise<Blob | undefined> {
+    const tx = this.db.transaction("files", "readonly"),
+      done = completed(tx),
+      [file] = await Promise.all([request(tx.objectStore("files").get(id)), done]);
+    return file instanceof Blob ? file : undefined;
+  }
   async fileURL(id: string): Promise<string | undefined> {
     const cached = this.urls.get(id);
     if (cached) return cached;

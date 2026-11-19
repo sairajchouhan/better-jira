@@ -260,9 +260,6 @@ test("57 a file that failed to upload says so in Linear's error toast, its red i
 });
 
 test("57 an image whose upload Jira has is placed in the description even when the page reloads right after", async ({ page, app }) => {
-  // Known failure: the page stops guarding the upload once it is answered and places the file only after keeping a local
-  // copy and measuring it (jira-media uploadNow, editor-media-upload start). A reload in that gap loses the placement.
-  test.fail();
   await app.seed({ writable: true });
   await app.changeInJira({ key: "TEST-2", description: "Steps to reproduce" });
   await openIssue(page, "TEST-2", "Browser fixture 2");
@@ -290,8 +287,6 @@ test("57 an image is placed in the description and lands once even when the page
   page,
   app,
 }) => {
-  // Known failure: the file is placed only once Jira answered the upload, so the reload loses it.
-  test.fail();
   await app.seed({ writable: true });
   await app.changeInJira({ key: "TEST-2", description: "Steps to reproduce" });
   await openIssue(page, "TEST-2", "Browser fixture 2");

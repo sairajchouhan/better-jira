@@ -8,7 +8,7 @@ import { type Full, type Issue } from "@/shared/issue-model";
  */
 import type { LocalChange, LocalState } from "./local-data";
 import { createOutbox, type Answer } from "./outbox";
-import { aliasAttachments, prepareOps, settleUploads } from "./jira-media";
+import { aliasAttachments, prepareOps, settleUploads, uploadingIn } from "./jira-media";
 import { namesKey, renameCommentIds, renameIds, type Side } from "@/shared/jira-ops";
 import { jiraCommentId } from "@/client/features/media/media-edits";
 import {
@@ -78,6 +78,7 @@ const writes = createOutbox(
         body: JSON.stringify(body),
       }),
     prepare: (key, ops) => prepareOps(key, ops),
+    uploading: (ops) => uploadingIn(ops),
     clock: {
       now: () => Date.now(),
       setTimeout: (fn, ms) => setTimeout(fn, ms),

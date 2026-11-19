@@ -1,5 +1,5 @@
 import { expect, test } from "bun:test";
-import { prepareOps, Unreachable, uploadNow, UploadRefused } from "./jira-media";
+import { prepareOps, Unreachable, uploadPlaced, UploadRefused } from "./jira-media";
 
 /** What `send` rejects with while the browser's fetch answers `answer`. */
 async function failure(answer: () => Promise<Response>, send: () => Promise<unknown>) {
@@ -19,7 +19,7 @@ const offline = async (): Promise<Response> => {
 };
 
 test("an upload fails as unreachable when the server can't be reached, and as refused when the server says no", async () => {
-  const upload = () => uploadNow("KAN-1", [new File(["x"], "a.png")], async () => []);
+  const upload = () => uploadPlaced("KAN-1", "local-1", new File(["x"], "a.png"));
   expect(await failure(offline, upload)).toBeInstanceOf(Unreachable);
   const refusal = async () => Response.json({ error: "The file is too large for Jira." }, { status: 422 });
   expect(await failure(refusal, upload)).toBeInstanceOf(UploadRefused);

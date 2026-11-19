@@ -37,6 +37,13 @@ export type DescriptionPorts = {
 };
 
 const textOf = (doc: string) => adfToText(JSON.parse(doc || "null"));
+/** The files a document shows, as their attributes (id and size). */
+function mediaKey(node: unknown): string {
+  if (!node || typeof node !== "object") return "";
+  const { type, attrs, content } = node as { type?: string; attrs?: unknown; content?: unknown };
+  if (type === "media" || type === "mediaInline") return JSON.stringify(attrs);
+  return Array.isArray(content) ? content.map(mediaKey).join("") : "";
+}
 /** The ids of the files a document shows. */
 function mediaIds(node: unknown, ids = new Set<string>()) {
   if (!node || typeof node !== "object") return ids;
@@ -46,6 +53,11 @@ function mediaIds(node: unknown, ids = new Set<string>()) {
   return ids;
 }
 const stringify = (doc: unknown) => JSON.stringify(normalizeDocument(doc as AdfDocument));
+const sameMedia = (a: unknown, b: unknown) => {
+  const one = mediaIds(a),
+    other = mediaIds(b);
+  return one.size === other.size && [...one].every((id) => other.has(id));
+};
 
 /**
  * `key` is the issue's key when the editor opened; it stays the session's key (and draft key) after the issue moves to
@@ -66,7 +78,7 @@ export function descriptionSession(
     resolving = false,
     snapshot: DescriptionSnapshot = { revision: 0, draft: undefined, conflict: false };
   // The files the editor's document showed after its last change, read from `shown` at the first change.
-  let media: Set<string> | undefined;
+  let media: string | undefined;
   const listeners = new Set<() => void>();
   const publish = (patch: Partial<DescriptionSnapshot> = {}) => {
     snapshot = { ...snapshot, conflict, ...patch };
@@ -132,16 +144,16 @@ export function descriptionSession(
     held,
 
     /**
-     * The editor's document changed. A file it didn't show before (a paste, drop or upload that just landed in Jira)
-     * saves at once rather than after the typing pause: Linear's description is a Yjs document that syncs each change
-     * as it happens (BJ-233).
+     * The editor's document changed. A file placed or changed (a paste, drop or upload, or its size once measured) saves
+     * at once rather than after the typing pause: Linear's description is a Yjs document that syncs each change as it
+     * happens (BJ-233).
      */
     edit(doc: AdfDocument) {
       typed = doc;
-      const before = media ?? mediaIds(JSON.parse(shown || "null"));
-      media = mediaIds(doc);
+      const before = media ?? mediaKey(JSON.parse(shown || "null"));
+      media = mediaKey(doc);
       autosave.send({ type: "change", doc });
-      if ([...media].some((id) => !before.has(id))) autosave.send({ type: "flush" });
+      if (media !== before) autosave.send({ type: "flush" });
     },
     /** Saves pending typing now (blur, unmount). */
     flush() {
@@ -211,7 +223,8 @@ export function descriptionSession(
         const saved = JSON.parse(raw),
           doc: AdfDocument = saved?.type === "doc" ? saved : saved.doc,
           base: string | undefined = saved?.type === "doc" ? undefined : saved.base;
-        if (textOf(JSON.stringify(doc)) === textOf(stored)) forget();
+        // A file placed is a change too, even when the text is Jira's.
+        if (textOf(JSON.stringify(doc)) === textOf(stored) && sameMedia(doc, JSON.parse(stored || "null"))) forget();
         else if (held() || (base && textOf(base) !== textOf(stored))) {
           typed = doc;
           if (!held()) conflict = true;

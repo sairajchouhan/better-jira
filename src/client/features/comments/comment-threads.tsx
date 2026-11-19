@@ -3,6 +3,7 @@ import { newSubIssueDraft } from "@/client/features/issue/sub-issue-draft";
 import { canHaveSubIssues } from "@/shared/issue-properties";
 
 import { type Issue } from "@/shared/issue-model";
+import type { Attachment } from "@/shared/attachment-media";
 import { pageURL } from "@/client/features/navigation/app-navigation";
 /* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
@@ -21,12 +22,12 @@ import { ActionMenu, type ActionEntry } from "@/client/components/action-menu";
 import { ReactionPicker, ReactionPill } from "./reactions";
 import { CommentEditEditor, FramedEditor, CommentComposer } from "@/client/features/editor/rich-editor-loader";
 import { ME, get, set } from "@/client/state/store";
-import { actions, addIssueFiles, beginCreate } from "@/client/state/issue-actions";
+import { actions, beginCreate, keepIssueFiles, uploadIssueFile } from "@/client/state/issue-actions";
 import { currentKey } from "@/client/state/jira-sync";
 import { addLocalFiles } from "@/client/state/local-database";
 import { commentDraftKey, onRejectedComment, restoreRejectedDraft } from "./rejected-comment";
 import { readStored, writeStored } from "@/client/state/stored-state";
-import { trackDraftUploads } from "@/client/features/issue/draft-uploads";
+import { trackDraftUpload } from "@/client/features/issue/draft-uploads";
 import { mentionDraft, visibleComments, type IssueComment } from "./comment-thread";
 import { useAnchorHighlight, useLocationAnchor } from "./anchor-highlight";
 import { copyText } from "@/client/lib/clipboard";
@@ -54,16 +55,11 @@ export function useDraftFiles(key: string) {
   // Leaving the issue only cancels: an upload may still be on its way into the saved draft.
   useEffect(() => () => sweep.later.cancel(), [sweep]);
   return {
-    onFiles: async (files: File[]) => {
-      const saved = await trackDraftUploads(
-        get().namespace,
-        key,
-        files,
-        (ids) => addIssueFiles(key, files, ids),
-        get().writable,
-      );
-      for (const file of saved) uploaded.current.add(file.id);
-      return saved;
+    onFiles: keepIssueFiles,
+    onUpload: async (file: Attachment, picked: File) => {
+      const upload = () => uploadIssueFile(key, file, picked);
+      await (get().writable ? trackDraftUpload(get().namespace, key, { ...file, name: picked.name, size: picked.size }, upload) : upload());
+      uploaded.current.add(file.id);
     },
     changed: (body: AdfDocument) => {
       draft.current = body;
@@ -447,6 +443,7 @@ function Thread({
               issueKey={issue.key}
               attachments={issue.attachments}
               onFiles={editFiles.onFiles}
+              onUpload={editFiles.onUpload}
               onChange={(body) => {
                 editFiles.changed(body);
                 trackEdit(comment.id, body);
@@ -530,6 +527,7 @@ function Thread({
                   issueKey={issue.key}
                   attachments={issue.attachments}
                   onFiles={replyFiles.onFiles}
+                  onUpload={replyFiles.onUpload}
                   saveLabel="Submit reply"
                   onChange={(body) => {
                     replyFiles.changed(body);

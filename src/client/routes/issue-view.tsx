@@ -42,12 +42,11 @@ import { ME, get, useStore, isWatching, statusOf } from "@/client/state/store";
 import { issueURL, jiraIssueURL } from "@/client/features/issue/issue-urls";
 import { LINEAR_RELATIONS, relationSections } from "@/shared/relations";
 import { IssueKeyLink } from "@/client/features/navigation/app-link";
-import { actions, addIssueFiles } from "@/client/state/issue-actions";
+import { actions, keepIssueFiles, uploadIssueFile } from "@/client/state/issue-actions";
 import { loadFull } from "@/client/state/server-data";
 import { currentKey, firstKey } from "@/client/state/jira-sync";
 import { flushLocalChanges } from "@/client/state/local-database";
 import { navigate, openIssuesIn, ui } from "@/client/features/navigation/app-navigation";
-import { interruptedUploads } from "@/client/state/jira-media";
 import { listPosition, navigationIssues, visibleOrder } from "@/shared/view-model";
 import { epicChanges, epicLocked, epicName, epicOf } from "@/shared/epics";
 import { PersonalIssueDetails } from "@/client/features/issue/personal-controls";
@@ -689,16 +688,6 @@ function Description({ issue }: { issue: Issue }) {
     if (loaded) session.recover(stored);
     // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Draft recovery follows the load transition, not each refreshed description.
   }, [loaded, session]);
-  // Files that were uploading when the page reloaded reached Jira's attachments, if anything, but not the text (R2-D9).
-  useEffect(() => {
-    const names = interruptedUploads(issue.key);
-    if (names.length)
-      showNotification({
-        text: `${names.join(", ")} ${names.length > 1 ? "weren't" : "wasn't"} placed`,
-        detail:
-          `The page reloaded during the upload. ${JIRA_MESSAGES["check-attachments"].phrase}`,
-      });
-  }, [issue.key]);
   useEffect(() => () => session.flush(), [session]);
   return (
     <section
@@ -743,7 +732,8 @@ function Description({ issue }: { issue: Issue }) {
           scope={`${issue.key}:description`}
           onLateMedia={session.lateMedia}
           initial={draft ?? content}
-          onFiles={(files) => addIssueFiles(issue.key, files)}
+          onFiles={keepIssueFiles}
+          onUpload={(file, picked) => uploadIssueFile(issue.key, file, picked)}
           issueKey={issue.key}
           attachments={issue.attachments}
           placeholder="Add description…"
@@ -1020,6 +1010,7 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
             issueKey={issue.key}
             attachments={issue.attachments}
             onFiles={composerFiles.onFiles}
+            onUpload={composerFiles.onUpload}
             label="Leave a comment…"
             placeholder="Leave a comment…"
             autoFocus={draft.autoFocus}

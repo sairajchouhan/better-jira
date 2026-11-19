@@ -23,7 +23,7 @@ import { COPY_FAILED, showNotification } from "@/client/state/app-notifications"
 import { normalizeDocument, type AdfDocument } from "@/shared/document";
 import { get, ME, set, useStore, usePeople } from "@/client/state/store";
 import { firstKey } from "@/client/state/jira-sync";
-import { actions, addIssueFiles } from "@/client/state/issue-actions";
+import { actions, keepIssueFiles, uploadIssueFile } from "@/client/state/issue-actions";
 import { flushLocalChanges } from "@/client/state/local-database";
 import { navigate } from "@/client/features/navigation/app-navigation";
 import { toggleFavorite } from "@/client/features/navigation/favorites";
@@ -282,7 +282,8 @@ function DocumentBody() {
       }}
       issueKey={issue.key}
       attachments={issue.attachments}
-      onFiles={(files) => addIssueFiles(issue.key, files)}
+      onFiles={keepIssueFiles}
+      onUpload={(file, picked) => uploadIssueFile(issue.key, file, picked)}
       onChange={(body) => update({ body })}
       onBlur={endSession}
     />

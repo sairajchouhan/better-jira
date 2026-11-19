@@ -1,9 +1,10 @@
-import { Plugin, PluginKey } from "prosemirror-state";
+import { Plugin, PluginKey, type Transaction } from "prosemirror-state";
+import type { Node as ProseMirrorNode } from "prosemirror-model";
 import { insertPoint } from "prosemirror-transform";
 import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
 import type { Attachment } from "@/shared/attachment-media";
 import { documentHasMedia, normalizeDocument, type AdfDocument } from "@/shared/document";
-import { Unreachable } from "@/client/state/jira-media";
+import { placingFile, Unreachable } from "@/client/state/jira-media";
 import { showNotification } from "@/client/state/app-notifications";
 
 /** Media an editor placed after it was closed: its document when it closed (before) and after the late files landed. */
@@ -63,20 +64,44 @@ async function dimensions(
     });
 }
 
+/** How long a placed file's write waits for its size (Linear's `YAe.previewTimeoutMs`). */
+const PREVIEW_TIMEOUT = 10_000;
+/** Where the file `id` an upload placed sits in `doc`, as the mediaSingle holding it. */
+function placed(doc: ProseMirrorNode, id: string) {
+  let at: { pos: number; node: ProseMirrorNode } | undefined;
+  doc.descendants((node, pos) => {
+    if (at) return false;
+    if (node.type.name === "mediaSingle" && node.attrs.raw?.content?.some((m: any) => m?.attrs?.id === id))
+      at = { pos, node };
+  });
+  return at;
+}
+
+/**
+ * Files picked, pasted or dropped into an editor. Like Linear's upload node (`uploadState: "uploading"`), each file is in the
+ * document as soon as its local copy is kept, before its upload starts, so a reload or a closed editor never loses where it
+ * went; its size follows once measured. `upload` sends it to Jira; if that fails the file leaves the document and a toast
+ * says why (Linear's `Cje`, `showAlert("File failed to upload", …)`).
+ */
 export function mediaUploads(
   view: () => EditorView | null,
-  save: (files: File[]) => Promise<Attachment[]>,
+  files: {
+    keep: (files: File[]) => Promise<Attachment[]>;
+    upload?: (file: Attachment, picked: File) => Promise<unknown>;
+  },
   changed?: (busy: boolean) => void,
   notice?: (message: string) => void,
 ) {
   const key = new PluginKey<Map<string, number>>("media-uploads");
   let alive = true;
+  /** Picks still keeping or uploading their files, and the local ids of the files uploading. */
   const jobs = new Map<string, { files: File[] }>(),
-    saving = new Set<string>(),
+    uploading = new Set<string>(),
     waiting: (() => void)[] = [];
   const settle = (id: string) => {
-    saving.delete(id);
-    if (!saving.size) waiting.splice(0).forEach((resolve) => resolve());
+    jobs.delete(id);
+    changed?.(jobs.size > 0);
+    if (!jobs.size) waiting.splice(0).forEach((resolve) => resolve());
   };
   const widget = (id: string) => {
     const dom = document.createElement("span");
@@ -107,7 +132,7 @@ export function mediaUploads(
           if (!removed) positions.set(id, pos);
         }
         const change = tr.getMeta(key);
-        if (change) {
+        if (change?.id) {
           if (change.position === undefined) positions.delete(change.id);
           else positions.set(change.id, change.position);
         }
@@ -115,109 +140,126 @@ export function mediaUploads(
       },
     },
     props: {
-      decorations: (state) =>
-        DecorationSet.create(
-          state.doc,
-          [...(key.getState(state) ?? [])].map(([id, pos]) =>
+      decorations: (state) => {
+        const busy: Decoration[] = [];
+        for (const id of uploading) {
+          const at = placed(state.doc, id);
+          if (at) busy.push(Decoration.node(at.pos, at.pos + at.node.nodeSize, { "aria-busy": "true" }));
+        }
+        return DecorationSet.create(state.doc, [
+          ...busy,
+          ...[...(key.getState(state) ?? [])].map(([id, pos]) =>
             Decoration.widget(pos, () => widget(id), {
               key: id,
               side: -1,
               stopEvent: () => true,
             }),
           ),
-        ),
+        ]);
+      },
     },
   });
-  const position = (id: string) => {
-    const editor = view();
-    return editor ? key.getState(editor.state)?.get(id) : undefined;
+  /** Changes the file `id` placed, out of the undo history (Linear's `Gy` with `addToHistory: false`). */
+  const edit = (id: string, change: (tr: Transaction, at: { pos: number; node: ProseMirrorNode }) => Transaction) => {
+    const editor = view(),
+      at = editor && placed(editor.state.doc, id);
+    if (alive && editor && at) editor.dispatch(change(editor.state.tr, at).setMeta("addToHistory", false));
   };
-  const remove = (id: string) => {
-    const editor = view();
-    jobs.delete(id);
-    changed?.(jobs.size > 0);
-    if (alive && editor) editor.dispatch(editor.state.tr.setMeta(key, { id }));
+  const failed = (error: unknown) =>
+    showNotification({
+      text: "File failed to upload",
+      detail:
+        error instanceof Unreachable && !navigator.onLine
+          ? "Cannot upload files while being offline."
+          : error instanceof Error
+            ? error.message
+            : "Please try again later",
+      error: true,
+    });
+  /**
+   * Measures the placed file and waits for its upload; a failed upload takes it out again. Like Linear's upload, which
+   * finishes once the preview gave the file its size (`YAe.run`, up to `previewTimeoutMs`), the write placing it waits for
+   * both, so it carries the size.
+   */
+  const send = async (file: Attachment, picked: File, placed: () => void) => {
+    const measured = dimensions(picked, file.url).then((size) => {
+      if (size)
+        edit(file.id, (tr, { pos, node }) => {
+          const raw = node.attrs.raw;
+          return tr.setNodeMarkup(pos, undefined, {
+            ...node.attrs,
+            raw: { ...raw, content: raw.content.map((m: any) => ({ ...m, attrs: { ...m.attrs, ...size } })) },
+          });
+        });
+    });
+    try {
+      await Promise.all([
+        Promise.race([measured, new Promise((resolve) => setTimeout(resolve, PREVIEW_TIMEOUT))]),
+        files.upload?.(file, picked).catch((error) => {
+          edit(file.id, (tr, { pos, node }) => tr.delete(pos, pos + node.nodeSize));
+          failed(error);
+        }),
+      ]);
+    } finally {
+      placed();
+      if (uploading.delete(file.id)) edit(file.id, (tr) => tr.setMeta(key, {}));
+    }
   };
   const start = async (id: string) => {
     const job = jobs.get(id)!;
-    saving.add(id);
     try {
-      const files = await save(job.files);
-      const sizes = await Promise.all(
-        files.map((file, index) => dimensions(job.files[index]!, file.url)),
-      );
+      const saved = await files.keep(job.files);
       const editor = view(),
-        at = position(id);
+        at = editor && key.getState(editor.state)?.get(id);
       if (!alive || !editor) return;
-      if (at === undefined) {
-        remove(id);
-        notice?.("Files saved to issue attachments because their insertion point was removed.");
+      if (at === undefined || at === null) {
+        notice?.("The attachment insertion point was removed. Choose the file again.");
         return;
       }
-      const nodes = files.map((file, index) =>
+      const nodes = saved.map((file) =>
         editor.state.schema.nodes.mediaSingle!.create({
           raw: {
             type: "mediaSingle",
             attrs: { layout: "center" },
-            content: [
-              {
-                type: "media",
-                attrs: {
-                  id: file.id,
-                  type: "file",
-                  collection: "local",
-                  localId: file.id,
-                  ...sizes[index],
-                },
-              },
-            ],
+            content: [{ type: "media", attrs: { id: file.id, type: "file", collection: "local", localId: file.id } }],
           },
         }),
       );
+      // Marked before they go in, so the write the placing queues (in this same step) waits for them.
+      const placed = saved.map((file) => {
+        if (files.upload) uploading.add(file.id);
+        return placingFile(file.id);
+      });
       // At a paragraph's start or end the files go beside it, not into it, so no empty paragraph is left behind (a drop lands at a start).
       const place = insertPoint(editor.state.doc, at, editor.state.schema.nodes.mediaSingle!) ?? at;
       editor.dispatch(editor.state.tr.replaceWith(place, place, nodes).setMeta(key, { id }));
-      jobs.delete(id);
-      changed?.(jobs.size > 0);
+      await Promise.all(saved.map((file, index) => send(file, job.files[index]!, placed[index]!)));
     } catch (error) {
-      // Linear's upload catch drops the file and says why (`Cje`, `showAlert("File failed to upload", …, true)`), in its
-      // offline wording when offline (`tmr`). Nothing waits to go later.
-      remove(id);
-      showNotification({
-        text: "File failed to upload",
-        detail:
-          error instanceof Unreachable && !navigator.onLine
-            ? "Cannot upload files while being offline."
-            : error instanceof Error
-              ? error.message
-              : "Please try again later",
-        error: true,
-      });
+      failed(error);
     } finally {
+      const editor = view();
+      if (alive && editor && key.getState(editor.state)?.has(id)) editor.dispatch(editor.state.tr.setMeta(key, { id }));
       settle(id);
     }
   };
   return {
     plugin,
     busy: () => jobs.size > 0,
-    /** Resolves once no file is mid-save, so an unmounting editor can still place files that finish late. */
-    idle: () =>
-      saving.size ? new Promise<void>((resolve) => waiting.push(resolve)) : Promise.resolve(),
-    enqueue(files: File[], at?: number) {
+    /** Resolves once no file is keeping or uploading, so an unmounting editor can still place files that finish late. */
+    idle: () => (jobs.size ? new Promise<void>((resolve) => waiting.push(resolve)) : Promise.resolve()),
+    enqueue(picked: File[], at?: number) {
       const editor = view();
-      if (!alive || !editor || !files.length) return;
+      if (!alive || !editor || !picked.length) return;
       const id = crypto.randomUUID();
-      jobs.set(id, { files });
+      jobs.set(id, { files: picked });
       changed?.(true);
-      editor.dispatch(
-        editor.state.tr.setMeta(key, { id, position: at ?? editor.state.selection.from }),
-      );
+      editor.dispatch(editor.state.tr.setMeta(key, { id, position: at ?? editor.state.selection.from }));
       void start(id);
     },
     dispose() {
       alive = false;
       jobs.clear();
-      saving.clear();
+      uploading.clear();
       waiting.splice(0).forEach((resolve) => resolve());
     },
   };

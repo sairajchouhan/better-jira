@@ -2,9 +2,9 @@ import { storedMediaIds } from "./issue-attachments";
 import { remember, UploadRefused, type Uploaded } from "@/client/state/jira-media";
 
 /**
- * Files a comment composer uploads go to Jira at once. Each is noted here before it starts, so one a reload cut off
- * mid-upload, or that a draft dropped just before leaving, is removed from Jira on the next load; its upload slot goes
- * too (R2-comments-D5). `local` is the file's local id once the upload answered.
+ * Files a comment composer uploads go to Jira at once. Each is noted here before it starts, under its local id (the
+ * upload's client id), so one a reload cut off mid-upload, or that a draft dropped just before leaving, is removed from Jira
+ * on the next load; its upload slot goes too (R2-comments-D5). `local` is the file's local id once the upload answered.
  */
 export type DraftUpload = {
   id: string;
@@ -34,53 +34,34 @@ function edit(namespace: string, fn: (list: DraftUpload[]) => DraftUpload[]) {
     else localStorage.removeItem(store(namespace));
   } catch {}
 }
-export function noteDraftUploads(namespace: string, key: string, files: File[]): string[] {
-  const entries = files.map((file) => ({
-    id: crypto.randomUUID(),
-    key,
-    name: file.name,
-    size: file.size,
-    at: Date.now(),
-  }));
-  edit(namespace, (list) => [...list, ...entries]);
-  return entries.map((e) => e.id);
+function noteDraftUpload(namespace: string, key: string, file: { id: string; name: string; size: number }) {
+  edit(namespace, (list) => [...list, { id: file.id, key, name: file.name, size: file.size, at: Date.now() }]);
 }
-/** `locals` are the saved files' local ids, in order; without them (a failed upload) the entries go. */
-export function settleDraftUploads(namespace: string, ids: string[], locals?: string[]) {
+/** `local`: the saved file's local id; without it (a refused upload) the entry goes. */
+function settleDraftUpload(namespace: string, id: string, local?: string) {
   edit(namespace, (list) =>
-    list.flatMap((entry) => {
-      const index = ids.indexOf(entry.id);
-      if (index < 0) return [entry];
-      return locals?.[index] ? [{ ...entry, local: locals[index] }] : [];
-    }),
+    list.flatMap((entry) => (entry.id !== id ? [entry] : local ? [{ ...entry, local }] : [])),
   );
 }
 /**
- * Notes `files` while `upload` sends them (it gets the notes' ids as the uploads' client ids), then settles the notes:
- * saved files keep theirs with their local ids, a refusal drops them. A send with no answer (a reload cut it off) keeps
- * them, so the cleaner asks the server what it made and removes it (R3-comments-D1).
+ * Notes `file` (an editor's local copy) while `upload` sends it under its local id, then settles the note: an uploaded file
+ * keeps it with its local id, a refusal drops it. A send with no answer (a reload cut it off) keeps it, so the cleaner asks
+ * the server what it made and removes it (R3-comments-D1).
  */
-export async function trackDraftUploads<T extends { id: string }>(
+export async function trackDraftUpload(
   namespace: string,
   key: string,
-  files: File[],
-  upload: (ids: string[]) => Promise<T[]>,
-  writable = true,
-): Promise<T[]> {
-  const noted = writable ? noteDraftUploads(namespace, key, files) : [];
-  let saved: T[];
+  file: { id: string; name: string; size: number },
+  upload: () => Promise<unknown>,
+) {
+  noteDraftUpload(namespace, key, file);
   try {
-    saved = await upload(noted);
+    await upload();
   } catch (error) {
-    if (error instanceof UploadRefused) settleDraftUploads(namespace, noted);
+    if (error instanceof UploadRefused) settleDraftUpload(namespace, file.id);
     throw error;
   }
-  settleDraftUploads(
-    namespace,
-    noted,
-    saved.map((file) => file.id),
-  );
-  return saved;
+  settleDraftUpload(namespace, file.id, file.id);
 }
 
 const slot = (entry: DraftUpload) => `better-jira:upload:${entry.key}:${entry.local}`;

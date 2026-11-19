@@ -59,6 +59,8 @@ export type OutboxPorts = {
    *  the server can't be reached, with `NoAnswer` when Jira didn't answer an upload, and with any other error when a file
    *  can't be sent (Jira refused it). */
   prepare(key: string, ops: Op[]): Promise<Op[]>;
+  /** Whether `ops` place a file an editor here is still uploading (jira-media's uploadingIn): the job waits for it. */
+  uploading?(ops: Op[]): boolean;
   clock: {
     now(): number;
     setTimeout(fn: () => void, ms: number): unknown;
@@ -288,10 +290,13 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
     try {
       while (outbox.length) {
         // A job for an issue another tab is still creating waits for its Jira key; one Jira couldn't settle yet waits for
-        // its retry, and its issue's later jobs behind it. Every other issue's jobs go on (sync review 3, 3-2).
+        // its retry, and one placing a file still uploading here waits for the upload; each holds its issue's later jobs
+        // behind it. Every other issue's jobs go on (sync review 3, 3-2).
         const now = clock.now(),
           cooling = new Set(
-            outbox.flatMap((job) => (job.retryAt! > now ? [currentKey(job.key)] : [])),
+            outbox.flatMap((job) =>
+              job.retryAt! > now || ports.uploading?.(job.ops) ? [currentKey(job.key)] : [],
+            ),
           );
         const index = outbox.findIndex(
           (job) => !waitsForCreate(job) && !cooling.has(currentKey(job.key)),

@@ -150,6 +150,10 @@ export function nextSeq() {
 export async function localFileURL(id: string) {
   return database?.fileURL(id);
 }
+/** A kept file as it was picked, with its name and type. */
+export async function localFile(id: string) {
+  return database?.file(id);
+}
 /** Keeps a copy of a Jira attachment, so undoing its removal can upload it again. */
 export async function retainJiraFile(id: string, file: Blob) {
   await database?.retainFile(id, file);

@@ -94,7 +94,10 @@ import {
 /** Shared content, persistence and interaction contract for every editor presentation. */
 export type RichEditorProps = {
   initial: unknown;
+  /** Keeps local copies of picked files, which the editor places at once. */
   onFiles?: (files: File[]) => Promise<Attachment[]>;
+  /** Sends a placed file on (to Jira); a rejection takes it out of the document with Linear's upload error toast. */
+  onUpload?: (file: Attachment, picked: File) => Promise<unknown>;
   issueKey?: string;
   /** The issue whose people @mentions suggest, when it differs from `issueKey` (a sub-issue draft suggests its parent's). */
   mentionIssue?: string;
@@ -259,11 +262,14 @@ export function RichEditor(props: EditorEngineProps) {
       reported: ProseMirrorNode | null = null;
     const uploads = mediaUploads(
       () => mine,
-      async (files) => {
-        if (!latest.current.onFiles) throw new Error("File uploads are unavailable here");
-        const saved = await latest.current.onFiles(files);
-        staged.current.push(...saved);
-        return saved;
+      {
+        keep: async (files) => {
+          if (!latest.current.onFiles) throw new Error("File uploads are unavailable here");
+          const saved = await latest.current.onFiles(files);
+          staged.current.push(...saved);
+          return saved;
+        },
+        upload: (file, picked) => latest.current.onUpload?.(file, picked) ?? Promise.resolve(),
       },
       setUploadBusy,
       setUploadNotice,

@@ -47,7 +47,8 @@ import {
 import { recordRelation } from "@/client/features/issue/issue-activity";
 import { newSubIssueDraft } from "@/client/features/issue/sub-issue-draft";
 import { inverseKind, type Relation } from "@/shared/relations";
-import { uploadNow } from "./jira-media";
+import { uploadPlaced } from "./jira-media";
+import type { Attachment } from "@/shared/attachment-media";
 import { get, set, timed, ME, boardOf, issueBoardId } from "./store";
 import { onBoard } from "@/shared/board-membership";
 
@@ -144,20 +145,19 @@ export async function saveCrop(key: string, id: string, crop: ImageCrop, file: F
     if (swapped) patchFields(key, () => ({ description }));
   });
 }
-/** `clients` name each upload (see draft-uploads), so cleanup can find what it made by id. */
-export async function addIssueFiles(key: string, files: File[], clients?: string[]) {
-  const keep = localFiles(),
-    // On a writable site the files go to Jira now, so a failed upload shows on the file (Retry, Discard) before anything looks saved.
-    saved =
-      get().writable && !isLocalIssue(key)
-        ? await uploadNow(key, files, keep, clients)
-        : await keep(files),
-    issue = get().issues.get(key);
+/** Local copies of files picked into an issue's editor, which places them at once. */
+export const keepIssueFiles = (files: File[]) => localFiles()(files);
+/**
+ * Sends a file an issue's editor placed to Jira under its local id, then lists it with the issue's attachments. A read-only
+ * site, or an issue Jira hasn't made yet, keeps it here (the write that places it uploads it once Jira has the issue).
+ */
+export async function uploadIssueFile(key: string, file: Attachment, picked: File) {
+  if (get().writable && !isLocalIssue(key)) await uploadPlaced(key, file.id, picked);
+  const issue = get().issues.get(key);
   if (issue)
     record(key, `attached files to ${key}`, () =>
-      patchIssue(key, { attachments: [...(issue.attachments ?? []), ...saved] }),
+      patchIssue(key, { attachments: [...(issue.attachments ?? []), file] }),
     );
-  return saved;
 }
 /** Submission id → the issue it created. */
 const submissions = new Map<string, string>();
