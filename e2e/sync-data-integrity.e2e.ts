@@ -293,7 +293,19 @@ test("57 an image is placed in the description and lands once even when the page
   await expect(description(page)).toHaveText("Steps to reproduce");
   await expect(description(page)).not.toHaveAttribute("aria-busy", "true");
 
-  // Jira takes the file, but the page reloads before its answer arrives (route.fetch would send the upload without its file).
+  // Jira takes the file, but the page reloads before its answer arrives.
+  await holdUploadAnswer(page);
+  await attachImage(page, "first");
+  await expect(page.locator("body[data-upload-reached]")).toHaveCount(1);
+  page.on("dialog", (dialog) => void dialog.accept());
+  await page.reload();
+
+  await expectPlacedOnce(page, app);
+});
+
+/** TEST-2's uploads reach Jira, but their answers never reach the page; `body[data-upload-reached]` marks one sent
+ *  (route.fetch would send the upload without its file). */
+async function holdUploadAnswer(page: Page) {
   await page.evaluate(() => {
     const send = window.fetch.bind(window);
     window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
@@ -304,12 +316,38 @@ test("57 an image is placed in the description and lands once even when the page
       });
     }) as typeof fetch;
   });
-  await attachImage(page, "first");
-  await expect(page.locator("body[data-upload-reached]")).toHaveCount(1);
-  page.on("dialog", (dialog) => void dialog.accept());
-  await page.reload();
+}
 
-  await expectPlacedOnce(page, app);
+test("57 a comment draft's file a reload cut off mid-upload stays in Jira while the draft holds it, and posts with the comment", async ({
+  page,
+  app,
+}) => {
+  // Known failure: after the reload nothing shows the draft's file (the issue lists it only once its upload answered), and
+  // the cleaner deletes it from Jira, as it checks drafts only for answered uploads.
+  test.fail();
+  await app.seed({ writable: true, jiraComments: true });
+  await openIssue(page, "TEST-2", "Browser fixture 2");
+  const comment = page.getByRole("textbox", { name: "Leave a comment…" });
+  await comment.fill("Seen after a reload");
+  await holdUploadAnswer(page);
+  await attachImage(page, "last");
+  await expect(page.locator("body[data-upload-reached]")).toHaveCount(1);
+  await expect(comment.getByRole("img", { name: "media-image.png" })).toBeVisible();
+
+  // The user comes back after the upload settled, the file still in the draft.
+  page.on("dialog", (dialog) => void dialog.accept());
+  await page.clock.install({ time: Date.now() + 3 * 60_000 });
+  await page.reload();
+  await expect(comment.getByRole("img", { name: "media-image.png" })).toBeVisible();
+  await page.getByRole("button", { name: "Submit comment" }).click();
+  await expect(saveStatus(page)).toHaveText("Saved to Jira", RESEND);
+
+  const [upload, ...more] = await app.uploads();
+  expect(more).toEqual([]);
+  const full = (await app.jiraIssue("TEST-2")).full;
+  expect((full.fields.attachment as any[]).map((a) => String(a.id))).toContain(upload!.id);
+  const posted = (full.fields.comment.comments as any[]).filter((c) => plain(c.body).includes("Seen after a reload"));
+  expect(posted.map((c) => mediaIds(c.body))).toEqual([[upload!.mediaId]]);
 });
 
 /** TEST-2's description shows the test image after the reload, and Jira has it there, uploaded once. */
