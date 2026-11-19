@@ -143,38 +143,55 @@ const mediaIds = (node: any): string[] => [
   ...(node?.content ?? []).flatMap(mediaIds),
 ];
 
-test("57 an image and text put into a description offline reach Jira once back online, exactly once", async ({ page, app }) => {
-  // An existing issue's file uploads before it is placed (jira-media uploadNow), not through the outbox: offline it shows
-  // Retry and Discard, stays failed back online, and is gone after navigating away or a reload.
+/** Picks the test image through the paperclip `which` (the description's comes first, the comment box's last). */
+async function attachImage(page: Page, which: "first" | "last") {
+  const chooser = page.waitForEvent("filechooser");
+  await page.getByRole("button", { name: "Attach images, files, or videos" })[which]().click();
+  await (await chooser).setFiles("scripts/fixtures/media-image.png");
+}
+/** Linear's toast for a file it couldn't upload (`showAlert("File failed to upload", …)`). */
+const uploadFailed = (page: Page) => page.getByRole("alertdialog", { name: /File failed to upload/ });
+/** What Jira's description of `key` reads and shows. */
+const jiraDescription = async (app: { jiraIssue(key: string): Promise<{ full: any }> }, key: string) => {
+  const doc = (await app.jiraIssue(key)).full.fields.description;
+  return { text: plain(doc), media: mediaIds(doc) };
+};
+
+test("57 a file put into a description offline is refused as Linear refuses it, and the text typed with it reaches Jira once", async ({ page, app }) => {
+  // Today the file stays in the editor as "Can't reach the better-jira server." with Retry and Discard (jira-media uploadNow).
   test.fail();
-  await app.seed({ writable: true });
+  await app.seed({ writable: true, jiraEdits: true });
   await app.changeInJira({ key: "TEST-2", description: "Steps to reproduce" });
   await openIssue(page, "TEST-2", "Browser fixture 2");
   await expect(description(page)).toHaveText("Steps to reproduce");
   await expect(description(page)).not.toHaveAttribute("aria-busy", "true");
 
+  // Linear can't upload offline: the file leaves the editor at once and a toast says why. Nothing waits to go later.
   await page.context().setOffline(true);
-  const chooser = page.waitForEvent("filechooser");
-  await page.getByRole("button", { name: "Attach images, files, or videos" }).first().click();
-  await (await chooser).setFiles("scripts/fixtures/media-image.png");
-  await expect(descriptionImage(page)).toBeVisible();
+  await attachImage(page, "first");
+  await expect(uploadFailed(page)).toContainText("Cannot upload files while being offline.");
+  await expect(descriptionImage(page)).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Retry" })).toHaveCount(0);
   await description(page).getByText("Steps to reproduce", { exact: true }).click();
   await page.keyboard.press("End");
   await page.keyboard.type(" while offline");
   await expect(saveStatus(page)).toContainText("Can't reach the better-jira server. Retrying…");
-  expect(await app.uploads()).toEqual([]);
 
   await page.context().setOffline(false);
 
   await expect(saveStatus(page)).toHaveText("Saved to Jira", RESEND);
+  await expect.poll(() => jiraDescription(app, "TEST-2"), RESEND).toEqual({ text: "Steps to reproduce while offline", media: [] });
+  expect(await app.uploads()).toEqual([]);
+
+  // Back online the same file goes in, once.
+  await attachImage(page, "first");
+  await expect(descriptionImage(page)).toBeVisible();
   await expect.poll(app.uploads, RESEND).toEqual([expect.objectContaining({ key: "TEST-2", name: "media-image.png" })]);
   const [upload] = await app.uploads();
   await expect
-    .poll(async () => {
-      const doc = (await app.jiraIssue("TEST-2")).full.fields.description;
-      return { text: plain(doc), media: mediaIds(doc) };
-    }, RESEND)
+    .poll(() => jiraDescription(app, "TEST-2"), RESEND)
     .toEqual({ text: expect.stringContaining("Steps to reproduce while offline"), media: [upload!.mediaId] });
+  await expect(saveStatus(page)).toHaveText("Saved to Jira", RESEND);
   const sent = await app.jiraWrites();
 
   // A reload replays anything still unsent: nothing goes twice.
@@ -183,6 +200,68 @@ test("57 an image and text put into a description offline reach Jira once back o
   await expect(descriptionImage(page)).toBeVisible();
   await sendSentinel(page, app);
   expect(await app.jiraWrites()).toEqual([...sent, SENTINEL]);
+  expect(await app.uploads()).toHaveLength(1);
+});
+
+test("57 a file put into a comment offline is refused as Linear refuses it, and the comment keeps its text", async ({ page, app }) => {
+  // Today the file stays in the composer as "Can't reach the better-jira server." with Retry and Discard.
+  test.fail();
+  await app.seed({ writable: true, jiraComments: true });
+  await openIssue(page, "TEST-2", "Browser fixture 2");
+  const comment = page.getByRole("textbox", { name: "Leave a comment…" });
+  await comment.fill("Seen while offline");
+
+  await page.context().setOffline(true);
+  await attachImage(page, "last");
+  await expect(uploadFailed(page)).toContainText("Cannot upload files while being offline.");
+  await expect(comment.getByRole("img")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Retry" })).toHaveCount(0);
+  await expect(comment).toHaveText("Seen while offline");
+  expect(await app.uploads()).toEqual([]);
+
+  // Back online the same file goes in, and the comment posts with it once.
+  await page.context().setOffline(false);
+  await attachImage(page, "last");
+  await expect(comment.getByRole("img", { name: "media-image.png" })).toBeVisible();
+  await page.getByRole("button", { name: "Submit comment" }).click();
+  await expect(saveStatus(page)).toHaveText("Saved to Jira", RESEND);
+  const [upload, ...more] = await app.uploads();
+  expect(more).toEqual([]);
+  const posted = ((await app.jiraIssue("TEST-2")).full.fields.comment.comments as any[]).filter((c) =>
+    plain(c.body).includes("Seen while offline"),
+  );
+  expect(posted.map((c) => mediaIds(c.body))).toEqual([[upload!.mediaId]]);
+});
+
+test("57 an image whose upload Jira has is placed in the description even when the page reloads right after", async ({ page, app }) => {
+  // Known failure: the page stops guarding the upload once it is answered and places the file only after keeping a local
+  // copy and measuring it (jira-media uploadNow, editor-media-upload start). A reload in that gap loses the placement.
+  test.fail();
+  await app.seed({ writable: true });
+  await app.changeInJira({ key: "TEST-2", description: "Steps to reproduce" });
+  await openIssue(page, "TEST-2", "Browser fixture 2");
+  await expect(description(page)).toHaveText("Steps to reproduce");
+  await expect(description(page)).not.toHaveAttribute("aria-busy", "true");
+
+  // A slow device: measuring the image takes this page a few seconds, and the reload comes the moment Jira answers the
+  // upload. Jira has the file; the description doesn't show it yet.
+  await page.evaluate(() => {
+    const measure = window.createImageBitmap.bind(window) as (...args: unknown[]) => Promise<ImageBitmap>;
+    window.createImageBitmap = ((...args: unknown[]) =>
+      new Promise((resolve) => setTimeout(resolve, 5000)).then(() => measure(...args))) as typeof createImageBitmap;
+  });
+  const answer = page.waitForResponse("**/api/issues/TEST-2/attachments");
+  await attachImage(page, "first");
+  await (await answer).finished();
+  await page.reload();
+
+  await expect(descriptionImage(page)).toBeVisible();
+  const [upload, ...more] = await app.uploads();
+  expect(more).toEqual([]);
+  await expect
+    .poll(() => jiraDescription(app, "TEST-2"), RESEND)
+    .toEqual({ text: expect.stringContaining("Steps to reproduce"), media: [upload!.mediaId] });
+  await expect(saveStatus(page)).toHaveText("Saved to Jira", RESEND);
   expect(await app.uploads()).toHaveLength(1);
 });
 
