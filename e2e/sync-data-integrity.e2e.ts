@@ -322,9 +322,6 @@ test("57 a comment draft's file a reload cut off mid-upload stays in Jira while 
   page,
   app,
 }) => {
-  // Known failure: after the reload nothing shows the draft's file (the issue lists it only once its upload answered), and
-  // the cleaner deletes it from Jira, as it checks drafts only for answered uploads.
-  test.fail();
   await app.seed({ writable: true, jiraComments: true });
   await openIssue(page, "TEST-2", "Browser fixture 2");
   const comment = page.getByRole("textbox", { name: "Leave a comment…" });

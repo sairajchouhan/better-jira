@@ -5,6 +5,7 @@ import { FileBlockLoading } from "./file-block";
 import { useEffect, useMemo, useState } from "react";
 import type { MediaProps } from "./media-loader";
 import type { Attachment } from "@/shared/attachment-media";
+import { keptAttachment } from "@/client/state/local-database";
 import { Adf } from "@/client/features/editor/adf";
 import { downloadURL, isShownImage, mediaContainerStyle, mediaDimensions, safeExternalImage } from "./media-layout";
 import { VideoPlayer } from "./video-player";
@@ -125,20 +126,26 @@ function LoadedMedia({
   useEffect(() => {
     if (local || external || !issueKey || !id) return;
     const abort = new AbortController();
-    void fetch(`/api/issues/${encodeURIComponent(issueKey)}/media/${encodeURIComponent(id)}`, {
-      signal: abort.signal,
-    })
-      .then(async (response) => {
-        if (!response.ok)
-          throw new Error(
-            response.status === 404
-              ? "This attachment could not be found"
-              : "Could not load attachment",
-          );
-        const file = (await response.json()) as Attachment;
-        if (!file.url?.startsWith(`/api/issues/${encodeURIComponent(issueKey)}/attachments/`))
-          throw new Error("Invalid attachment source");
-        setRemote(file);
+    const remoteFile = async () => {
+      const response = await fetch(`/api/issues/${encodeURIComponent(issueKey)}/media/${encodeURIComponent(id)}`, {
+        signal: abort.signal,
+      });
+      if (!response.ok)
+        throw new Error(
+          response.status === 404
+            ? "This attachment could not be found"
+            : "Could not load attachment",
+        );
+      const file = (await response.json()) as Attachment;
+      if (!file.url?.startsWith(`/api/issues/${encodeURIComponent(issueKey)}/attachments/`))
+        throw new Error("Invalid attachment source");
+      return file;
+    };
+    // A file kept here that the issue doesn't list yet (a draft's, its upload cut off by a reload) shows from its copy.
+    void (node.attrs?.collection === "local" ? keptAttachment(id) : Promise.resolve(undefined))
+      .then((kept) => kept ?? remoteFile())
+      .then((file) => {
+        if (!abort.signal.aborted) setRemote(file);
       })
       .catch((reason) => {
         if (!abort.signal.aborted)

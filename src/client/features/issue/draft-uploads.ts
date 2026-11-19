@@ -122,12 +122,16 @@ export async function cleanDraftUploads(
     ]);
     const files: any[] = full.fields?.attachment ?? [];
     for (const entry of entries) {
-      if (entry.local && (held.has(entry.local) || pending.includes(entry.local))) continue;
+      // A draft or unsent change holds the file by its local id, answered or not: a file goes into its editor before its
+      // upload starts. Entries noted before that have their own id and the local id once answered.
+      const local = entry.local ?? entry.id;
+      if (held.has(local) || pending.includes(local)) continue;
       // Only the attachment this upload made, by id: from its slot, or, when the answer never arrived (a reload cut it
       // off), from the server's record of it. A file of the same name and size someone else attached is never touched.
       let id: string | undefined, media: string | undefined, found: boolean | undefined;
+      const slotted = uploaded({ ...entry, local });
       try {
-        if (entry.local) ({ id, mediaId: media, found } = uploaded(entry)?.attachment ?? {});
+        if (slotted) ({ id, mediaId: media, found } = slotted.attachment);
         else {
           const made = await jira.uploaded(entry.id);
           // Still uploading (a slow or large file): look again later rather than lose track of it.
@@ -140,7 +144,7 @@ export async function cleanDraftUploads(
       // Matched by name and size after a lost answer, so possibly the user's own file: kept, never deleted.
       if (found) {
         kept.push(id!);
-        if (entry.local) remember(key, entry.local);
+        if (slotted) remember(key, local);
         done.push(entry.id);
         continue;
       }
@@ -153,7 +157,7 @@ export async function cleanDraftUploads(
       } catch {
         continue;
       }
-      if (entry.local) remember(key, entry.local);
+      if (slotted) remember(key, local);
       done.push(entry.id);
     }
   }

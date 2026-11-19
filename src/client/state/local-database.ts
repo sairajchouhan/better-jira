@@ -1,5 +1,6 @@
 import { loadable } from "@/client/lib/loadable";
 import { type Issue } from "@/shared/issue-model";
+import type { Attachment } from "@/shared/attachment-media";
 /**
  * This account's saved local data in IndexedDB: the edits Jira hasn't taken, the undo history, the files they hold and
  * the numbers local keys and comment ids are made from. Saving runs through the storage machine, which reports its
@@ -153,6 +154,11 @@ export async function localFileURL(id: string) {
 /** A kept file as it was picked, with its name and type. */
 export async function localFile(id: string) {
   return database?.file(id);
+}
+/** A kept file as an attachment this browser can show, if it is kept here. */
+export async function keptAttachment(id: string): Promise<Attachment | undefined> {
+  const [file, url] = await Promise.all([database?.file(id), database?.fileURL(id)]);
+  if (file && url) return { id, name: file instanceof File ? file.name : "Attachment", type: file.type, size: file.size, url };
 }
 /** Keeps a copy of a Jira attachment, so undoing its removal can upload it again. */
 export async function retainJiraFile(id: string, file: Blob) {
