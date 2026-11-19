@@ -132,6 +132,69 @@ test("57 an edit made offline before the app finished loading is still sent once
   await expect(issueTitle(page)).toHaveValue("Renamed offline");
 });
 
+/** Fills the composer with a new issue and an image picked through its paperclip; the file uploads once Jira has made the
+ *  issue. Answers the composer's Create issue button. */
+async function composeWithFile(page: Page) {
+  await expect(page.getByRole("grid", { name: "Todo" }).getByRole("row").first()).toBeVisible();
+  await page.keyboard.press("c");
+  const composer = page.getByRole("dialog", { name: "Create issue" });
+  await composer.getByRole("textbox", { name: "Issue title", exact: true }).fill("Made with a file");
+  const chooser = page.waitForEvent("filechooser");
+  await composer.getByRole("button", { name: "Attach images, files, or videos" }).click();
+  await (await chooser).setFiles("scripts/fixtures/media-image.png");
+  await expect(composer.getByRole("img", { name: "media-image.png" })).toBeVisible();
+  return composer.getByRole("button", { name: "Create issue" });
+}
+
+test("57 a new issue's file whose upload the connection cut off is sent once back online, exactly once", async ({ page, app }) => {
+  await app.seed({ writable: true, jiraEdits: true, createSuccess: true });
+  const create = await composeWithFile(page);
+  // The connection drops the moment Jira answers the create, before the file's upload.
+  await page.route(
+    "**/api/issues/*/ops",
+    async (route) => {
+      const response = await route.fetch();
+      await page.context().setOffline(true);
+      await route.fulfill({ response });
+    },
+    { times: 1 },
+  );
+  await create.click();
+
+  await expect(saveStatus(page)).toContainText("Can't reach the better-jira server. Retrying…");
+  expect(await app.uploads()).toEqual([]);
+
+  await page.context().setOffline(false);
+
+  await expect.poll(app.uploads, RESEND).toEqual([expect.objectContaining({ key: "TEST-90", name: "media-image.png" })]);
+  await expect(saveStatus(page)).toHaveText("Saved to Jira", RESEND);
+  const [upload] = await app.uploads();
+  expect((await app.jiraIssue("TEST-90")).full.fields.attachment).toEqual([
+    expect.objectContaining({ id: upload!.id, filename: "media-image.png" }),
+  ]);
+  const sent = await app.jiraWrites();
+
+  // A reload replays anything still unsent: nothing goes twice.
+  await page.reload();
+  await expect(row(page, "TEST-90", "Made with a file", "Backlog")).toBeVisible();
+  await sendSentinel(page, app);
+  expect(await app.jiraWrites()).toEqual([...sent, SENTINEL]);
+  expect(await app.uploads()).toHaveLength(1);
+});
+
+test("57 a new issue's file Jira refuses is not sent again, and says why", async ({ page, app }) => {
+  await app.seed({ writable: true, createSuccess: true });
+  await app.refuse(["upload"], "Jira refused the file.");
+  await (await composeWithFile(page)).click();
+
+  await expect(page.getByRole("alertdialog", { name: "Jira did not save the change to TEST-90" })).toContainText(
+    "Jira refused the file.",
+  );
+  await expect(saveStatus(page)).toHaveText("Not saved to Jira: TEST-90: Jira refused the file.");
+  expect(await app.uploads()).toEqual([]);
+  expect((await app.jiraIssue("TEST-90")).full.fields.attachment).toEqual([]);
+});
+
 test("58 an edit whose send Jira never answered is sent again and lands once", async ({ page, app }) => {
   await app.seed({ writable: true, jiraEdits: true });
   await openIssue(page, "TEST-2", "Browser fixture 2");
