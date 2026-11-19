@@ -71,8 +71,9 @@ async function postAttachment(
     uploading--;
   }
 }
-/** Uploads files to Jira at once and in parallel, before they are placed, so a failure shows on the file with Retry and Discard
- * instead of a card that looks saved; `keep` then stores the local copies, which map to the Jira attachments. */
+/** Uploads files to Jira at once and in parallel, before they are placed, so a refusal shows on the file with Retry and Discard
+ * instead of a card that looks saved (a server it can't reach drops the file, as Linear's offline upload does); `keep` then
+ * stores the local copies, which map to the Jira attachments. */
 export async function uploadNow(
   key: string,
   files: File[],

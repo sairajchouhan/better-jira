@@ -158,8 +158,6 @@ const jiraDescription = async (app: { jiraIssue(key: string): Promise<{ full: an
 };
 
 test("57 a file put into a description offline is refused as Linear refuses it, and the text typed with it reaches Jira once", async ({ page, app }) => {
-  // Today the file stays in the editor as "Can't reach the better-jira server." with Retry and Discard (jira-media uploadNow).
-  test.fail();
   await app.seed({ writable: true, jiraEdits: true });
   await app.changeInJira({ key: "TEST-2", description: "Steps to reproduce" });
   await openIssue(page, "TEST-2", "Browser fixture 2");
@@ -204,8 +202,6 @@ test("57 a file put into a description offline is refused as Linear refuses it, 
 });
 
 test("57 a file put into a comment offline is refused as Linear refuses it, and the comment keeps its text", async ({ page, app }) => {
-  // Today the file stays in the composer as "Can't reach the better-jira server." with Retry and Discard.
-  test.fail();
   await app.seed({ writable: true, jiraComments: true });
   await openIssue(page, "TEST-2", "Browser fixture 2");
   const comment = page.getByRole("textbox", { name: "Leave a comment…" });

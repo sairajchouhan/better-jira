@@ -3,6 +3,8 @@ import { insertPoint } from "prosemirror-transform";
 import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
 import type { Attachment } from "@/shared/attachment-media";
 import { documentHasMedia, normalizeDocument, type AdfDocument } from "@/shared/document";
+import { Unreachable } from "@/client/state/jira-media";
+import { showNotification } from "@/client/state/app-notifications";
 
 /** Media an editor placed after it was closed: its document when it closed (before) and after the late files landed. */
 export type LateMedia = { before: AdfDocument; after: AdfDocument };
@@ -205,6 +207,16 @@ export function mediaUploads(
       jobs.delete(id);
       changed?.(jobs.size > 0);
     } catch (error) {
+      // Linear drops a file that couldn't reach its server and says why in a toast, in its offline wording when offline
+      // (`tmr`, `Cje`). Nothing waits to go later.
+      if (error instanceof Unreachable) {
+        remove(id);
+        showNotification({
+          text: "File failed to upload",
+          detail: navigator.onLine ? error.message : "Cannot upload files while being offline.",
+        });
+        return;
+      }
       const editor = view(),
         at = position(id);
       if (!alive || !editor) return;
