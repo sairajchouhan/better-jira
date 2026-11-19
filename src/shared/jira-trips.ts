@@ -28,7 +28,6 @@ export const JIRA_MESSAGES = {
     phrase: "Open the board in Jira and copy its address.",
     path: "/jira/software/projects/:project/boards/:id",
   },
-  "check-attachments": { phrase: "Check the issue's attachments in Jira, then attach it again.", path: "/browse/:key" },
 } as const;
 export type JiraMessage = keyof typeof JIRA_MESSAGES;
 

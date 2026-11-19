@@ -2,7 +2,6 @@ import { IssueHoverCard } from "@/client/features/issue/issue-hover-card";
 import { ActivityEntry, ActivityPropertyRow, LinkedTarget } from "@/client/features/issue/activity-entry";
 import { fullTime } from "@/client/features/issue/issue-dates";
 import { type Issue } from "@/shared/issue-model";
-import { JIRA_MESSAGES } from "@/shared/jira-trips";
 import { useLocation } from "@tanstack/react-router";
 import { Group } from "react-aria-components";
 import { pageURL } from "@/client/features/navigation/app-navigation";

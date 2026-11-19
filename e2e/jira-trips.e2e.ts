@@ -266,15 +266,6 @@ const EXITS: Exit[] = [
     },
     trip: { kind: "message:board-address", path: "/jira/software/projects/:project/boards/:id" },
   },
-  {
-    name: "an upload a reload cut off, which says to check the attachments in Jira",
-    go: async (page) => {
-      await page.evaluate(() => localStorage.setItem("better-jira:uploading:TEST-2:earlier", JSON.stringify(["notes.txt"])));
-      await openIssue(page);
-      await expect(page.getByText(JIRA_MESSAGES["check-attachments"].phrase)).toBeVisible();
-    },
-    trip: { kind: "message:check-attachments", path: "/browse/:key", issue: "TEST-2" },
-  },
 ];
 
 for (const exit of EXITS)
