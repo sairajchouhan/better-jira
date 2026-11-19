@@ -75,15 +75,13 @@ test("56 a write Jira refuses rolls back and says why, and later writes still la
   await expect(row(page, "TEST-2", "Accepted title")).toBeVisible();
 });
 
-/** The lazy chunk every Jira write loads first (src/client/state/jira-media.ts prepareOps); the app fetches it at idle. */
-const WRITE_CHUNK = /\/local-database-[^/]*\.js$/;
+/** The saved local data's chunk (src/client/state/local-database.ts). The app's entry holds its code, so no Jira write may
+ *  wait to fetch it. */
+const STORE_CHUNK = /\/local-database-[^/]*\.js$/;
 
 test("57 edits made offline are sent once the browser is back online, exactly once", async ({ page, app }) => {
-  // The app has finished loading before the connection drops; the next test covers a drop before that.
-  const loaded = page.waitForResponse(WRITE_CHUNK);
   await app.seed({ writable: true, jiraEdits: true });
   await openIssue(page, "TEST-2", "Browser fixture 2");
-  await loaded;
 
   await page.context().setOffline(true);
   await retitle(page, "Renamed offline");
@@ -115,12 +113,10 @@ test("57 edits made offline are sent once the browser is back online, exactly on
 });
 
 test("57 an edit made offline before the app finished loading is still sent once back online", async ({ page, app }) => {
-  // BUG: prepareOps can't load its lazy chunk offline; the outbox drops the write as "This tab is out of date", and a reload loses the edit.
-  test.fail();
-  // The connection drops while the app is still fetching the chunk a write needs.
+  // The connection drops while the app is still loading; that chunk, if anything asks for it, never arrives.
   let dropped!: () => void;
   const offline = new Promise<void>((resolve) => (dropped = resolve));
-  await page.route(WRITE_CHUNK, async (route) => (await offline, route.abort("internetdisconnected")), { times: 1 });
+  await page.route(STORE_CHUNK, async (route) => (await offline, route.abort("internetdisconnected")), { times: 1 });
   await app.seed({ writable: true, jiraEdits: true });
   await openIssue(page, "TEST-2", "Browser fixture 2");
   await page.context().setOffline(true);

@@ -1,6 +1,6 @@
-import { loadable } from "@/client/lib/loadable";
 import type { Op } from "@/shared/jira-ops";
 import { issueAttachments, type Attachment } from "@/shared/attachment-media";
+import { localFileURL, retainJiraFile } from "./local-database";
 
 /** `found`: matched after a lost answer rather than answered by Jira (see uploadAttachment). */
 export type Uploaded = { attachment: Attachment & { found?: boolean }; collection: string };
@@ -169,10 +169,7 @@ export function aliasAttachments(
   return files.map((file) => ({ ...file, ...aliases.get(file.id) }));
 }
 
-/** local-database's exports, a small chunk of its own fetched on the first attachment write; in the walk early. */
-const localDatabase = loadable("local-database", () => import("./local-database"), 100);
 export async function prepareOps(key: string, ops: Op[]): Promise<Op[]> {
-  const { localFileURL, retainJiraFile } = await localDatabase.load();
   const pending = new Map<string, Promise<Uploaded>>();
   // A file uploaded for a document node gets its name from the job's attachment op, not the blob.
   const names = new Map(
