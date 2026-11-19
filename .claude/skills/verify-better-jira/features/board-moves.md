@@ -27,5 +27,5 @@ On fake Jira: `e2e/move.e2e.ts`.
 
 ## Gotchas
 
-- Not yet driven on real Jira. The drag target and the column the card lands in come from the live snapshot. The first real run confirms them.
+- `bun run test:real` drives this on real Jira. The drop also ranks the card in Jira (a `Rank` changelog entry), so putting it back means its rank too.
 - A move Jira's workflow doesn't allow is refused, and the card goes back. That is correct behavior, not a failure of the run.

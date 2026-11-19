@@ -59,6 +59,8 @@ Real Jira, with `mcp__browse__execute` and `tab: "verify-better-jira"`:
 
 Fake Jira: `bun run test:e2e` runs everything. `bunx playwright test <file> -g "<name>"` runs one flow, and `--repeat-each 30` runs an intermittent one. Write a new flow in `e2e/*.e2e.ts` with the `test` and `app` from `e2e/app.ts`. `app.seed`, `app.jiraWrites`, `app.jiraIssue` and `app.requests` (with bodies) are the read-back; the doc comments in `e2e/app.ts` list the controls. When ports clash with another run, set `E2E_PORT_BASE` (default 3200).
 
+`bun run test:real` (`e2e-real/`) runs the title and priority edit, board move, comments and offline-once flows on SAM1-6 and SAM1-8 against cloudsairaj, on its own build at :3052. It reads each result back from Jira and puts both issues back after every test. Run it after a change to how the app writes to Jira.
+
 The feature map in `features/README.md` holds one recipe per feature. Drive every entry point it lists for a feature before calling that feature verified.
 
 ## Evidence

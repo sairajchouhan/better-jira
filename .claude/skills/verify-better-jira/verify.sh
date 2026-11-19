@@ -9,8 +9,6 @@ set -u
 SELF=${0:A}
 cd "${SELF:h}/../../.." || exit 1
 SITE=https://cloudsairaj.atlassian.net
-MAIN=/Users/sairaj.chouhan/cs/better-jira
-PERSONAL=$MAIN/instances/personal
 REX_SESSION=${REX_SESSION:-session:01a1e801-0f1c-7df2-846a-a068595cbad8}
 STATE=.raj/tmp/verify/instance
 EVIDENCE=.raj/tmp/verify/runs
@@ -30,10 +28,9 @@ up)
   lsof -iTCP:$port -sTCP:LISTEN >/dev/null && fail "port $port is taken by a process this script didn't start. Pick another: verify.sh up <port>"
   build=$(git rev-parse --short HEAD)$(git status --porcelain | grep -q . && print '+changes')
   mkdir -p ${STATE:h}
-  # Shell env beats the instance's .env: its own port and cache, and writes to cloudsairaj only. It builds to dist/personal.
+  # Its own port and cache, writes to cloudsairaj only, built to dist/personal (scripts/personal-jira.ts serve).
   window=$(rex window new -s $REX_SESSION verify-$port -c $PWD --keep-open --focus=false --json -- \
-    env PORT=$port JIRA_WRITES=$SITE JIRA_CACHE=dist/verify-cache.db \
-    bun scripts/instance.ts start $PERSONAL | python3 -c 'import sys,json;print(json.load(sys.stdin)["window_id"])') ||
+    bun scripts/personal-jira.ts serve $port dist/verify-cache.db dist/personal | python3 -c 'import sys,json;print(json.load(sys.stdin)["window_id"])') ||
     fail "rex couldn't open a window in $REX_SESSION. Set REX_SESSION to a session from: rex session list"
   for i in {1..180}; do
     pid=$(lsof -tiTCP:$port -sTCP:LISTEN 2>/dev/null | head -1)
@@ -71,14 +68,7 @@ doctor)
   ;;
 jira)
   [ -n "${2:-}" ] || fail "usage: verify.sh jira /rest/api/3/issue/<KEY>"
-  [ -f $PERSONAL/.env ] || fail "no $PERSONAL/.env: the personal instance isn't set up."
-  bun --env-file=$PERSONAL/.env -e '
-    const site = process.env.JIRA_URL ?? "", path = process.argv.at(-1);
-    if (new URL(site).hostname !== "cloudsairaj.atlassian.net") { console.error(`verify: refusing ${new URL(site).hostname}`); process.exit(2); }
-    const auth = btoa(`${process.env.JIRA_EMAIL}:${process.env.JIRA_TOKEN}`);
-    const r = await fetch(site.replace(/\/$/, "") + path, { headers: { Authorization: `Basic ${auth}`, Accept: "application/json" } });
-    console.log(JSON.stringify(await r.json().catch(() => ({ status: r.status })), null, 1));
-    if (!r.ok) process.exit(1);' "$2"
+  bun scripts/personal-jira.ts get "$2"
   ;;
 evidence)
   [ -n "${2:-}" ] || fail "usage: verify.sh evidence <run-id>"

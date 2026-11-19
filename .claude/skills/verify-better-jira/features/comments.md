@@ -29,5 +29,5 @@ On fake Jira: `e2e/comments-journeys.e2e.ts`.
 
 ## Gotchas
 
-- Not yet driven on real Jira. The handles come from the e2e specs.
+- `bun run test:real` drives add, edit and delete on real Jira. Reply is not yet driven there.
 - Comments are real on cloudsairaj. Always delete the ones the run made.

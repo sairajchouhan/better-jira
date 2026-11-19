@@ -30,5 +30,6 @@ On fake Jira: `e2e/issue-detail-properties.e2e.ts`, `e2e/edit.e2e.ts`, `e2e/boar
 
 ## Gotchas
 
-- Not yet driven on real Jira. The handles come from the live board snapshot and the e2e specs. The first real run confirms them and updates this file.
+- `bun run test:real` drives the rename and the priority from the issue view on real Jira. The card controls are not yet driven there.
 - The priority names come from the Jira site. Read the menu instead of assuming `High` or `Low`.
+- Jira can't clear a priority once an issue has one: REST refuses `null`, `{}` and id `-1`. Only change the priority of an issue that already has one, or it can't be put back.

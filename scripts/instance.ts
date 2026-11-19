@@ -3,7 +3,8 @@
  *  (site, boards, the edits switch) and `cache.db`. A name is `instances/<name>`; anything with a `/` is a folder path.
  *  `start` builds the instance to `dist/<folder name>` and runs it in production; `dev` runs it with hot reload; `setup`
  *  makes the folder and connects it to Jira. Only the instance's `.env` is loaded (bunfig.toml turns off bun's own
- *  `.env` loading), and the shell's env still beats it, so `PORT=3031 bun start personal` moves the port. */
+ *  `.env` loading), and the shell's env still beats it, so `PORT=3031 bun start personal` moves the port. `BETTER_JIRA_DIST`
+ *  moves the build, so a second copy of an instance doesn't overwrite the one already running. */
 import { mkdirSync, readdirSync, statSync } from "node:fs";
 import path from "node:path";
 
@@ -47,7 +48,7 @@ else if (!isFolder(home)) fail(`There is no instance at ${path.relative(root, ho
 
 const envFile = `--env-file=${path.join(home, ".env")}`;
 const env = { ...process.env, BETTER_JIRA_HOME: home };
-const out = path.join("dist", path.basename(home));
+const out = process.env.BETTER_JIRA_DIST || path.join("dist", path.basename(home));
 
 /** Runs `args` from the repo root, passing Ctrl+C and kill on to it; resolves to its exit code. */
 async function run(args: string[], extra: Record<string, string> = {}) {

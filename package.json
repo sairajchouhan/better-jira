@@ -13,6 +13,7 @@
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "test:e2e": "playwright test",
+    "test:real": "playwright test -c playwright.real.config.ts",
     "scan:documents": "bun scripts/scan-documents.ts"
   },
   "dependencies": {
