@@ -1,5 +1,5 @@
 import type { Page } from "@playwright/test";
-import { expect, test, type JiraWrite } from "./app";
+import { expect, test, type App, type JiraWrite } from "./app";
 
 /** A write is resent after a 5 s backoff (src/client/state/outbox.ts RETRY_WAIT, UNREACHABLE_WAIT). */
 const RESEND = { timeout: 15_000 };
@@ -279,17 +279,57 @@ test("57 an image whose upload Jira has is placed in the description even when t
   const answer = page.waitForResponse("**/api/issues/TEST-2/attachments");
   await attachImage(page, "first");
   await (await answer).finished();
+  // Leaving with the write still on its way asks first; the reload goes ahead.
+  page.on("dialog", (dialog) => void dialog.accept());
   await page.reload();
 
+  await expectPlacedOnce(page, app);
+});
+
+test("57 an image is placed in the description and lands once even when the page reloads before Jira answers its upload", async ({
+  page,
+  app,
+}) => {
+  // Known failure: the file is placed only once Jira answered the upload, so the reload loses it.
+  test.fail();
+  await app.seed({ writable: true });
+  await app.changeInJira({ key: "TEST-2", description: "Steps to reproduce" });
+  await openIssue(page, "TEST-2", "Browser fixture 2");
+  await expect(description(page)).toHaveText("Steps to reproduce");
+  await expect(description(page)).not.toHaveAttribute("aria-busy", "true");
+
+  // Jira takes the file, but the page reloads before its answer arrives (route.fetch would send the upload without its file).
+  await page.evaluate(() => {
+    const send = window.fetch.bind(window);
+    window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
+      if (!String(input).endsWith("/api/issues/TEST-2/attachments")) return send(input, init);
+      return send(input, init).then(() => {
+        document.body.dataset.uploadReached = "true";
+        return new Promise<Response>(() => {});
+      });
+    }) as typeof fetch;
+  });
+  await attachImage(page, "first");
+  await expect(page.locator("body[data-upload-reached]")).toHaveCount(1);
+  page.on("dialog", (dialog) => void dialog.accept());
+  await page.reload();
+
+  await expectPlacedOnce(page, app);
+});
+
+/** TEST-2's description shows the test image after the reload, and Jira has it there, uploaded once. */
+async function expectPlacedOnce(page: Page, app: App) {
   await expect(descriptionImage(page)).toBeVisible();
+  await expect.poll(async () => (await jiraDescription(app, "TEST-2")).media.length, RESEND).toBe(1);
   const [upload, ...more] = await app.uploads();
   expect(more).toEqual([]);
-  await expect
-    .poll(() => jiraDescription(app, "TEST-2"), RESEND)
-    .toEqual({ text: expect.stringContaining("Steps to reproduce"), media: [upload!.mediaId] });
+  expect(await jiraDescription(app, "TEST-2")).toEqual({
+    text: expect.stringContaining("Steps to reproduce"),
+    media: [upload!.mediaId],
+  });
   await expect(saveStatus(page)).toHaveText("Saved to Jira", RESEND);
   expect(await app.uploads()).toHaveLength(1);
-});
+}
 
 /** Fills the composer with a new issue and an image picked through its paperclip; the file uploads once Jira has made the
  *  issue. Answers the composer's Create issue button. */
