@@ -47,7 +47,7 @@ import {
 import { recordRelation } from "@/client/features/issue/issue-activity";
 import { newSubIssueDraft } from "@/client/features/issue/sub-issue-draft";
 import { inverseKind, type Relation } from "@/shared/relations";
-import { uploadPlaced } from "./jira-media";
+import { Unreachable, uploadPlaced } from "./jira-media";
 import type { Attachment } from "@/shared/attachment-media";
 import { get, set, timed, ME, boardOf, issueBoardId } from "./store";
 import { onBoard } from "@/shared/board-membership";
@@ -147,6 +147,14 @@ export async function saveCrop(key: string, id: string, crop: ImageCrop, file: F
 }
 /** Local copies of files picked into an issue's editor, which places them at once. */
 export const keepIssueFiles = (files: File[]) => localFiles()(files);
+/**
+ * Files a composer keeps for an issue Jira hasn't made yet; they upload once it is made. Linear's composer uploads a file
+ * the moment it is picked, so one picked offline is refused as Linear refuses it.
+ */
+export async function keepComposerFiles(files: File[]) {
+  if (get().writable && !navigator.onLine) throw new Unreachable(new Error("The browser is offline."));
+  return localFiles()(files);
+}
 /**
  * Sends a file an issue's editor placed to Jira under its local id, then lists it with the issue's attachments. A read-only
  * site, or an issue Jira hasn't made yet, keeps it here (the write that places it uploads it once Jira has the issue).

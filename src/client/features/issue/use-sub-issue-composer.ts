@@ -2,8 +2,8 @@ import { type Board, type Issue, type IssueDraft } from "@/shared/issue-model";
 import { type MouseEvent, useEffect, useRef, useState } from "react";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { get, set } from "@/client/state/store";
-import { actions } from "@/client/state/issue-actions";
-import { addLocalFiles, restoreLocalFiles } from "@/client/state/local-database";
+import { actions, keepComposerFiles } from "@/client/state/issue-actions";
+import { restoreLocalFiles } from "@/client/state/local-database";
 import { discardLateMedia, lateMediaDiscarded, normalizeDocument, type AdfDocument } from "@/shared/document";
 import { rankBetween } from "@/shared/view-model";
 import { childrenByParent } from "./sub-issue-model";
@@ -74,7 +74,7 @@ export function useSubIssueComposer(issue: Issue, board: Board, namespace: strin
   // Uploads saved after a discard are dropped; otherwise they join the draft as it is when they land.
   const addFiles = async (selected: File[]) => {
     const since = performance.now(),
-      saved = await addLocalFiles(selected);
+      saved = await keepComposerFiles(selected);
     if (!lateMediaDiscarded(scope, since)) late((draft) => ({ files: [...draft.files, ...saved] }));
     return saved;
   };

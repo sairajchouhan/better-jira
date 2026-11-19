@@ -6,7 +6,7 @@ import { typedResourceURL } from "@/shared/issue-resource";
 import { alreadyLinked } from "@/shared/relations";
 import { useStoredState, writeStored } from "@/client/state/stored-state";
 import { adfToText } from "@/client/features/editor/adf";
-import { showNotification } from "@/client/state/app-notifications";
+import { showNotification, uploadFailed } from "@/client/state/app-notifications";
 import { Text } from "@/client/components/text";
 import { IssuePeek } from "./issue-peek";
 import { IssueDescriptionHistory } from "./description-history";
@@ -61,11 +61,10 @@ import {
   DueMenu,
 } from "./property-menu";
 import { usePeople, get, set, useStore, issueBoardId, issueBoard } from "@/client/state/store";
-import { actions, beginCreate } from "@/client/state/issue-actions";
+import { actions, beginCreate, keepComposerFiles } from "@/client/state/issue-actions";
 import { addBoard } from "@/client/state/server-data";
 import { JIRA_MESSAGES } from "@/shared/jira-trips";
 import { recordJiraMessage } from "@/client/features/navigation/jira-trips";
-import { addLocalFiles } from "@/client/state/local-database";
 import { navigate, ui } from "@/client/features/navigation/app-navigation";
 import {
   buckets,
@@ -1059,7 +1058,6 @@ const AttachmentsContext = createContext<{
   onChange: (files: NonNullable<Issue["attachments"]>) => void;
   pick: () => void;
   busy: boolean;
-  error: string;
   attach: RefObject<HTMLButtonElement | null>;
 } | null>(null);
 const useAttachments = () => {
@@ -1086,10 +1084,9 @@ function AttachmentsRoot({
 }) {
   const file = useRef<HTMLInputElement>(null),
     attach = useRef<HTMLButtonElement>(null);
-  const [busy, setBusy] = useState(false),
-    [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
   return (
-    <AttachmentsContext value={{ attachments, listed: listed ?? attachments, onChange, busy, error, attach, pick: () => file.current?.click() }}>
+    <AttachmentsContext value={{ attachments, listed: listed ?? attachments, onChange, busy, attach, pick: () => file.current?.click() }}>
       {/* Native file selection is outside the text-field primitive family. */}
       <input
         ref={file}
@@ -1102,16 +1099,11 @@ function AttachmentsRoot({
             selected = [...(input.files ?? [])];
           setBusy(true);
           onBusy?.(true);
-          setError("");
           try {
-            const files = await addLocalFiles(selected);
+            const files = await keepComposerFiles(selected);
             onChange([...attachments, ...files]);
           } catch (error) {
-            setError(
-              error instanceof Error
-                ? error.message
-                : "Could not save this file locally",
-            );
+            showNotification(uploadFailed(error));
           } finally {
             input.value = "";
             setBusy(false);
@@ -1140,16 +1132,11 @@ function AttachButton() {
   );
 }
 function AttachmentsBody() {
-  const { attachments, listed, onChange, error, attach } = useAttachments();
+  const { attachments, listed, onChange, attach } = useAttachments();
   // Removing from the shown list keeps the files drawn elsewhere.
   const hidden = attachments.filter((a) => !listed.includes(a));
   return (
     <Text as="div" variant="mini" color="inherit">
-      {error && (
-        <p role="alert" className="mt-2 text-fg-3">
-          {error}
-        </p>
-      )}
       <AttachmentList attachments={listed} onChange={(files) => onChange([...hidden, ...files])} attachButton={attach} />
     </Text>
   );

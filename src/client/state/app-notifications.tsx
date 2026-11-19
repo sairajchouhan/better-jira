@@ -7,6 +7,7 @@ import { currentKey } from "./jira-sync";
 import { isLocalIssue } from "./local-edits";
 import { navigate } from "@/client/features/navigation/app-navigation";
 import { recordJiraMessages } from "@/client/features/navigation/jira-trips";
+import { Unreachable } from "./jira-media";
 
 /** Each different confirmation is a toast of its own, so a second one stacks over the first (up to the queue's four): Linear
  *  shows every `new U(…).show()` as a sonner toast (ToastPresenter `visibleToasts: 4`, gap 8). The same one again takes the
@@ -31,6 +32,18 @@ export const COPY_FAILED = { text: "Couldn’t copy to clipboard", error: true }
 /** `icon` is the image before the text, as Linear's info toasts carry one (the copy icon on "Copied issue link to clipboard").
  *  `error`: Linear's error toast (`L.error`), its red icon before the text. */
 export type Notification = { text: string; detail?: string; key?: string; undo?: () => void; icon?: IconName; error?: boolean };
+/** Linear's toast for a file it couldn't upload (`showAlert("File failed to upload", n.message ?? "Please try again later",
+ *  true)`), offline saying so as Linear's `uploadFile` does. */
+export const uploadFailed = (error: unknown): Notification => ({
+  text: "File failed to upload",
+  detail:
+    error instanceof Unreachable && !navigator.onLine
+      ? "Cannot upload files while being offline."
+      : error instanceof Error
+        ? error.message
+        : "Please try again later",
+  error: true,
+});
 type ContentProps = { notice: Notification; id: string };
 
 /** View issue: opens the issue by the key it has now, so a key Jira has since replaced still finds it. */

@@ -4,8 +4,8 @@ import { insertPoint } from "prosemirror-transform";
 import { Decoration, DecorationSet, type EditorView } from "prosemirror-view";
 import type { Attachment } from "@/shared/attachment-media";
 import { documentHasMedia, normalizeDocument, type AdfDocument } from "@/shared/document";
-import { placingFile, Unreachable } from "@/client/state/jira-media";
-import { showNotification } from "@/client/state/app-notifications";
+import { placingFile } from "@/client/state/jira-media";
+import { showNotification, uploadFailed } from "@/client/state/app-notifications";
 
 /** Media an editor placed after it was closed: its document when it closed (before) and after the late files landed. */
 export type LateMedia = { before: AdfDocument; after: AdfDocument };
@@ -165,17 +165,7 @@ export function mediaUploads(
       at = editor && placed(editor.state.doc, id);
     if (alive && editor && at) editor.dispatch(change(editor.state.tr, at).setMeta("addToHistory", false));
   };
-  const failed = (error: unknown) =>
-    showNotification({
-      text: "File failed to upload",
-      detail:
-        error instanceof Unreachable && !navigator.onLine
-          ? "Cannot upload files while being offline."
-          : error instanceof Error
-            ? error.message
-            : "Please try again later",
-      error: true,
-    });
+  const failed = (error: unknown) => showNotification(uploadFailed(error));
   /**
    * Measures the placed file and waits for its upload; a failed upload takes it out again. Like Linear's upload, which
    * finishes once the preview gave the file its size (`YAe.run`, up to `previewTimeoutMs`), the write placing it waits for

@@ -393,8 +393,6 @@ test("57 a file picked offline in the new-issue composer is refused as Linear re
   page,
   app,
 }) => {
-  // Known failure: the composer keeps the file and uploads it once the issue is made, whenever that is.
-  test.fail();
   await app.seed({ writable: true, createSuccess: true });
   await expect(page.getByRole("grid", { name: "Todo" }).getByRole("row").first()).toBeVisible();
   await page.keyboard.press("c");
@@ -418,8 +416,6 @@ test("57 a file picked offline in the new-issue composer is refused as Linear re
 });
 
 test("57 a file put into a new sub-issue's description offline is refused as Linear refuses it", async ({ page, app }) => {
-  // Known failure: the sub-issue composer keeps the file and uploads it once the sub-issue is made.
-  test.fail();
   await app.seed({ writable: true, createSuccess: true });
   await openIssue(page, "TEST-2", "Browser fixture 2");
   const subIssues = page.getByRole("region", { name: "Sub-issues" });
