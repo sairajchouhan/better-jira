@@ -105,7 +105,13 @@ export async function cleanDraftUploads(
   } catch {}
   const done: string[] = [],
     kept: string[] = [];
-  const byKey = Map.groupBy(due, (entry) => entry.key);
+  // A draft or unsent change holds the file by its local id, answered or not: a file goes into its editor before its upload
+  // starts. Entries noted before that have their own id and the local id once answered. A held file stays, at no cost.
+  const free = due.filter((entry) => {
+    const local = entry.local ?? entry.id;
+    return !held.has(local) && !pending.includes(local);
+  });
+  const byKey = Map.groupBy(free, (entry) => entry.key);
   for (const [key, entries] of byKey) {
     let full: any;
     try {
@@ -124,10 +130,7 @@ export async function cleanDraftUploads(
     ]);
     const files: any[] = full.fields?.attachment ?? [];
     for (const entry of entries) {
-      // A draft or unsent change holds the file by its local id, answered or not: a file goes into its editor before its
-      // upload starts. Entries noted before that have their own id and the local id once answered.
       const local = entry.local ?? entry.id;
-      if (held.has(local) || pending.includes(local)) continue;
       // Only the attachment this upload made, by id: from its slot, or, when the answer never arrived (a reload cut it
       // off), from the server's record of it. A file of the same name and size someone else attached is never touched.
       let id: string | undefined, media: string | undefined, found: boolean | undefined;
@@ -167,10 +170,16 @@ export async function cleanDraftUploads(
   return { kept };
 }
 
-/** Cleans now, then again when the youngest entry is old enough. */
+/** Cleans now, then again when the next entry is old enough; one already old enough (held, or not yet answerable) is looked
+ *  at again a settle time later. */
 export async function keepDraftUploadsClean(namespace: string, pending: () => string, jira: Jira) {
   await cleanDraftUploads(namespace, pending(), jira).catch(() => {});
-  const next = Math.min(...readDraftUploads(namespace).map((e) => e.at + SETTLE_MS - Date.now()));
+  const next = Math.min(
+    ...readDraftUploads(namespace).map((e) => {
+      const wait = e.at + SETTLE_MS - Date.now();
+      return wait > 0 ? wait : SETTLE_MS;
+    }),
+  );
   if (Number.isFinite(next))
     setTimeout(() => void keepDraftUploadsClean(namespace, pending, jira), Math.max(next, 1000));
 }

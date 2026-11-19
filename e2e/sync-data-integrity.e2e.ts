@@ -510,8 +510,6 @@ test("57 a file put into a new sub-issue's description offline is refused as Lin
 });
 
 test("57 a document's image stays in Jira after the uploads settle", async ({ page, app }) => {
-  // Known failure: a held entry past its settle time has the cleaner read the issue every second, for good.
-  test.fail();
   await app.seed({ writable: true });
   await openIssue(page, "TEST-2", "Browser fixture 2");
   await page.getByRole("button", { name: "Issue options" }).click();
