@@ -533,6 +533,41 @@ test("58 an existing issue's file whose upload Jira didn't answer twice leaves t
   await expect(description(page)).toHaveText("Steps to reproduce");
 });
 
+test("58 a description file Jira took but never answered leaves Jira once the user placed it again, and the placed one stays", async ({
+  page,
+  app,
+}) => {
+  // Known failure: only comment uploads are noted for the cleaner, so Jira keeps the first copy.
+  test.fail();
+  await app.seed({ writable: true, jiraEdits: true });
+  await app.changeInJira({ key: "TEST-2", description: "Steps to reproduce" });
+  await openIssue(page, "TEST-2", "Browser fixture 2");
+  await expect(description(page)).toHaveText("Steps to reproduce");
+  // Jira takes the file, but neither answer (the send and its retry) reaches the app.
+  await app.unanswered(2, { uploads: true, applied: true });
+  await attachImage(page, "first");
+  await expect(uploadFailed(page)).toContainText("Jira didn't answer.");
+  await expect(descriptionImage(page)).toHaveCount(0);
+  const [lost] = await app.uploads();
+
+  // The user picks the file again, and this one lands.
+  await attachImage(page, "first");
+  await expect(descriptionImage(page)).toBeVisible();
+  await expect.poll(async () => (await app.uploads()).length).toBe(2);
+  const placed = (await app.uploads())[1]!;
+  await expect.poll(async () => (await jiraDescription(app, "TEST-2")).media, RESEND).toEqual([placed.mediaId]);
+  await expect(saveStatus(page)).toHaveText("Saved to Jira", RESEND);
+
+  // The user comes back after the uploads settled: Jira keeps the file the description shows, not the one it lost.
+  await page.clock.install({ time: Date.now() + 3 * 60_000 });
+  await page.reload();
+  const files = async () => ((await app.jiraIssue("TEST-2")).full.fields.attachment as any[]).map((a) => String(a.id));
+  await expect.poll(files, RESEND).not.toContain(lost!.id);
+  expect(await files()).toContain(placed.id);
+  await expect(descriptionImage(page)).toBeVisible();
+  expect((await jiraDescription(app, "TEST-2")).media).toEqual([placed.mediaId]);
+});
+
 test("59 local edits survive a reload and replay only what Jira lacks", async ({ page, app }) => {
   await app.seed({ writable: true, jiraEdits: true });
   await openIssue(page, "TEST-2", "Browser fixture 2");
