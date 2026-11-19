@@ -731,6 +731,7 @@ export async function refresh(
   } catch (error) {
     if ((error as { status?: number }).status === 404) {
       store.remove(key);
+      notify(); // other tabs drop it
       return null;
     }
     throw error;

@@ -213,6 +213,7 @@ function answered({ key: sent, ops, result, created, refused, describes }: Answe
   adoptJira(result.key ?? sent, result, !!result.error, created, describes);
   for (const other of result.others ?? [])
     adoptJira(other.key, { issue: other, error: result.error }, false, created);
+  for (const gone of result.gone ?? []) adoptJira(gone, { issue: null }, false, created);
   if (refused) {
     const selection = refusedSelectionCreate(sent);
     const doc = selection && get().full.get(selection.source)?.fields.description;

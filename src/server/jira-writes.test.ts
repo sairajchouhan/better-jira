@@ -839,3 +839,15 @@ test("every issue is an issue: a sub-task type named under an epic takes the pro
   ]);
   expect(sent).toEqual(["Task", "Bug"]);
 });
+
+test("deleting an issue names the sub-issues Jira deleted with it, so the tab drops them too", async () => {
+  calls.length = 0;
+  answer = (path) => (path.endsWith("?fields=subtasks") ? { fields: { subtasks: [{ key: "K-81" }, { key: "K-82" }] } } : {});
+  // Jira has neither the issue nor its sub-issues once the delete lands.
+  refreshing = () => turn(() => null);
+  const result = await applyOps("K-80", [{ op: "delete" }]);
+  expect(calls).toContain("DELETE /rest/api/3/issue/K-80?deleteSubtasks=true");
+  expect(result).toMatchObject({ issue: null, others: [], gone: ["K-81", "K-82"] });
+  expect(result.unsettled).toBe(undefined);
+  refreshing = () => turn(() => undefined);
+});

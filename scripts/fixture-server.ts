@@ -587,14 +587,18 @@ function applyOps(key: string, ops: any[]) {
             : [...list, link],
       );
     }
-    // Jira deletes the issue's subtasks with it.
+    // Jira deletes the issue's subtasks with it; the server's answer names them (src/server/jira-writes.ts `gone`).
     if (op.op === "delete")
-      for (const gone of listed().filter((i: any) => i.key === key || i.parent === key)) deletedKeys.add(gone.key);
+      for (const gone of listed().filter((i: any) => i.key === key || i.parent === key)) {
+        deletedKeys.add(gone.key);
+        if (gone.key !== key) touched.add(gone.key);
+      }
   }
   stamp(key);
   for (const other of touched) stamp(other);
   const others = () => [...touched].flatMap((other) => listed().find((i) => i.key === other) ?? []);
-  if (deletedKeys.has(key)) return Response.json({ key, created, others: others(), ...jiraIssue(key) });
+  const gone = [...touched].filter((other) => deletedKeys.has(other));
+  if (deletedKeys.has(key)) return Response.json({ key, created, others: others(), ...(gone.length ? { gone } : {}), ...jiraIssue(key) });
   const issue = listed().find((i) => i.key === key)!,
     type = ops.find((op) => op.op === "fields" && op.fields.type)?.fields.type;
   if (type && (issue.type === "Subtask") !== (type === "Subtask"))
