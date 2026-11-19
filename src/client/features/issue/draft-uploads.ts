@@ -2,7 +2,7 @@ import { storedMediaIds } from "./issue-attachments";
 import { remember, UploadRefused, type Uploaded } from "@/client/state/jira-media";
 
 /**
- * Files an issue's editors (description, comments) upload go to Jira at once. Each is noted here before it starts, under
+ * Files an issue's editors (description, comments, documents) upload go to Jira at once. Each is noted here before it starts, under
  * its local id (the upload's client id), so one a reload cut off mid-upload, one whose answer was lost, or one a draft
  * dropped just before leaving, is removed from Jira on the next load; its upload slot goes too (R2-comments-D5). `local`
  * is the file's local id once the upload answered.
@@ -46,8 +46,8 @@ function settleDraftUpload(namespace: string, id: string, local?: string) {
 }
 /**
  * Notes `file` (an editor's local copy) while `upload` sends it under its local id, then settles the note: an uploaded file
- * keeps it with its local id, a refusal drops it. A send with no answer (a reload cut it off) keeps it, so the cleaner asks
- * the server what it made and removes it (R3-comments-D1).
+ * keeps it with its local id, a refusal drops it. A send with no answer (a reload cut it off, or a lost answer) keeps it, so
+ * the cleaner asks the server what it made and removes it unless something still shows it (R3-comments-D1).
  */
 export async function trackDraftUpload(
   namespace: string,
