@@ -75,15 +75,9 @@ async function postAttachment(
     uploading--;
   }
 }
-/** Each picked file keeps one client id, so Retry after an upload Jira didn't answer gets back the file the first send made. */
-const clientIds = new WeakMap<File, string>();
-function clientId(file: File) {
-  if (!clientIds.has(file)) clientIds.set(file, crypto.randomUUID());
-  return clientIds.get(file)!;
-}
-/** Uploads files to Jira at once and in parallel, before they are placed, so a refusal shows on the file with Retry and Discard
- * instead of a card that looks saved (a server it can't reach drops the file, as Linear's offline upload does); `keep` then
- * stores the local copies, which map to the Jira attachments. */
+/** Uploads files to Jira at once and in parallel, before they are placed, so one Jira didn't take never looks saved; `keep`
+ * then stores the local copies, which map to the Jira attachments. A failed send goes once more at once under the same
+ * client id, as Linear's editor upload does (`retryOnFailure`: one retry, no backoff). */
 export async function uploadNow(
   key: string,
   files: File[],
@@ -98,9 +92,11 @@ export async function uploadNow(
   } catch {}
   try {
     const uploaded = await Promise.all(
-      files.map((file, i) =>
-        postAttachment(key, file, file.name, clients[i] ?? clientId(file)),
-      ),
+      files.map((file, i) => {
+        const client = clients[i] ?? crypto.randomUUID(),
+          send = () => postAttachment(key, file, file.name, client);
+        return send().catch(send);
+      }),
     );
     const saved = await keep(files);
     saved.forEach((file, index) => remember(key, file.id, uploaded[index]));

@@ -71,7 +71,7 @@ export function mediaUploads(
 ) {
   const key = new PluginKey<Map<string, number>>("media-uploads");
   let alive = true;
-  const jobs = new Map<string, { files: File[]; error?: string }>(),
+  const jobs = new Map<string, { files: File[] }>(),
     saving = new Set<string>(),
     waiting: (() => void)[] = [];
   const settle = (id: string) => {
@@ -79,31 +79,14 @@ export function mediaUploads(
     if (!saving.size) waiting.splice(0).forEach((resolve) => resolve());
   };
   const widget = (id: string) => {
-    const job = jobs.get(id)!;
     const dom = document.createElement("span");
     dom.contentEditable = "false";
     dom.dataset.mediaInteractive = "true";
     dom.className = "media-upload";
-    dom.setAttribute("role", job.error ? "alert" : "status");
+    dom.setAttribute("role", "status");
     const label = document.createElement("span");
-    label.textContent = job.error ?? `Saving ${job.files.map((file) => file.name).join(", ")}…`;
+    label.textContent = `Saving ${jobs.get(id)!.files.map((file) => file.name).join(", ")}…`;
     dom.append(label);
-    if (job.error)
-      for (const [name, action] of [
-        ["Retry", () => start(id)],
-        ["Discard", () => remove(id)],
-      ] as const) {
-        const button = document.createElement("button");
-        button.type = "button";
-        button.textContent = name;
-        button.onmousedown = (event) => event.preventDefault();
-        button.onclick = (event) => {
-          event.preventDefault();
-          event.stopPropagation();
-          action();
-        };
-        dom.append(button);
-      }
     return dom;
   };
   const plugin = new Plugin<Map<string, number>>({
@@ -137,7 +120,7 @@ export function mediaUploads(
           state.doc,
           [...(key.getState(state) ?? [])].map(([id, pos]) =>
             Decoration.widget(pos, () => widget(id), {
-              key: `${id}:${jobs.get(id)?.error ?? ""}`,
+              key: id,
               side: -1,
               stopEvent: () => true,
             }),
@@ -156,17 +139,7 @@ export function mediaUploads(
     if (alive && editor) editor.dispatch(editor.state.tr.setMeta(key, { id }));
   };
   const start = async (id: string) => {
-    const editor = view(),
-      job = jobs.get(id),
-      at = position(id);
-    if (!alive || !editor || !job) return;
-    if (at === undefined) {
-      remove(id);
-      notice?.("The attachment insertion point was removed. Choose the file again.");
-      return;
-    }
-    job.error = undefined;
-    editor.dispatch(editor.state.tr.setMeta(key, { id, position: at }));
+    const job = jobs.get(id)!;
     saving.add(id);
     try {
       const files = await save(job.files);
@@ -207,29 +180,19 @@ export function mediaUploads(
       jobs.delete(id);
       changed?.(jobs.size > 0);
     } catch (error) {
-      // Linear drops a file that couldn't reach its server and says why in a toast, in its offline wording when offline
-      // (`tmr`, `Cje`). Nothing waits to go later.
-      if (error instanceof Unreachable) {
-        remove(id);
-        showNotification({
-          text: "File failed to upload",
-          detail: navigator.onLine ? error.message : "Cannot upload files while being offline.",
-          error: true,
-        });
-        return;
-      }
-      const editor = view(),
-        at = position(id);
-      if (!alive || !editor) return;
-      if (at === undefined) {
-        remove(id);
-        notice?.(
-          `${error instanceof Error ? error.message : "Could not save files locally"}. Choose the file again.`,
-        );
-        return;
-      }
-      job.error = error instanceof Error ? error.message : "Could not save files locally";
-      editor.dispatch(editor.state.tr.setMeta(key, { id, position: at }));
+      // Linear's upload catch drops the file and says why (`Cje`, `showAlert("File failed to upload", …, true)`), in its
+      // offline wording when offline (`tmr`). Nothing waits to go later.
+      remove(id);
+      showNotification({
+        text: "File failed to upload",
+        detail:
+          error instanceof Unreachable && !navigator.onLine
+            ? "Cannot upload files while being offline."
+            : error instanceof Error
+              ? error.message
+              : "Please try again later",
+        error: true,
+      });
     } finally {
       settle(id);
     }

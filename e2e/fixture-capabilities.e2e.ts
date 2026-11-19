@@ -217,8 +217,6 @@ test("a view saved in one tab shows in another tab's sidebar without a reload", 
 });
 
 test("an upload Jira refuses leaves the description with Linear's toast, and goes in once Jira accepts it", async ({ page, app }) => {
-  // Known failure: the file stays in the description with Retry and Discard.
-  test.fail();
   await app.seed({ writable: true });
   await openIssue(page, "TEST-2", "Browser fixture 2");
   await app.refuse(["upload"], "Jira refused the file.");
