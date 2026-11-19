@@ -73,7 +73,7 @@ function keep(kind: string, path: string | null) {
       time: new Date().toISOString(),
       kind,
       path,
-      screen: router.state.matches.at(-1)?.routeId ?? location.pathname,
+      screen: router.state.matches.at(-1)?.routeId ?? "unknown",
       board: s.board || null,
       issue: s.selected,
     },

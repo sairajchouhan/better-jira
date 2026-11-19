@@ -14,6 +14,8 @@ describe("jiraPath", () => {
     ["https://acme.atlassian.net/jira/settings/personal/notifications", "/jira/settings/personal/notifications"],
     ["https://acme.atlassian.net/jira/people/5b10a2844c20165700ede21g", "/jira/people/:value"],
     ["https://acme.atlassian.net/wiki/spaces/ENG/pages/123456/Secret+launch+plan", "/wiki/spaces/:space/pages/:id/:value"],
+    ["https://acme.atlassian.net/wiki/spaces/ENG/pages/123456/overview", "/wiki/spaces/:space/pages/:id/:value"],
+    ["https://acme.atlassian.net/secure/attachment/10001/summary", "/secure/attachment/:id/:value"],
   ])("%s → %s", (url, path) => {
     expect(jiraPath(url, SITE)?.path).toBe(path);
   });

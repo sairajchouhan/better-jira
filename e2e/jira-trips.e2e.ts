@@ -38,6 +38,23 @@ const descriptionLinks = async (page: Page, app: App) => {
   await openIssue(page);
   return page.locator(".issue-description");
 };
+/** Adds `url` to TEST-2 as a link resource (opening the issue first unless `open` is false). */
+async function addLink(page: Page, url: string, open = true) {
+  if (open) await openIssue(page);
+  await page.keyboard.press("Control+l");
+  const form = page.getByRole("dialog", { name: "Add link" });
+  await form.getByRole("textbox", { name: "URL", exact: true }).fill(url);
+  await form.getByRole("button", { name: "Add link" }).click();
+  await expect(page.getByRole("region", { name: "Resources" }).locator(`a[href="${url}"]`)).toBeVisible();
+}
+/** Reloads, so the board reads the issues' web links, and turns on the cards' Links property. */
+async function showLinksOnCards(page: Page) {
+  await page.goto(new URL("/", page.url()).href);
+  await page.getByRole("button", { name: "Display options" }).click();
+  const display = page.getByRole("dialog", { name: "Display options" });
+  await display.getByRole("button", { name: "Links", exact: true }).click();
+  await page.keyboard.press("Escape");
+}
 const inbox = (page: Page) => page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: /^Inbox/ });
 const inboxRow = (page: Page, key: string) => page.getByRole("region", { name: "Inbox" }).getByRole("link", { name: new RegExp(`^(Unread|Read) ${key} `) });
 const mod = process.platform === "darwin" ? "Meta" : "Control";
@@ -174,6 +191,60 @@ const EXITS: Exit[] = [
       await page.locator(`[data-activity=link] a[href="${DASHBOARD}"]`).click();
     },
     trip: { kind: "activity-link", path: "/jira/dashboards/:id", issue: "TEST-2" },
+  },
+  {
+    name: "a link resource's Open link",
+    settings: { writable: true },
+    go: async (page) => {
+      await addLink(page, DASHBOARD);
+      const resources = page.getByRole("region", { name: "Resources" });
+      await resources.locator(`a[href="${DASHBOARD}"]`).hover();
+      await resources.getByRole("button", { name: `Options for ${DASHBOARD}` }).click();
+      await page.getByRole("menuitem", { name: "Open link" }).click();
+    },
+    trip: { kind: "resource-link", path: "/jira/dashboards/:id", issue: "TEST-2" },
+  },
+  {
+    name: "a card's link badge",
+    settings: { writable: true },
+    go: async (page) => {
+      await addLink(page, DASHBOARD);
+      await showLinksOnCards(page);
+      await page.getByRole("link", { name: /^Open link .* on TEST-2$/ }).click();
+    },
+    trip: { kind: "card-link", path: "/jira/dashboards/:id" },
+  },
+  {
+    name: "a card's Open link… menu, for an issue with three links",
+    settings: { writable: true },
+    go: async (page) => {
+      await addLink(page, DASHBOARD);
+      await addLink(page, FILTER, false);
+      await addLink(page, "https://example.com/handbook", false);
+      await showLinksOnCards(page);
+      await page.getByRole("button", { name: "Links on TEST-2" }).click();
+      await page.getByRole("menuitem").filter({ hasText: /dashboards|10000/i }).first().click();
+    },
+    trip: { kind: "card-link", path: "/jira/dashboards/:id" },
+  },
+  {
+    name: "Open in new window on a link in an issue's document",
+    settings: { writable: true },
+    go: async (page) => {
+      await openIssue(page);
+      await page.getByRole("button", { name: "Issue options" }).click();
+      await page.getByRole("menuitem", { name: "Add document…" }).click();
+      const body = page.locator("[data-trip=document-link] .ProseMirror").last();
+      await body.click();
+      await page.keyboard.type("dashboard");
+      await page.keyboard.press("Shift+Home");
+      await page.keyboard.press(`${mod}+k`);
+      await page.keyboard.type(DASHBOARD);
+      await page.keyboard.press("Enter");
+      await body.getByText("dashboard").click();
+      await page.getByRole("button", { name: "Open in new window" }).click();
+    },
+    trip: { kind: "document-link", path: "/jira/dashboards/:id", issue: "TEST-2" },
   },
   {
     name: "a type change Jira refuses, which says to use Move in Jira",

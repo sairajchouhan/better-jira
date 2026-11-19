@@ -46,9 +46,11 @@ const WORDS = new Set(
 /** What replaces a segment that follows one of these. */
 const AFTER: Record<string, string> = { projects: ":project", spaces: ":space", display: ":space" };
 
-/** One path segment as the pattern shows it: a word Jira's own pages use, else what kind of value it holds. */
-function segment(part: string, previous: string | undefined): string {
+/** One path segment as the pattern shows it: a word Jira's own pages use, else what kind of value it holds. A page's or
+ *  file's name (after `pages/:id` or `attachment/:id`) is always replaced, even when it is one of those words. */
+function segment(part: string, previous: string | undefined, beforePrevious: string | undefined): string {
   if (previous && AFTER[previous]) return AFTER[previous];
+  if ((beforePrevious === "pages" || beforePrevious === "attachment") && /^\d+$/.test(previous ?? "")) return ":value";
   if (/^\d+$/.test(part)) return ":id";
   if (/^[A-Z][A-Z0-9_]*-\d+$/.test(part)) return ":key";
   return WORDS.has(part) ? part : ":value";
@@ -63,7 +65,7 @@ export function jiraPath(url: string, site: string): { path: string; confluence:
   const parsed = new URL(url);
   if (parsed.origin !== new URL(site).origin) return null;
   const parts = parsed.pathname.split("/").filter(Boolean);
-  const shown = parts.map((part, i) => segment(part, parts[i - 1]));
+  const shown = parts.map((part, i) => segment(part, parts[i - 1], parts[i - 2]));
   const names = [...new Set(parsed.searchParams.keys())].filter((name) => /^[\w.-]+$/.test(name)).sort();
   return {
     path: `/${shown.join("/")}${names.length ? `?${names.join("&")}` : ""}`,
