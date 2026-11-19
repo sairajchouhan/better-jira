@@ -347,9 +347,7 @@ test("36. after someone changed the description in Jira, Keep mine saves the use
   expect(plain(await jiraDescription(app))).toBe("Original words and mine");
 });
 
-// BUG: in roughly a third to most runs the refused version stays saved locally, so every reload shows the bar again
-// although Jira holds the kept text. It can't be triggered on demand, so test.fail() would flake; fixme until fixed.
-test.fixme("36. after Keep mine has saved, a reload doesn't bring the conflict bar back", async ({ page, app }) => {
+test("36. after Keep mine has saved, a reload doesn't bring the conflict bar back", async ({ page, app }) => {
   await conflict(page, app);
 
   await conflictBar(page).getByRole("button", { name: "Keep mine" }).click();
