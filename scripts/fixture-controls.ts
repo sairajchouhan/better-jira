@@ -55,8 +55,9 @@ export type FixtureSettings = Partial<{
 export type Refusal = { refuse?: string[]; refuseText?: string };
 
 /** `POST /__fixture/retry`: the next `count` op sends answer 503 `retry`, as the server does when Jira didn't answer.
- *  `applied`: Jira made the change anyway and only its answer was lost, so the resend must not make it twice. */
-export type Unanswered = { count: number; applied?: boolean };
+ *  `applied`: Jira made the change anyway and only its answer was lost, so the resend must not make it twice.
+ *  `uploads`: the next `count` uploads instead (applied: Jira attached the file). */
+export type Unanswered = { count: number; applied?: boolean; uploads?: boolean };
 
 /**
  * `POST /__fixture/jira`: someone changes an issue in Jira, and the server tells open tabs ("changed"), as its poll does.

@@ -358,6 +358,28 @@ test("an upload answers with Jira's attachment and the issue's id from the read 
   expect(await uploadAttachment("K-3", new File(["abcd"], "c.txt"), "f30")).toEqual({ id: "950", found: false });
 });
 
+// Known failure: the server answers every failed upload 422, a refusal (src/server/index.ts).
+test.failing("an upload Jira may have taken (no answer in time, a server error, a cut connection) answers retry; one Jira refused says why", async () => {
+  const { uploadAttachment, uploadFailure } = await import("./jira-writes");
+  const { JiraError } = await import("./jira");
+  const jiraSays = (status: number, reason: string) =>
+    Object.assign(new JiraError("POST", "/rest/api/3/issue/K-5/attachments", status, ""), { status, reason });
+  const failed = async (error: unknown, client: string) => {
+    answer = (path) => {
+      if (path === "/rest/api/3/issue/K-5/attachments") throw error;
+      return { id: "10050", fields: { attachment: [] } };
+    };
+    return uploadFailure(await uploadAttachment("K-5", new File(["abcd"], "e.txt"), client).catch((e) => e));
+  };
+  const retry = { error: "Jira didn't answer.", retry: true } as const;
+  expect(await failed(new Error("Jira POST /rest/api/3/issue/K-5/attachments didn't answer within 120s."), "f50")).toEqual(retry);
+  expect(await failed(jiraSays(502, "Bad gateway"), "f51")).toEqual(retry);
+  expect(await failed(new TypeError("socket closed"), "f52")).toEqual(retry);
+  expect(await failed(jiraSays(413, "The file is too large for Jira."), "f53")).toEqual({
+    error: "The file is too large for Jira.",
+  });
+});
+
 test("sync review 2-2: an issue search can't find yet doesn't authorize a second create until the intent is old", async () => {
   const issues: any[] = [];
   let indexed = false,

@@ -292,8 +292,9 @@ const writes: { key: string; ops: any[] }[] = [],
   /** The server's ledger (src/server/jira-writes.ts `once`): what each `client` id made, so a resend after a lost answer gets
    *  the same issue, comment or file. */
   made = new Map<string, string>();
-/** `/__fixture/retry`: how many op sends still answer 503, and whether Jira applies them anyway (a lost answer). */
-let unanswered: Required<Unanswered> = { count: 0, applied: false },
+/** `/__fixture/retry`: how many op sends (and, apart, uploads) still answer 503, and whether Jira applies them anyway (a lost answer). */
+let unanswered = { count: 0, applied: false },
+  unansweredUploads = { count: 0, applied: false },
   attachmentId = 20000;
 /** The server's refusal when a write clears a priority (src/server/jira-writes.ts, not exported there). */
 const PRIORITY_REQUIRED = "Jira keeps a priority on every saved issue. Pick one instead of clearing it.";
@@ -1208,6 +1209,11 @@ async function upload(req: Request, key: string) {
   if (refuse.includes("upload")) return Response.json({ error: refuseText }, { status: 422 });
   if (!listed().some((i) => i.key === key))
     return Response.json({ error: "Issue does not exist or you do not have permission to see it." }, { status: 422 });
+  // Jira didn't answer, or its answer was lost (`applied`): the server says to send again (src/server/index.ts).
+  const lost = unansweredUploads.count > 0;
+  if (lost) unansweredUploads.count--;
+  const noAnswer = () => Response.json({ error: "Jira didn't answer.", retry: true }, { status: 503 });
+  if (lost && !unansweredUploads.applied) return noAnswer();
   let done = ledger ? uploads.find((u) => u.id === made.get(ledger)) : undefined;
   if (!done) {
     done = {
@@ -1224,6 +1230,7 @@ async function upload(req: Request, key: string) {
     if (ledger) made.set(ledger, done.id);
     stamp(key);
   }
+  if (lost) return noAnswer();
   return Response.json({
     attachment: {
       id: done.id,
@@ -1309,6 +1316,7 @@ async function handle(req: Request) {
     stamped.clear();
     made.clear();
     unanswered = { count: 0, applied: false };
+    unansweredUploads = { count: 0, applied: false };
     attachmentId = 20000;
     commentId = 9000;
     return Response.json({ ok: true });
@@ -1321,8 +1329,10 @@ async function handle(req: Request) {
     return Response.json({ ok: true });
   }
   if (path === "/__fixture/retry" && req.method === "POST") {
-    const next: Unanswered = await req.json();
-    unanswered = { count: next.count, applied: next.applied ?? false };
+    const next: Unanswered = await req.json(),
+      setting = { count: next.count, applied: next.applied ?? false };
+    if (next.uploads) unansweredUploads = setting;
+    else unanswered = setting;
     return Response.json({ ok: true });
   }
   if (path === "/__fixture/jira" && req.method === "POST") return Response.json(changeInJira(await req.json()));

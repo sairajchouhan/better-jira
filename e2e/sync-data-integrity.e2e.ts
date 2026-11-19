@@ -366,6 +366,45 @@ test("58 a new issue whose answer Jira lost is sent again and made once, never t
   expect(await opsAnswers(app)).toEqual([503, 200, 200]);
 });
 
+/** The statuses the app's uploads were answered with, in order. */
+const uploadAnswers = async (app: { requests(): Promise<{ path: string; status: number }[]> }) =>
+  (await app.requests()).filter((r) => r.path.endsWith("/attachments")).map((r) => r.status);
+
+test("58 a new issue's file whose upload Jira didn't answer is sent again and attached once, not rolled back", async ({ page, app }) => {
+  // Today the server's 503 reads as a refusal: the outbox rolls the edit back and says Jira didn't save it.
+  test.fail();
+  await app.seed({ writable: true, jiraEdits: true, createSuccess: true });
+  await app.unanswered(1, { applied: true, uploads: true });
+  await (await composeWithFile(page)).click();
+
+  await expect.poll(() => uploadAnswers(app), RESEND).toEqual([503, 200]);
+  await expect(saveStatus(page)).toHaveText("Saved to Jira", RESEND);
+  const [upload, ...more] = await app.uploads();
+  expect(more).toEqual([]);
+  expect((await app.jiraIssue("TEST-90")).full.fields.attachment).toEqual([
+    expect.objectContaining({ id: upload!.id, filename: "media-image.png" }),
+  ]);
+  await expect(page.getByRole("alertdialog", { name: /Jira did not save/ })).toHaveCount(0);
+});
+
+test("58 an existing issue's file whose upload Jira didn't answer goes once on Retry", async ({ page, app }) => {
+  // Today Retry sends the file under a new id, so Jira gets it twice.
+  test.fail();
+  await app.seed({ writable: true, jiraEdits: true });
+  await openIssue(page, "TEST-2", "Browser fixture 2");
+  await app.unanswered(1, { applied: true, uploads: true });
+
+  await attachImage(page, "first");
+  await expect(description(page).getByRole("alert")).toContainText("Jira didn't answer.");
+  await description(page).getByRole("button", { name: "Retry" }).click();
+
+  await expect(descriptionImage(page)).toBeVisible();
+  expect(await uploadAnswers(app)).toEqual([503, 200]);
+  const [upload, ...more] = await app.uploads();
+  expect(more).toEqual([]);
+  await expect.poll(async () => (await jiraDescription(app, "TEST-2")).media, RESEND).toEqual([upload!.mediaId]);
+});
+
 test("59 local edits survive a reload and replay only what Jira lacks", async ({ page, app }) => {
   await app.seed({ writable: true, jiraEdits: true });
   await openIssue(page, "TEST-2", "Browser fixture 2");

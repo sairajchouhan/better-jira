@@ -29,8 +29,9 @@ export type App = {
   jiraIssues(): Promise<any[]>;
   /** Jira refuses ops of these kinds or fields from now on (none: stops refusing), with `text`. */
   refuse(kinds: string[], text?: string): Promise<void>;
-  /** The next `count` writes get no answer from Jira (503 retry); `applied`: Jira made them and only the answer was lost. */
-  unanswered(count: number, options?: { applied?: boolean }): Promise<void>;
+  /** The next `count` writes get no answer from Jira (503 retry); `applied`: Jira made them and only the answer was lost;
+   *  `uploads`: the next `count` uploads instead. */
+  unanswered(count: number, options?: { applied?: boolean; uploads?: boolean }): Promise<void>;
   /** Someone changes an issue in Jira, and open tabs are told. Answers the id of a comment it added. */
   changeInJira(change: JiraChange): Promise<{ commentId?: string }>;
   /** A new notification lands in Jira's bell, and open tabs are told. */
@@ -106,7 +107,8 @@ export const test = base.extend<{ app: App }, { fixtureUrl: string }>({
       jiraIssue: (key) => call(`/__fixture/jira?key=${encodeURIComponent(key)}`),
       jiraIssues: async () => (await call<{ issues: any[] }>("/__fixture/jira")).issues,
       refuse: async (kinds, text) => void (await call("/__fixture/refuse", { refuse: kinds, refuseText: text })),
-      unanswered: async (count, { applied } = {}) => void (await call("/__fixture/retry", { count, applied })),
+      unanswered: async (count, { applied, uploads } = {}) =>
+        void (await call("/__fixture/retry", { count, applied, uploads })),
       changeInJira: (change) => call("/__fixture/jira", change),
       pushInbox: async (notification) => void (await call("/__fixture/inbox", notification)),
     });
