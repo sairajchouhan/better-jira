@@ -2,9 +2,10 @@ import { storedMediaIds } from "./issue-attachments";
 import { remember, UploadRefused, type Uploaded } from "@/client/state/jira-media";
 
 /**
- * Files a comment composer uploads go to Jira at once. Each is noted here before it starts, under its local id (the
- * upload's client id), so one a reload cut off mid-upload, or that a draft dropped just before leaving, is removed from Jira
- * on the next load; its upload slot goes too (R2-comments-D5). `local` is the file's local id once the upload answered.
+ * Files an issue's editors (description, comments) upload go to Jira at once. Each is noted here before it starts, under
+ * its local id (the upload's client id), so one a reload cut off mid-upload, one whose answer was lost, or one a draft
+ * dropped just before leaving, is removed from Jira on the next load; its upload slot goes too (R2-comments-D5). `local`
+ * is the file's local id once the upload answered.
  */
 export type DraftUpload = {
   id: string;
@@ -82,7 +83,8 @@ type Jira = {
 };
 /**
  * Settles old entries: a file a draft or an unsent change still holds stays; one Jira's description or comments show
- * keeps its attachment and loses only its slot; any other is deleted from Jira. `pending` is the unsent local changes.
+ * keeps its attachment and loses only its slot; any other is deleted from Jira. `pending` is the unsent local changes
+ * (documents, which live only here, among them).
  */
 export async function cleanDraftUploads(
   namespace: string,

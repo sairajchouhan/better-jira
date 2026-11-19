@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import type { Page } from "@playwright/test";
 import { expect, test, type App, type JiraWrite } from "./app";
 
@@ -301,6 +302,14 @@ test("57 an image is placed in the description and lands once even when the page
   await page.reload();
 
   await expectPlacedOnce(page, app);
+  // Once the uploads settle, the cleaner keeps the file: the description shows it.
+  const [upload] = await app.uploads();
+  await page.clock.install({ time: Date.now() + 3 * 60_000 });
+  await page.reload();
+  await expect(descriptionImage(page)).toBeVisible();
+  // The cleaner runs as the app loads; give it time to have removed the file if it were going to.
+  await page.waitForTimeout(2_000);
+  expect(((await app.jiraIssue("TEST-2")).full.fields.attachment as any[]).map((a) => String(a.id))).toContain(upload!.id);
 });
 
 /** TEST-2's uploads reach Jira, but their answers never reach the page; `body[data-upload-reached]` marks one sent
@@ -472,6 +481,35 @@ test("57 a file put into a new sub-issue's description offline is refused as Lin
   expect(await app.uploads()).toEqual([]);
 });
 
+test("57 a document's image stays in Jira after the uploads settle", async ({ page, app }) => {
+  await app.seed({ writable: true });
+  await openIssue(page, "TEST-2", "Browser fixture 2");
+  await page.getByRole("button", { name: "Issue options" }).click();
+  await page.getByRole("menuitem", { name: "Add document…" }).click();
+  const body = page.getByRole("textbox", { name: "Document content" });
+  await expect(body).toBeVisible();
+  // Pasted, as the document's editor has no paperclip.
+  const bytes = readFileSync("scripts/fixtures/media-image.png").toString("base64");
+  await body.evaluate((editor, bytes) => {
+    const clipboardData = new DataTransfer();
+    clipboardData.items.add(new File([Uint8Array.from(atob(bytes), (c) => c.charCodeAt(0))], "media-image.png", { type: "image/png" }));
+    editor.dispatchEvent(new ClipboardEvent("paste", { clipboardData, bubbles: true, cancelable: true }));
+  }, bytes);
+  await expect(body.getByRole("img", { name: "media-image.png" })).toBeVisible();
+  await expect.poll(async () => (await app.uploads()).length).toBe(1);
+  await expect(body).not.toHaveAttribute("aria-busy", "true");
+  await expect(body.locator('[aria-busy="true"]')).toHaveCount(0);
+  const [upload] = await app.uploads();
+
+  // Documents live only in this browser, so Jira's text never shows the file; the cleaner must still keep it.
+  await page.clock.install({ time: Date.now() + 3 * 60_000 });
+  await page.reload();
+  await expect(body.getByRole("img", { name: "media-image.png" })).toBeVisible();
+  // The cleaner runs as the app loads; give it time to have removed the file if it were going to.
+  await page.waitForTimeout(2_000);
+  expect(((await app.jiraIssue("TEST-2")).full.fields.attachment as any[]).map((a) => String(a.id))).toContain(upload!.id);
+});
+
 test("58 an edit whose send Jira never answered is sent again and lands once", async ({ page, app }) => {
   await app.seed({ writable: true, jiraEdits: true });
   await openIssue(page, "TEST-2", "Browser fixture 2");
@@ -572,8 +610,6 @@ test("58 a description file Jira took but never answered leaves Jira once the us
   page,
   app,
 }) => {
-  // Known failure: only comment uploads are noted for the cleaner, so Jira keeps the first copy.
-  test.fail();
   await app.seed({ writable: true, jiraEdits: true });
   await app.changeInJira({ key: "TEST-2", description: "Steps to reproduce" });
   await openIssue(page, "TEST-2", "Browser fixture 2");

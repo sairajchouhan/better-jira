@@ -48,6 +48,7 @@ import { recordRelation } from "@/client/features/issue/issue-activity";
 import { newSubIssueDraft } from "@/client/features/issue/sub-issue-draft";
 import { inverseKind, type Relation } from "@/shared/relations";
 import { Unreachable, uploadPlaced } from "./jira-media";
+import { trackDraftUpload } from "@/client/features/issue/draft-uploads";
 import type { Attachment } from "@/shared/attachment-media";
 import { get, set, timed, ME, boardOf, issueBoardId } from "./store";
 import { onBoard } from "@/shared/board-membership";
@@ -156,11 +157,16 @@ export async function keepComposerFiles(files: File[]) {
   return localFiles()(files);
 }
 /**
- * Sends a file an issue's editor placed to Jira under its local id, then lists it with the issue's attachments. A read-only
- * site, or an issue Jira hasn't made yet, keeps it here (the write that places it uploads it once Jira has the issue).
+ * Sends a file an issue's editor placed to Jira under its local id, then lists it with the issue's attachments. The upload
+ * is noted while it goes, so a copy Jira keeps that no description, comment or draft shows is removed later
+ * (draft-uploads). A read-only site, or an issue Jira hasn't made yet, keeps it here (the write that places it uploads it
+ * once Jira has the issue).
  */
 export async function uploadIssueFile(key: string, file: Attachment, picked: File) {
-  if (get().writable && !isLocalIssue(key)) await uploadPlaced(key, file.id, picked);
+  if (get().writable && !isLocalIssue(key))
+    await trackDraftUpload(get().namespace, key, { id: file.id, name: picked.name, size: picked.size }, () =>
+      uploadPlaced(key, file.id, picked),
+    );
   const issue = get().issues.get(key);
   if (issue)
     record(key, `attached files to ${key}`, () =>

@@ -27,7 +27,6 @@ import { currentKey } from "@/client/state/jira-sync";
 import { addLocalFiles } from "@/client/state/local-database";
 import { commentDraftKey, onRejectedComment, restoreRejectedDraft } from "./rejected-comment";
 import { readStored, writeStored } from "@/client/state/stored-state";
-import { trackDraftUpload } from "@/client/features/issue/draft-uploads";
 import { mentionDraft, visibleComments, type IssueComment } from "./comment-thread";
 import { useAnchorHighlight, useLocationAnchor } from "./anchor-highlight";
 import { copyText } from "@/client/lib/clipboard";
@@ -57,8 +56,7 @@ export function useDraftFiles(key: string) {
   return {
     onFiles: keepIssueFiles,
     onUpload: async (file: Attachment, picked: File) => {
-      const upload = () => uploadIssueFile(key, file, picked);
-      await (get().writable ? trackDraftUpload(get().namespace, key, { ...file, name: picked.name, size: picked.size }, upload) : upload());
+      await uploadIssueFile(key, file, picked);
       uploaded.current.add(file.id);
     },
     changed: (body: AdfDocument) => {
