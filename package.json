@@ -14,7 +14,8 @@
     "lint:fix": "oxlint --fix",
     "test:e2e": "playwright test",
     "test:real": "playwright test -c playwright.real.config.ts",
-    "scan:documents": "bun scripts/scan-documents.ts"
+    "scan:documents": "bun scripts/scan-documents.ts",
+    "trips": "bun scripts/trips.ts"
   },
   "dependencies": {
     "@internationalized/date": "3.12.4",

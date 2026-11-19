@@ -5,6 +5,7 @@ import { descriptionBases } from "@/shared/document";
 import { inwardKind, jiraLinkType, LINEAR_TYPES } from "@/shared/relations";
 import { TITLE_MAX, TITLE_TOO_LONG } from "@/shared/issue-title";
 import { defaultIssueType } from "@/shared/issue-properties";
+import { JIRA_MESSAGES } from "@/shared/jira-trips";
 
 const at = (key: string) => `/rest/api/3/issue/${encodeURIComponent(key)}`;
 
@@ -380,7 +381,7 @@ async function run(ctx: Context, op: Op) {
       // Jira refuses a type in another workflow or hierarchy (Subtask ↔ Task); only Jira's Move can do that.
       const refused = (reason: string) =>
         new UserError(
-          `Jira won't change ${key} to ${rest.type}: ${reason} Use Move in Jira for this change.`,
+          `Jira won't change ${key} to ${rest.type}: ${reason} ${JIRA_MESSAGES["move-in-jira"].phrase}`,
         );
       if (Object.keys(fields).length || update?.labels.length)
         await jira(at(key), {

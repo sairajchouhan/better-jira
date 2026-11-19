@@ -5,13 +5,14 @@ import { localMediaRequest } from "@/shared/attachment-media";
 import index from "@/client/index.html";
 import * as mirror from "./mirror";
 import { parsePreferences } from "@/shared/view-model";
-import { serverConfiguration } from "./server-config";
+import { serverConfiguration, tripsPath } from "./server-config";
 import { fetchPreview } from "./link-preview";
 import { remoteImage } from "./remote-image";
 import { applyOps, uploadAttachment, uploadFailure } from "./jira-writes";
 import { jira, canWrite } from "./jira";
 import * as inbox from "./notifications";
 import { jiraProblem } from "./jira-problem";
+import { tripLog } from "./trip-log";
 
 const json = (body: string) =>
   new Response(body, { headers: { "Content-Type": "application/json" } });
@@ -208,6 +209,7 @@ const server = serve({
         }
       }),
     },
+    "/api/trips": { POST: localOnly(tripLog(tripsPath)) },
     "/api/remote-image": localOnly((req) => remoteImage(new URL(req.url).searchParams.get("url") ?? "")),
     "/api/issues": localOnly(() => json(mirror.issues())),
     "/api/avatar": { GET: localOnly(mirror.avatar) },

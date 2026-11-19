@@ -20,6 +20,9 @@ export const serverConfiguration = () => configuration(process.env, localSetting
 export const serverAuth = () => jiraAuth(process.env, localSettings);
 /** The mirror's SQLite file: the instance's own cache.db, unless JIRA_CACHE names another. */
 export const cachePath = () => process.env.JIRA_CACHE || join(instanceHome(), "cache.db");
+/** Where the trips to Jira this instance's browsers send are kept (shared/jira-trips.ts): the instance's trips.jsonl, unless
+ *  JIRA_TRIPS names another file. */
+export const tripsPath = () => process.env.JIRA_TRIPS || join(instanceHome(), "trips.jsonl");
 /** Saves a board added in the app for this site (or, with `withoutAddedBoard`, its removal). Re-reads the file first: another
  *  server may have saved to it. A broken file throws, never overwritten. */
 export async function saveAddedBoard(board: number, edit = withAddedBoard) {

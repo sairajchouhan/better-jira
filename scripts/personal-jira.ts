@@ -45,13 +45,21 @@ function serve(port: number, cache: string, dist: string) {
   if (!Number.isSafeInteger(port) || RESERVED_PORTS.has(port)) throw new Error(`port ${port} is reserved`);
   personalAuth();
   const root = path.resolve(import.meta.dirname, "..");
-  // Shell env beats the instance's .env, so these pins win: its own port, cache and build, and writes to cloudsairaj only.
+  // Shell env beats the instance's .env, so these pins win: its own port, cache, build and trips to Jira (kept in the build, not
+  // the instance's log), and writes to cloudsairaj only.
   // A site or account in the shell would win too, past the check above: only the instance's own are kept.
   const { JIRA_URL: _url, JIRA_EMAIL: _email, JIRA_TOKEN: _token, ...shell } = process.env;
   const child = spawn("bun", ["scripts/instance.ts", "start", PERSONAL], {
     cwd: root,
     stdio: "inherit",
-    env: { ...shell, PORT: String(port), JIRA_WRITES: SITE, JIRA_CACHE: cache, BETTER_JIRA_DIST: dist },
+    env: {
+      ...shell,
+      PORT: String(port),
+      JIRA_WRITES: SITE,
+      JIRA_CACHE: cache,
+      BETTER_JIRA_DIST: dist,
+      JIRA_TRIPS: path.resolve(root, dist, "trips.jsonl"),
+    },
   });
   for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) process.on(signal, () => child.kill(signal));
   child.on("exit", (code) => process.exit(code ?? 1));

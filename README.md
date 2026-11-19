@@ -12,9 +12,16 @@ bun run setup mine
 bun start mine
 ```
 
-Everything one copy reads or writes lives in its folder, `instances/mine/`: the token in `.env` (typed without echo, owner-only permissions), the site, boards and edits answer in `settings.json`, and the local copy of your boards in `cache.db`. Git ignores `instances/`. `bun run setup mine --check` checks the saved setup against Jira and changes nothing. Run setup again to change boards or the edits answer, then restart `bun start mine`. You can also add a board from the sidebar ("Add space").
+Everything one copy reads or writes lives in its folder, `instances/mine/`: the token in `.env` (typed without echo, owner-only permissions), the site, boards and edits answer in `settings.json`, the local copy of your boards in `cache.db`, and your trips to Jira in `trips.jsonl`. Git ignores `instances/`. `bun run setup mine --check` checks the saved setup against Jira and changes nothing. Run setup again to change boards or the edits answer, then restart `bun start mine`. You can also add a board from the sidebar ("Add space").
 
 For a second Jira site or account, set up another name (`bun run setup other`, then `PORT=3001 bun start other`). Each copy keeps its own folder and never reads another's. `bun start` alone lists the copies you have.
+
+## What still sends you to Jira
+
+Each time the app sends you to your Jira site (Open in Jira, a Jira link in a description or comment, Board settings, a
+message that says to do something in Jira), it notes which control or message it was, the screen you were on and the Jira
+page's address with its keys and ids taken out. Nothing else: no issue text or titles, and it stays in `trips.jsonl` on your
+machine. `bun run trips mine` lists them, most frequent first, with counts and when each was last seen.
 
 ## What goes to Jira
 

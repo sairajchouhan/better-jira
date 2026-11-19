@@ -1,3 +1,5 @@
+import { JIRA_MESSAGES } from "@/shared/jira-trips";
+
 export type JiraAuth = { site: string; email: string; token: string };
 export type Configuration = JiraAuth & {
   boards: number[];
@@ -114,7 +116,7 @@ export function boardFromInput(input: string, site: string): number {
   }
   const board = Number(id);
   if (!/^\d+$/.test(id) || !Number.isSafeInteger(board) || board < 1)
-    throw new Error("That link isn't a Jira board. Open the board in Jira and copy its address.");
+    throw new Error(`That link isn't a Jira board. ${JIRA_MESSAGES["board-address"].phrase}`);
   return board;
 }
 
