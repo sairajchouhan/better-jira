@@ -1,6 +1,7 @@
 import { type Issue } from "@/shared/issue-model";
 import { expect, test } from "bun:test";
 import { createOutbox, type Answer, type OutboxPorts } from "./outbox";
+import { Unreachable } from "./jira-media";
 import { DESCRIPTION_CONFLICT, type Side } from "@/shared/jira-ops";
 import type { LocalChange } from "./local-data";
 
@@ -402,6 +403,50 @@ test("a failed upload rolls the write back to Jira's copy without sending it; fi
   await h.advance(0);
   expect(h.sent).toHaveLength(1);
   expect(h.log.slice(-2)).toEqual(["uploadsOnly UP-2", "pending 0"]);
+});
+
+test("a file upload that can't reach the server goes again every 5 s, or at once back online, and then the write is sent", async () => {
+  let down = 2;
+  const h = harness({
+    prepare: async (_key, ops) => {
+      if (down-- > 0) throw new Unreachable(new TypeError("fetch failed"));
+      return ops.filter((op) => op.op !== "attachment.add");
+    },
+  });
+  const file = { id: "f1", name: "a.png", url: "", type: "image/png", size: 1 };
+  h.send(edit(issue("UP-3"), { attachments: [file], priority: "High" }));
+  await h.advance(6_200);
+  expect(h.sent).toEqual([]);
+  h.outbox.retryNow();
+  await h.advance(0);
+  expect(h.sent.map((s) => [s.at, s.key, s.ops])).toEqual([
+    [6_200, "UP-3", [{ op: "fields", fields: { priority: "High" } }]],
+  ]);
+  expect(h.answers.map((a) => a.result.error)).toEqual([undefined]);
+  expect(h.log.filter((l) => l.startsWith("unreachable"))).toEqual([
+    "unreachable UP-3",
+    "unreachable UP-3",
+    "unreachable null",
+  ]);
+});
+
+test("Restore stops a file upload waiting on an unreachable server: nothing is uploaded or sent for it", async () => {
+  let tries = 0;
+  const h = harness({
+    prepare: async () => {
+      tries++;
+      throw new Unreachable(new TypeError("fetch failed"));
+    },
+  });
+  const file = { id: "f1", name: "a.png", url: "", type: "image/png", size: 1 };
+  h.send(edit(issue("UP-4"), { attachments: [file] }));
+  await h.advance(5_000);
+  expect(tries).toBe(2);
+  h.outbox.cancel("UP-4");
+  await h.advance(60_000);
+  expect(tries).toBe(2);
+  expect(h.sent).toEqual([]);
+  expect(h.outbox.pending()).toBe(0);
 });
 
 test("a create Jira refuses takes its follow-up uploads with it", async () => {

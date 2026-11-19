@@ -151,10 +151,8 @@ export async function localFileURL(id: string) {
   return database?.fileURL(id);
 }
 /** Keeps a copy of a Jira attachment, so undoing its removal can upload it again. */
-export async function retainJiraFile(id: string, url: string) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error("Could not retain attachment for undo.");
-  await database?.retainFile(id, await response.blob());
+export async function retainJiraFile(id: string, file: Blob) {
+  await database?.retainFile(id, file);
 }
 /** Where new files are kept. Throws when local file storage is unavailable. */
 export function localFiles() {

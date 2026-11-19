@@ -31,6 +31,16 @@ export function remember(key: string, id: string, value?: Uploaded) {
 /** The server answered an upload with a refusal: nothing was attached. Any other failure (a reload cutting the send off)
  *  leaves the server to finish it. */
 export class UploadRefused extends Error {}
+/** fetch's own failure: the better-jira server couldn't be reached, so the request got no answer and nothing reached Jira. */
+export class Unreachable extends Error {
+  constructor(cause: unknown) {
+    super("Can't reach the better-jira server.", { cause });
+  }
+}
+const request = (url: string, init?: RequestInit) =>
+  fetch(url, init).catch((cause) => {
+    throw new Unreachable(cause);
+  });
 
 let uploading = 0;
 // A reload mid-upload can't resume it, so the browser asks first (the file would miss its place in the description).
@@ -50,7 +60,7 @@ async function postAttachment(
     const body = new FormData();
     body.append("file", file, name);
     body.append("client", client);
-    const response = await fetch(`/api/issues/${encodeURIComponent(key)}/attachments`, {
+    const response = await request(`/api/issues/${encodeURIComponent(key)}/attachments`, {
       method: "POST",
       body,
     });
@@ -207,8 +217,11 @@ export async function prepareOps(key: string, ops: Op[]): Promise<Op[]> {
         id = mapped?.attachment.id ?? op.id;
       if (!/^\d+$/.test(id)) continue;
       // Retain bytes for undo of deleting an attachment that originated in Jira.
-      if (!(await localFileURL(op.id)))
-        await retainJiraFile(op.id, `/api/issues/${encodeURIComponent(key)}/attachments/${id}`);
+      if (!(await localFileURL(op.id))) {
+        const response = await request(`/api/issues/${encodeURIComponent(key)}/attachments/${id}`);
+        if (!response.ok) throw new Error("Could not retain attachment for undo.");
+        await retainJiraFile(op.id, await response.blob());
+      }
       out.push({ ...op, id });
       continue;
     }

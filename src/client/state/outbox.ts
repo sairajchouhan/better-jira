@@ -1,6 +1,6 @@
 import { type Full, type Issue } from "@/shared/issue-model";
 import { DESCRIPTION_CONFLICT, mergeOps, opsFor, renameCommentIds, namesKey, renameIds, type Op, type Side } from "@/shared/jira-ops";
-import { withoutLocalMedia } from "./jira-media";
+import { Unreachable, withoutLocalMedia } from "./jira-media";
 import type { LocalChange } from "./local-data";
 
 
@@ -55,7 +55,8 @@ export type Answer = {
 export type OutboxPorts = {
   /** `POST /api/issues/:key/ops`. Rejects when the server can't be reached; a 503 means Jira couldn't settle the write yet. */
   post(key: string, body: object): Promise<Response>;
-  /** Uploads the files a job places and returns the ops to send (jira-media's prepareOps). Rejects if an upload fails. */
+  /** Uploads the files a job places and returns the ops to send (jira-media's prepareOps). Rejects with `Unreachable` when
+   *  the server can't be reached, and with any other error when a file can't be sent (Jira refused it). */
   prepare(key: string, ops: Op[]): Promise<Op[]>;
   clock: {
     now(): number;
@@ -241,15 +242,16 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
 
   /** Ends the wait before resending to a server that couldn't be reached (the browser is back online). */
   let reconnect: (() => void) | undefined;
-  /** An unreachable server means nothing reached Jira: the same ops go again until it answers, every 5 s or as soon as
-   *  `retryNow` says the connection is back. */
-  async function reach(key: string, post: (ops: Op[]) => Promise<Response>, ops: Op[]) {
+  /** An unreachable server means nothing reached Jira: the same send goes again until it answers, every 5 s or as soon as
+   *  `retryNow` says the connection is back. Any other failure rejects. */
+  async function reach<T>(key: string, send: () => Promise<T>): Promise<T> {
     for (let failed = false; ; failed = true)
       try {
-        const response = await post(ops);
+        const answer = await send();
         if (failed) events.unreachable(null);
-        return response;
-      } catch {
+        return answer;
+      } catch (e) {
+        if (!(e instanceof Unreachable)) throw e;
         events.unreachable(key);
         await new Promise<void>((resolve) => {
           const timer = clock.setTimeout(resolve, UNREACHABLE_WAIT);
@@ -356,12 +358,15 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
                   ? { settle: false }
                   : {}),
                 ...(job.tries ? { resend: true } : {}),
+              }).catch((cause) => {
+                throw new Unreachable(cause);
               });
         let result: WriteResult, ops: Op[] | undefined;
         try {
-          ops = await ports.prepare(job.key, job.ops);
+          // A server that can't be reached got none of the files: they go again, as a write to it does.
+          ops = await reach(job.key, () => (job.cancelled ? Promise.resolve(job.ops) : ports.prepare(job.key, job.ops)));
         } catch (e) {
-          // An upload failed: fetch Jira's copy to roll back to.
+          // A file can't be sent (Jira refused it): fetch Jira's copy to roll back to.
           result = {
             error: e instanceof Error ? e.message : "Could not upload the file to Jira.",
           };
@@ -379,7 +384,8 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
           continue;
         }
         if (ops) {
-          const response = await reach(job.key, post, ops);
+          const prepared = ops;
+          const response = await reach(job.key, () => post(prepared));
           // 503: Jira didn't answer, or can't tell yet whether an earlier send went through. The same job (same client ids)
           // goes again later, with backoff, behind other issues' writes; it is never dropped (sync review 2-2, 3-1, 3-2).
           if (response.status === 503) {
