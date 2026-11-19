@@ -8,7 +8,7 @@ import type { KeptOutcome } from "@/shared/inbox-model";
 import { QueryObserver } from "@tanstack/query-core";
 import { queryClient } from "./query-client";
 import { defaultPreferences, parsePreferences } from "@/shared/view-model";
-import { mergeFull, mergeProperties, needsFull } from "./local-edits";
+import { mergeFull, mergeProperties, needsFull, writesAnswered } from "./local-edits";
 import { navigate } from "@/client/features/navigation/app-navigation";
 import { issuesDeletedInJira } from "./deleted-issues";
 import { get, set, subscribe } from "./store";
@@ -188,19 +188,24 @@ export function keptOutcome(key: string): KeptOutcome {
 export const subscribeKept = (listener: () => void) => queryClient.getQueryCache().subscribe(listener);
 /** Loads an issue's Jira record and keeps local field edits on top. The first read after a cold load takes the preloaded
  *  record when it is this issue's, and drops it otherwise, so a later read never gets an old answer. */
-async function fetchFull(key: string) {
-  const early = preloaded?.key === key ? preloaded.record : undefined;
+async function fetchFull(key: string): Promise<void> {
+  const early = preloaded?.key === key ? preloaded : undefined;
   preloaded = undefined;
-  mergeFull(key, await (early ?? json<Full>(fullPath(key))));
+  const since = early?.since ?? writesAnswered(key),
+    record = await (early?.record ?? json<Full>(fullPath(key)));
+  // Jira answered a write while this read was out, so the read may predate it: read again rather than undo the write here.
+  if (writesAnswered(key) !== since) return fetchFull(key);
+  mergeFull(key, record);
 }
 /** Linear's PageDataPreloader (`preloadTargetForPath`, `registerPreload`): an issue page opened cold starts that issue's
  *  record alongside the app's own load, instead of after it, so the issue's first read usually finds it arrived. */
-let preloaded: { key: string; record: Promise<Full> } | undefined;
+let preloaded: { key: string; record: Promise<Full>; since: number } | undefined;
 /** Whether the preloaded read of `key` found the issue: one no board holds is in the mirror once it has (BJ-341). */
 export const preloadFound = (key: string) =>
   preloaded?.key === key ? preloaded.record.then(() => true, () => false) : Promise.resolve(false);
 export function preloadFull(key: string) {
-  const record = json<Full>(fullPath(key));
+  const since = writesAnswered(key),
+    record = json<Full>(fullPath(key));
   record.catch(() => {}); // the issue's own read reports it
-  preloaded = { key, record };
+  preloaded = { key, record, since };
 }

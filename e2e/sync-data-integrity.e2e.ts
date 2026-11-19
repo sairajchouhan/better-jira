@@ -316,8 +316,6 @@ test("57 an image placed before a reload still shows when Jira's copy, read as t
   page,
   app,
 }) => {
-  // Known failure: the late read replaces the description the write just placed the image in.
-  test.fail();
   await app.seed({ writable: true });
   await app.changeInJira({ key: "TEST-2", description: "Steps to reproduce" });
   await openIssue(page, "TEST-2", "Browser fixture 2");

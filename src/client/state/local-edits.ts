@@ -334,6 +334,10 @@ function settleRefusal(key: string, error: string, describes: boolean) {
 const sameDocument = (a: unknown, b: unknown) =>
   JSON.stringify(normalizeDocument(a as never)) === JSON.stringify(normalizeDocument(b as never));
 
+/** How many writes to each issue Jira has answered: a read of its record sent before the count moved may predate a write. */
+const answeredWrites = new Map<string, number>();
+export const writesAnswered = (key: string) => answeredWrites.get(key) ?? 0;
+
 /** Takes Jira's copy of what Jira owns, once no later write for the issue waits. `force` rolls a failed write back; a refused
  *  write whose answer has no copy settles at once (`settleRefusal`) and rolls back with the next copy. */
 export function adoptJira(
@@ -347,6 +351,7 @@ export function adoptJira(
     if (force && result.error) settleRefusal(key, result.error, describes);
     return;
   }
+  answeredWrites.set(key, writesAnswered(key) + 1);
   const refusal = refusals.get(key);
   if (refusal !== undefined) {
     refusals.delete(key);
