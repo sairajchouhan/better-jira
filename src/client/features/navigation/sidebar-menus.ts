@@ -14,6 +14,7 @@ import { COPY_FAILED, showNotification } from "@/client/state/app-notifications"
 import { removeBoard } from "@/client/state/server-data";
 import { placeURL, ui } from "./app-navigation";
 import { toggleFavorite } from "./favorites";
+import { openTab } from "./jira-trips";
 import { copyText } from "@/client/lib/clipboard";
 
 /** Linear's sidebar visibility preferences (`$xe`) and their labels (`eSe`). */
@@ -48,14 +49,13 @@ const copy = (url: string, toast: string) =>
     () => showNotification({ text: toast }),
     () => showNotification(COPY_FAILED),
   );
-const openInNewTab = (url: string) => window.open(url, "_blank", "noopener");
 
 /** The SidebarLink's own rows (`O$n.build`): Copy link (`iX`, toast "Link copied to clipboard") and Open in new tab (`n4`; Linear
  *  shows it in its desktop app, where it opens an app tab, and here it opens a browser tab). */
 export function linkEntries(url: () => string): ActionEntry[] {
   return [
     { name: "Copy link", icon: "link", run: () => copy(url(), "Link copied to clipboard") },
-    { name: "Open in new tab", icon: "external", run: () => openInNewTab(url()) },
+    { name: "Open in new tab", icon: "external", run: () => openTab(url(), "sidebar-new-tab") },
   ];
 }
 
@@ -137,7 +137,7 @@ export function boardEntries(board: Board, shortcut?: ActionEntry["shortcut"]): 
       {
         name: "Board settings",
         icon: "external",
-        run: () => openInNewTab(`${get().site}/secure/RapidView.jspa?rapidView=${board.id}`),
+        run: () => openTab(`${get().site}/secure/RapidView.jspa?rapidView=${board.id}`, "board-settings"),
       },
       boardCopyURL(board, shortcut),
     ],
@@ -163,7 +163,7 @@ export function favoriteEntries(id: string, url: () => string): ActionEntry[] {
   return joinGroups(
     [
       { name: "Copy URL", icon: "link", run: () => copy(url(), "URL copied to clipboard") },
-      { name: "Open in new tab", icon: "external", run: () => openInNewTab(url()) },
+      { name: "Open in new tab", icon: "external", run: () => openTab(url(), "sidebar-new-tab") },
     ],
     [{ name: "Remove favorite", icon: "close", run: () => toggleFavorite(id) }],
   );

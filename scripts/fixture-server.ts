@@ -19,6 +19,17 @@ import { descriptionBases, textToAdf } from "../src/shared/document";
 import { TITLE_MAX, TITLE_TOO_LONG } from "../src/shared/issue-title";
 import { inverseKind } from "../src/shared/relations";
 import type { FixtureSettings, FixtureUpload, InboxPush, JiraChange, Refusal, Unanswered } from "./fixture-controls";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { tripLog } from "../src/server/trip-log";
+
+/** The fixture's own instance folder, for the trips to Jira the app records (the server keeps them in instances/<name>). */
+const home = mkdtempSync(join(tmpdir(), "better-jira-fixture-")),
+  tripsFile = join(home, "trips.jsonl");
+writeFileSync(tripsFile, "");
+process.on("exit", () => rmSync(home, { recursive: true, force: true }));
+process.on("SIGTERM", () => process.exit());
 
 /** A file in scripts/fixtures, from the repo root, so the built copy in dist/ finds it too. */
 const fixtureFile = (name: string) => Bun.file(`scripts/fixtures/${name}`);
@@ -1253,6 +1264,7 @@ async function handle(req: Request) {
   if (path === "/__fixture" && req.method === "POST") {
     viewDb.run("DELETE FROM saved_views");
     viewDb.run("DELETE FROM view_imports");
+    writeFileSync(tripsFile, "");
     const settings: FixtureSettings = await req.json();
     clientFailures = settings.clientFailures ?? 0;
     syncErrors = settings.syncErrors ?? [];
@@ -1342,6 +1354,14 @@ async function handle(req: Request) {
       issue = key && listed().find((i) => i.key === key);
     return Response.json(key ? { issue: issue || null, full: issue ? full(key) : null } : { issues: listed() });
   }
+  // Every trip to Jira the server kept since the last seed, as the file holds them (a resent trip shows twice).
+  if (path === "/__fixture/trips")
+    return Response.json({
+      trips: readFileSync(tripsFile, "utf8")
+        .split("\n")
+        .filter(Boolean)
+        .map((line) => JSON.parse(line)),
+    });
   if (path === "/__fixture" && req.method === "GET")
     return Response.json({ requests, rich, writes, uploads: uploads.map(({ blob: _, ...u }) => u) });
   // A new notification lands in Jira's bell as its issue's group head, and the server tells open tabs, as its poll does.
@@ -1576,6 +1596,7 @@ const server = Bun.serve({
     "/*": index,
     "/api/views": (req) => views.handle(req, "fixture"),
     "/api/views/:id": (req) => views.handle(req, "fixture", req.params.id),
+    "/api/trips": { POST: tripLog(() => tripsFile) },
     "/api/events": (req) => {
       server.timeout(req, 0);
       let listener: ReadableStreamDefaultController;

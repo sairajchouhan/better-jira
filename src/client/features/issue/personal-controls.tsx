@@ -28,7 +28,7 @@ import { useTitleLimit } from "@/client/features/editor/title-limit";
 import { draftEligible, readLocalDraft, resumeDraft, useComposerLocalDraft } from "./composer-local-draft";
 import { shortDate } from "@/client/lib/due-date";
 import { useHotkey } from "@tanstack/react-hotkeys";
-import { createContext, use, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import { createContext, use, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
 import { ComposerEditor } from "@/client/features/editor/rich-editor-loader";
 import { COMPOSER_TITLE, focusEditorAt, titleKeyDown } from "@/client/features/editor/title-flow";
 import { MediaView } from "@/client/features/media/media-loader";
@@ -63,6 +63,8 @@ import {
 import { usePeople, get, set, useStore, issueBoardId, issueBoard } from "@/client/state/store";
 import { actions, beginCreate } from "@/client/state/issue-actions";
 import { addBoard } from "@/client/state/server-data";
+import { JIRA_MESSAGES } from "@/shared/jira-trips";
+import { recordJiraMessage } from "@/client/features/navigation/jira-trips";
 import { addLocalFiles } from "@/client/state/local-database";
 import { navigate, ui } from "@/client/features/navigation/app-navigation";
 import {
@@ -1602,6 +1604,13 @@ export function AddBoard() {
     [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const close = () => ui.send({ type: "overlay.close" });
+  // The dialog sends the user to Jira for the board's address: a trip each time it opens.
+  const shown = useRef(false);
+  useEffect(() => {
+    if (shown.current) return;
+    shown.current = true;
+    recordJiraMessage("board-address");
+  }, []);
   return (
     <Dialog label="Add space" close={close} width={440}>
       <form
@@ -1640,8 +1649,7 @@ export function AddBoard() {
           </p>
         ) : (
           <Text className="mt-2" as="p" variant="mini" color="muted">
-            Open the board in Jira and copy its address. Better-jira only reads
-            it.
+            {JIRA_MESSAGES["board-address"].phrase} Better-jira only reads it.
           </Text>
         )}
         </Dialog.Body>

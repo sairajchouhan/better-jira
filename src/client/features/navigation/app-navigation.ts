@@ -19,6 +19,7 @@ import { smartLink } from "@/shared/smart-link";
 import { createAppRouter, locationOf, preloadIssueScreens, routeURL } from "@/client/routes/tree";
 import { historyWarmer } from "@/client/features/issue/history-warm";
 import { createHoverIntent, type Point } from "./hover-intent";
+import { watchJiraLinks } from "./jira-trips";
 
 type UiKey = keyof UiContext;
 
@@ -266,6 +267,7 @@ export function startNavigation() {
   navigationReady = true;
   window.addEventListener("click", openIssueLink);
   window.addEventListener("click", followHash);
+  watchJiraLinks();
   // The issue screens are preloaded by the idle walk (tree.tsx), so the first issue opens at once.
   // A rename (here or in another tab) moves the view's slug; the id suffix keeps the entry.
   let shown = get().savedViews;

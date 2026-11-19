@@ -10,6 +10,7 @@ import type {
 } from "../scripts/fixture-controls";
 
 export type { FixtureSettings, JiraWrite } from "../scripts/fixture-controls";
+import type { Trip } from "../src/shared/jira-trips";
 
 export { expect } from "@playwright/test";
 
@@ -36,6 +37,8 @@ export type App = {
   changeInJira(change: JiraChange): Promise<{ commentId?: string }>;
   /** A new notification lands in Jira's bell, and open tabs are told. */
   pushInbox(notification: InboxPush): Promise<void>;
+  /** Every trip to Jira the server kept since the last seed (src/shared/jira-trips.ts), oldest first. */
+  trips(): Promise<Trip[]>;
 };
 
 /** Starts the built fixture server on `port`; resolves once this child, not another process, is listening. */
@@ -111,6 +114,7 @@ export const test = base.extend<{ app: App }, { fixtureUrl: string }>({
         void (await call("/__fixture/retry", { count, applied, uploads })),
       changeInJira: (change) => call("/__fixture/jira", change),
       pushInbox: async (notification) => void (await call("/__fixture/inbox", notification)),
+      trips: async () => (await call<{ trips: Trip[] }>("/__fixture/trips")).trips,
     });
   },
 });

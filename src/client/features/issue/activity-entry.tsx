@@ -113,7 +113,7 @@ export function LinkedTarget({ title, url }: { title: string; url?: string }) {
         <SiteIcon url={url} />
       </span>{" "}
       {url ? (
-        <a href={url} target="_blank" rel="noreferrer" className="font-medium">
+        <a href={url} target="_blank" rel="noreferrer" className="font-medium" data-trip="activity-link">
           {title}
         </a>
       ) : (
@@ -391,7 +391,7 @@ function FieldText({ text }: { text: string }) {
   const [url, title] = html ? [html[1]!, html[2]!.replace(/<[^>]+>/g, "")] : wiki ? [wiki[2]!, wiki[1]!] : [];
   if (url && URL.canParse(url) && /^https?:/.test(url))
     return (
-      <a href={url} target="_blank" rel="noreferrer" className="hover:text-fg">
+      <a href={url} target="_blank" rel="noreferrer" className="hover:text-fg" data-trip="activity-link">
         {title || url}
       </a>
     );

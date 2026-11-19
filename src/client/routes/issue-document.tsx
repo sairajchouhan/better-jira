@@ -217,7 +217,7 @@ function DocumentEditor({ issue, resource }: { issue: Issue; resource: IssueReso
 function DocumentContent() {
   const { meta: { issue, resource } } = useDocument();
   return (
-    <div className="flex min-w-0 flex-1 flex-col" data-document={resource.id}>
+    <div className="flex min-w-0 flex-1 flex-col" data-document={resource.id} data-trip="document-link">
       <DocumentHeader />
       <div data-scroll-restoration-id="document-body" className="flex-1 overflow-y-auto">
         <div className="mx-auto max-w-[854px] px-6 py-16 text-[15px]">

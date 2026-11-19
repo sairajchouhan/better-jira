@@ -31,6 +31,7 @@ import { focusNode, useCommand } from "@/client/features/navigation/commands";
 import { shortcutTitle } from "@/client/components/keycap";
 import { get, isWatching, useStore, issueBoardId } from "@/client/state/store";
 import { preloadOnHover, ui } from "@/client/features/navigation/app-navigation";
+import { openTab } from "@/client/features/navigation/jira-trips";
 import { historyWarmer, nextIssue } from "@/client/features/issue/history-warm";
 import { SidebarToggle } from "@/client/features/navigation/breadcrumbs";
 import { useRouterState } from "@tanstack/react-router";
@@ -112,6 +113,7 @@ export function Row({
   return (
     <a
       href={item.link || item.url}
+      data-trip="inbox-row"
       data-inbox-row={item.id}
       data-unread={item.unread || undefined}
       aria-current={selected || undefined}
@@ -597,12 +599,7 @@ function Menus({ base }: { base: InboxItem[] }) {
           // Jira's own notification settings: better-jira has none of its own.
           {
             name: "Go to settings",
-            run: () =>
-              window.open(
-                `${site}/jira/settings/personal/notifications`,
-                "_blank",
-                "noopener",
-              ),
+            run: () => openTab(`${site}/jira/settings/personal/notifications`, "notification-settings"),
           },
         ]}
         close={close}
@@ -1088,7 +1085,7 @@ export function InboxPane() {
             </IconButton>
           ))}
           <span className="flex-1" />
-          <ButtonLink variant="link" size="small" href={row.link || row.url} target="_blank" rel="noreferrer">
+          <ButtonLink variant="link" size="small" href={row.link || row.url} target="_blank" rel="noreferrer" data-trip="inbox-open-in-jira">
             Open in Jira <Icon name="external" />
           </ButtonLink>
         </div>

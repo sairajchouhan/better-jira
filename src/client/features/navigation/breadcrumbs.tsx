@@ -246,7 +246,7 @@ function IssueCrumb({ issue, to }: { issue: Issue; to?: Destination }) {
             {title}
           </CrumbLink>
         ) : (
-          <Link isDisabled={false} className={CRUMB_LAST} href={issueURL(issue)} target="_blank" rel="noreferrer">
+          <Link isDisabled={false} className={CRUMB_LAST} href={issueURL(issue)} target="_blank" rel="noreferrer" data-trip="breadcrumb">
             {title}
           </Link>
         )}

@@ -98,6 +98,7 @@ export function CommentCard({ href, className = "", children }: { href?: string;
       {href && (
         <a
           href={href}
+          data-trip="inbox-comment"
           {...(href.startsWith("#") ? {} : { target: "_blank", rel: "noreferrer" })}
           className="mt-1 inline-block text-[12px] text-fg-3 hover:text-fg-2"
         >

@@ -1,6 +1,7 @@
 import { issueDocumentChunk } from "@/client/routes/route-chunks";
 import { DocumentGlyph } from "./document-glyph";
 import { type Issue } from "@/shared/issue-model";
+import { openTab } from "@/client/features/navigation/jira-trips";
 import { COPY_FAILED, showNotification } from "@/client/state/app-notifications";
 import { LoadingState } from "@/client/components/empty-state";
 import { Text } from "@/client/components/text";
@@ -291,7 +292,7 @@ export function IssueResources({ issue }: { issue: Issue }) {
             icon: "external",
             run: () => {
               const url = resourceURL(resource.url ?? "");
-              if (url) window.open(url, "_blank", "noopener");
+              if (url) openTab(url, "resource-link");
             },
           },
           { name: "Copy link", icon: "link", run: () => void copy(resource) },
@@ -313,7 +314,7 @@ export function IssueResources({ issue }: { issue: Issue }) {
           },
         ];
   return (
-    <section aria-label="Resources" className="issue-resources">
+    <section aria-label="Resources" className="issue-resources" data-trip="resource-link">
       <SectionDisclosure expanded={!collapsed} onExpandedChange={(open) => setCollapsed(!open)}>
         <div className="-ml-1.5 flex items-center pr-2 text-fg-3">
           <SectionDisclosure.Trigger label="Resources" />

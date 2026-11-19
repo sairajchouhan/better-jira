@@ -29,8 +29,9 @@ import { IssueHoverCard } from "./issue-hover-card";
 import { ChildrenMenu, openSubIssue } from "./sub-issue-menu";
 import { childrenByParent, subIssueCount } from "./sub-issue-model";
 import { copyText as writeText } from "@/client/lib/clipboard";
+import { openTab } from "@/client/features/navigation/jira-trips";
 
-const openExternal = (url: string) => void window.open(url, "_blank", "noopener,noreferrer");
+const openExternal = (url: string) => openTab(url, "card-link", "noopener,noreferrer");
 
 // ——— Links (Linear `mt`, "Open link…" `ht`, card `gt`) ———
 
@@ -56,7 +57,7 @@ function LinksCard({ links }: { links: Link[] }) {
                 <LinkImage link={link} />
               </span>
               <div className="flex min-w-0 flex-col items-start gap-2">
-                <a href={link.url} target="_blank" rel="noreferrer" className="max-w-[300px] truncate text-[13px] font-medium text-fg">
+                <a href={link.url} target="_blank" rel="noreferrer" className="max-w-[300px] truncate text-[13px] font-medium text-fg" data-trip="card-link">
                   {link.title}
                 </a>
                 <span className="line-clamp-2 text-[13px] break-all text-fg-3">{link.subtitle}</span>
@@ -78,7 +79,7 @@ export function LinkBadges({ issue }: { issue: Issue }) {
   if (links.length < 3)
     return links.map((link) => (
       <HoverCard key={link.url} label="Link" content={<LinksCard links={[link]} />}>
-        <Badge.Link href={link.url} aria-label={`Open link ${link.title} on ${issue.key}`}>
+        <Badge.Link href={link.url} aria-label={`Open link ${link.title} on ${issue.key}`} data-trip="card-link">
           <Badge.Icon>
             <LinkImage link={link} />
           </Badge.Icon>

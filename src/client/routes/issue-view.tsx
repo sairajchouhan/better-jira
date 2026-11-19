@@ -2,6 +2,7 @@ import { IssueHoverCard } from "@/client/features/issue/issue-hover-card";
 import { ActivityEntry, ActivityPropertyRow, LinkedTarget } from "@/client/features/issue/activity-entry";
 import { fullTime } from "@/client/features/issue/issue-dates";
 import { type Issue } from "@/shared/issue-model";
+import { JIRA_MESSAGES } from "@/shared/jira-trips";
 import { useLocation } from "@tanstack/react-router";
 import { Group } from "react-aria-components";
 import { pageURL } from "@/client/features/navigation/app-navigation";
@@ -163,6 +164,7 @@ function IssueKey({ issue }: { issue: Issue }) {
       <TypeDot type={issue.type} />
       <a
         className="text-fg-2 hover:text-fg"
+        data-trip="issue-key"
         href={issueURL(issue)}
         target="_blank"
         rel="noreferrer"
@@ -694,7 +696,7 @@ function Description({ issue }: { issue: Issue }) {
       showNotification({
         text: `${names.join(", ")} ${names.length > 1 ? "weren't" : "wasn't"} placed`,
         detail:
-          "The page reloaded during the upload. Check the issue's attachments in Jira, then attach it again.",
+          `The page reloaded during the upload. ${JIRA_MESSAGES["check-attachments"].phrase}`,
       });
   }, [issue.key]);
   useEffect(() => () => session.flush(), [session]);
@@ -702,6 +704,7 @@ function Description({ issue }: { issue: Issue }) {
     <section
       ref={section}
       className="issue-description mt-[14px] leading-[1.6] text-fg-2"
+      data-trip="description-link"
       onFocus={() => setFocused(true)}
       onBlur={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setFocused(false);
@@ -993,7 +996,7 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
           created={creation}
           revisions={issue.descriptionHistory}
         >
-          <ol className="space-y-3">
+          <ol className="space-y-3" data-trip="comment-link">
             <CommentThreads
               issue={issue}
               // Built before the gate decides, so the details may not be here yet.
@@ -1006,7 +1009,7 @@ function Activity({ issue, f }: { issue: Issue; f: any }) {
             />
           </ol>
         </DescriptionHistoryProvider>
-        <div className="issue-activity-composer mt-[14px]">
+        <div className="issue-activity-composer mt-[14px]" data-trip="comment-link">
           {/* A new key clears the box after sending; autoFocus keeps the caret in it. */}
           <CommentComposer
             key={draft.key}

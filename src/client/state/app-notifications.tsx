@@ -6,6 +6,7 @@ import { get, statusOf, useStore, issueBoardId } from "./store";
 import { currentKey } from "./jira-sync";
 import { isLocalIssue } from "./local-edits";
 import { navigate } from "@/client/features/navigation/app-navigation";
+import { recordJiraMessages } from "@/client/features/navigation/jira-trips";
 
 /** Each different confirmation is a toast of its own, so a second one stacks over the first (up to the queue's four): Linear
  *  shows every `new U(…).show()` as a sonner toast (ToastPresenter `visibleToasts: 4`, gap 8). The same one again takes the
@@ -118,6 +119,7 @@ export function showNotification(
   id = confirmationId(["notice", notice.text, notice.detail ?? "", notice.key ?? ""]),
 ) {
   if (notice.key) lastLink = notice.key;
+  recordJiraMessages(`${notice.text} ${notice.detail ?? ""}`);
   return toasts.show(<NotificationContent notice={notice} id={id} />, { id, duration: Infinity, expiresIn: 5000 });
 }
 /** "Issue created" for a new issue, a confirmation like the others so Open link from last toast finds it. */

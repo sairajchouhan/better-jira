@@ -1,3 +1,5 @@
+import { openTab } from "./jira-trips";
+
 /** The parts of an `auxclick` a row reads: which button, where it landed, and the row it is on. */
 type AuxClick = {
   button: number;
@@ -16,7 +18,7 @@ type AuxClick = {
  * button and a link inside it (which opens its own address) to what handles them now. A click from a portal (a menu the row
  * opened) isn't the row's.
  */
-export function openInNewTabOnMiddleClick(url: () => string, open: (url: string) => void = openTab) {
+export function openInNewTabOnMiddleClick(url: () => string, open: (url: string) => void = (url) => openTab(url, "row-new-tab")) {
   return (event: AuxClick) => {
     if (event.button !== 1) return;
     const target = event.target as Element | null;
@@ -29,4 +31,3 @@ export function openInNewTabOnMiddleClick(url: () => string, open: (url: string)
   };
 }
 
-const openTab = (url: string) => void window.open(url, "_blank", "noopener");

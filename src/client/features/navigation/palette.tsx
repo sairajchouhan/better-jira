@@ -77,6 +77,7 @@ import { isMac, type Keys } from "@/client/components/keycap";
 import { appURL } from "@/client/features/issue/issue-urls";
 import { useSmartLinkDetails } from "@/client/state/smart-link-details";
 import { browseURL, opensNewTab, pastedIssue, pastedRow, type PastedIssue } from "./pasted-issue";
+import { openTab } from "./jira-trips";
 import type { SmartLinkDetails } from "@/shared/smart-link";
 import {
   groupPriority,
@@ -435,7 +436,7 @@ const PALETTE_LIST_HEIGHT = 450;
 /** Whether ⌘ (Ctrl off a Mac) was held for the Enter or click that picks a row, read as the pick runs (Linear's `fu.metaKey`). */
 let newTab = false;
 const holdNewTab = (event: { metaKey: boolean; ctrlKey: boolean }) => void (newTab = opensNewTab(event, isMac()));
-const openNewTab = (url: string) => (close(), void window.open(url, "_blank", "noopener"));
+const openNewTab = (url: string) => (close(), openTab(url, "palette-new-tab"));
 
 /** Opens the issue on its board; ⌘↵ or ⌘-click opens its page in a new tab (Linear's `openPage({ newTab: fu.metaKey })`). */
 const openIssue = (i: Issue) =>

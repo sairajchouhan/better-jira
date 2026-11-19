@@ -1,17 +1,18 @@
 import { Plugin, TextSelection, type EditorState } from "prosemirror-state";
 import type { EditorView } from "prosemirror-view";
 import { linkedIssueKey, openIssueByKey } from "@/client/features/navigation/app-navigation";
+import { openTab, tripKindOf } from "@/client/features/navigation/jira-trips";
 import { isMac } from "@/client/components/keycap";
 import { richSchema } from "./rich-document";
 
 const link = richSchema.marks.link!;
 
 /** Opens a link from a document: an issue on this Jira site opens here, held or not (`openIssueByKey`, BJ-354), unless
- *  `newTab` (Mod or middle click) asks for Jira's page. */
-export function followLink(href: string, newTab = false) {
+ *  `newTab` (Mod or middle click) asks for Jira's page. `from` is the document it is in, which names a trip to Jira. */
+export function followLink(href: string, from: Element, newTab = false) {
   const key = newTab ? undefined : linkedIssueKey(href);
   if (key) openIssueByKey(key);
-  else window.open(href, "_blank", "noopener,noreferrer");
+  else openTab(href, tripKindOf(from), "noopener,noreferrer");
 }
 
 /** The whole link around `pos`, or null off a link or at the very edge of a link longer than two characters (Linear's
@@ -85,7 +86,7 @@ export const linkPlugin = () => {
           const target = anchor(view, event);
           if (!target || event.button !== 1) return false;
           event.preventDefault();
-          followLink(target.href, true);
+          followLink(target.href, target, true);
           return true;
         },
         click: (view, event) => {
@@ -97,13 +98,13 @@ export const linkPlugin = () => {
           if (!target || event.button !== 0 || event.shiftKey) return false;
           if (isMac() ? event.metaKey : event.ctrlKey) {
             event.preventDefault();
-            followLink(target.href, true);
+            followLink(target.href, target, true);
             return true;
           }
           // An issue reference or another card is one token, not editable text: a click opens it, as before.
           if (!focused || !target.isContentEditable) {
             event.preventDefault();
-            followLink(target.href);
+            followLink(target.href, target);
             return true;
           }
           // A drag or a double-click selected text: leave it.

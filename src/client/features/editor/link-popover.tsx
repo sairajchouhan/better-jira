@@ -110,7 +110,7 @@ export function LinkPopover({
         <IconButton
           size="small"
           label={linkedIssueKey(href) ? "Open" : "Open in new window"}
-          onClick={() => followLink(href)}
+          onClick={() => followLink(href, view.dom)}
         >
           <Icon name="external" />
         </IconButton>
