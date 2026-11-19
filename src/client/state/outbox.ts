@@ -35,6 +35,8 @@ export type WriteResult = {
   key?: string;
   created?: Record<string, string>;
   others?: Issue[];
+  /** Other issues Jira no longer has (sub-issues deleted with their parent). */
+  gone?: string[];
   issue?: Issue | null;
   full?: Full | null;
   /** Issues whose fresh copy the server didn't wait for: Jira has the write, and the outbox reads them again. */

@@ -618,7 +618,8 @@ async function run(ctx: Context, op: Op) {
 /** How long a write's answer waits for Jira's fresh copy once Jira has the write. */
 export const SETTLE_WAIT = 2000;
 /** What a write did; `retry`: send the same ops again later (an earlier send's outcome can't be told yet); `unsettled`: the
- *  issues whose fresh copy wasn't read in time, for the tab to read again. */
+ *  issues whose fresh copy wasn't read in time, for the tab to read again; `gone`: other issues Jira no longer has (sub-issues
+ *  deleted with their parent). */
 export type Written = {
   error?: string;
   retry?: boolean;
@@ -626,6 +627,7 @@ export type Written = {
   key: string;
   created: Record<string, string>;
   others: any[];
+  gone?: string[];
   issue?: any;
   full?: any;
 };
@@ -693,6 +695,7 @@ export async function applyOps(
     };
   const [fresh, ...touched] = settled;
   const others = touched.flatMap((r) => (r ? [r.issue] : []));
+  const gone = [...ctx.touched].filter((_, i) => touched[i] === null);
   // A copy that couldn't be read is read again by the tab, as a slow one is, refused write or not: a refusal settles the same
   // way with or without it, and rolls back once it lands (BJ-352).
   const unread = [...(settle && fresh === undefined ? [ctx.key] : []), ...[...ctx.touched].filter((_, i) => touched[i] === undefined)];
@@ -701,6 +704,7 @@ export async function applyOps(
     key: ctx.key,
     created: ctx.created,
     others,
+    ...(gone.length ? { gone } : {}),
     ...(fresh === undefined ? {} : { issue: fresh?.issue ?? null, full: fresh?.full ?? null }),
     ...(unread.length ? { unsettled: unread } : {}),
   };

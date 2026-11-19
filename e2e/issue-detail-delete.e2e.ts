@@ -45,8 +45,6 @@ test("31 deleting an issue asks first: Cancel keeps it, Delete removes it from J
 });
 
 test("31 deleting an issue with a sub-issue says so, and both leave Jira and the board", async ({ page, app }) => {
-  // BUG: the sub-issue Jira deleted with its parent stays on the board until the next 30 s poll or a reload.
-  test.fail();
   await app.seed({ writable: true, subtask: true });
   const row = (key: string, title: string) =>
     page.getByRole("grid", { name: "Todo" }).getByRole("row", { name: `${key} ${title}`, exact: true });
