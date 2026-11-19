@@ -20,6 +20,7 @@ import { writeLedger } from "./write-ledger";
 const ledger = writeLedger(new Database(":memory:"));
 mock.module("./jira", () => ({
   JiraError: class extends Error {},
+  JiraTimeout: class extends Error {},
   jira: async (path: string, init?: RequestInit) => {
     calls.push(`${init?.method ?? "GET"} ${path}`);
     return turn(() => (path.endsWith("/remotelink") && !init?.method ? links : answer(path, init)));

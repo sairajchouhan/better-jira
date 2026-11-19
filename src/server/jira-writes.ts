@@ -1,4 +1,4 @@
-import { jira, JiraError } from "./jira";
+import { jira, JiraError, JiraTimeout } from "./jira";
 import { ESTIMATES, ledger, refresh } from "./mirror";
 import { DESCRIPTION_CONFLICT, renameCommentIds, type Op } from "@/shared/jira-ops";
 import { descriptionBases } from "@/shared/document";
@@ -247,6 +247,17 @@ export async function uploadAttachment(
   return made.replay || !sent
     ? { id: made.id, found: made.found }
     : { id: made.id, found: made.found, attachment: sent, issueId };
+}
+/** What the upload route answers when an upload failed. */
+export function uploadFailure(e: unknown): { error: string; retry?: true } {
+  return {
+    error:
+      e instanceof JiraError
+        ? e.reason
+        : e instanceof JiraTimeout
+          ? "Jira didn't answer in time. Upload the file again."
+          : "Could not upload attachment.",
+  };
 }
 /** An attachment as Jira names it. */
 export type JiraAttachment = { id: string | number; filename: string; mimeType: string; size: number };

@@ -8,8 +8,8 @@ import { parsePreferences } from "@/shared/view-model";
 import { serverConfiguration } from "./server-config";
 import { fetchPreview } from "./link-preview";
 import { remoteImage } from "./remote-image";
-import { applyOps, uploadAttachment } from "./jira-writes";
-import { jira, JiraError, JiraTimeout, canWrite } from "./jira";
+import { applyOps, uploadAttachment, uploadFailure } from "./jira-writes";
+import { jira, canWrite } from "./jira";
 import * as inbox from "./notifications";
 import { jiraProblem } from "./jira-problem";
 
@@ -320,17 +320,8 @@ const server = serve({
             collection: `jira-${made.issueId ?? issue.id}`,
           });
         } catch (e) {
-          return Response.json(
-            {
-              error:
-                e instanceof JiraError
-                  ? e.reason
-                  : e instanceof JiraTimeout
-                    ? "Jira didn't answer in time. Upload the file again."
-                    : "Could not upload attachment.",
-            },
-            { status: 422 },
-          );
+          const failure = uploadFailure(e);
+          return Response.json(failure, { status: failure.retry ? 503 : 422 });
         }
       }),
     },
