@@ -1,15 +1,13 @@
 import { createInterface } from "node:readline/promises";
 import { chmod } from "node:fs/promises";
+import { join } from "node:path";
 import type { LocalSettings } from "../src/server/config";
+import { instanceHome, localSettings, settingsPath } from "../src/server/server-config";
 import { runSetup } from "./setup-flow";
 
-const settingsPath = ".better-jira.local.json";
-const local: LocalSettings = await Bun.file(settingsPath)
-  .json()
-  .catch(() => ({}));
 if (process.argv.includes("--help")) {
   console.log(
-    "bun run setup          Connect better-jira to your Jira Cloud site, account and boards, and choose whether edits go to Jira\nbun run setup --check  Check the saved setup against Jira (reads only, changes nothing)\n\nEnvironment: JIRA_URL, JIRA_EMAIL, JIRA_TOKEN, JIRA_BOARDS, JIRA_CACHE, PORT, and JIRA_WRITES=off to keep bun start local.\nSite, boards and the edits switch go in .better-jira.local.json; the email and token go in .env. Git ignores both.",
+    "bun run setup <name>          Connect instances/<name> to your Jira Cloud site, account and boards, and choose whether edits go to Jira\nbun run setup <name> --check  Check the saved setup against Jira (reads only, changes nothing)\n\nEnvironment: JIRA_URL, JIRA_EMAIL, JIRA_TOKEN, JIRA_BOARDS, JIRA_CACHE, PORT, and JIRA_WRITES=off to keep bun start local.\nSite, boards and the edits switch go in instances/<name>/settings.json; the email and token go in instances/<name>/.env. Git ignores instances/.",
   );
   process.exit(0);
 }
@@ -54,9 +52,10 @@ async function secret(saved: string): Promise<string> {
     process.stdin.on("data", read);
   });
 }
-/** Credentials replace their old lines in .env (other lines stay); the file is the owner's alone. */
+/** Credentials replace their old lines in the instance's .env (other lines stay); the file is the owner's alone. */
 async function save(credentials: { email: string; token: string }, settings: LocalSettings) {
-  const previous = await Bun.file(".env")
+  const envPath = join(instanceHome(), ".env");
+  const previous = await Bun.file(envPath)
     .text()
     .catch(() => "");
   const retained = previous
@@ -65,20 +64,21 @@ async function save(credentials: { email: string; token: string }, settings: Loc
     .join("\n")
     .trimEnd();
   await Bun.write(
-    ".env",
+    envPath,
     `${retained}${retained ? "\n" : ""}JIRA_EMAIL=${JSON.stringify(credentials.email)}\nJIRA_TOKEN=${JSON.stringify(credentials.token)}\n`,
   );
-  await chmod(".env", 0o600);
-  await Bun.write(settingsPath, JSON.stringify(settings, null, 2) + "\n");
+  await chmod(envPath, 0o600);
+  await Bun.write(settingsPath(), JSON.stringify(settings, null, 2) + "\n");
 }
 const checking = process.argv.includes("--check");
 try {
+  instanceHome();
   // Answers come from a person at a terminal; piped input would leave a question waiting forever.
   if (!checking && !process.stdin.isTTY)
     throw new Error(
-      "bun run setup asks questions, so run it in a terminal. Or set JIRA_URL, JIRA_EMAIL, JIRA_TOKEN and JIRA_BOARDS in .env and run bun run setup --check.",
+      "bun run setup asks questions, so run it in a terminal. Or set JIRA_URL, JIRA_EMAIL, JIRA_TOKEN and JIRA_BOARDS in the instance's .env and run bun run setup <name> --check.",
     );
-  await runSetup(checking, process.env, local, {
+  await runSetup(checking, process.env, localSettings, {
     fetch: (url, init) => fetch(url, init),
     ask,
     secret,

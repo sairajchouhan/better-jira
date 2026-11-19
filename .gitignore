@@ -4,6 +4,7 @@
 cache.db*
 cache-*.db*
 .better-jira.local.json
+instances/
 node_modules
 dist
 

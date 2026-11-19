@@ -4,15 +4,17 @@ A fast, Linear-style board for your Jira Cloud Kanban boards. It runs on your ow
 
 ## Quick start
 
-Install [Bun](https://bun.sh), clone this repository, then run `bun install`, `bun run setup` and `bun start`, and open http://localhost:3000. Setup asks for your Jira site (`https://your-team.atlassian.net`), the email you sign in with, an [API token](https://id.atlassian.com/manage-profile/security/api-tokens) and your boards (IDs, board links, or part of a name to search), checks each one against Jira with reads only, and asks whether your edits should go to Jira. The first sync of a large board takes a minute or two; the app opens when it's done.
+Install [Bun](https://bun.sh), clone this repository, then run `bun install`, `bun run setup mine` and `bun start mine`, and open http://localhost:3000. `mine` names this copy of better-jira: pick any name. Setup asks for your Jira site (`https://your-team.atlassian.net`), the email you sign in with, an [API token](https://id.atlassian.com/manage-profile/security/api-tokens) and your boards (IDs, board links, or part of a name to search), checks each one against Jira with reads only, and asks whether your edits should go to Jira. The first sync of a large board takes a minute or two; the app opens when it's done.
 
 ```sh
 bun install
-bun run setup
-bun start
+bun run setup mine
+bun start mine
 ```
 
-The token is typed without echo and saved in `.env` (owner-only permissions). Site, boards and the edits answer go in `.better-jira.local.json`. Git ignores both. `bun run setup --check` checks the saved setup against Jira and changes nothing. Run setup again to change boards or the edits answer, then restart `bun start`. You can also add a board from the sidebar ("Add space").
+Everything one copy reads or writes lives in its folder, `instances/mine/`: the token in `.env` (typed without echo, owner-only permissions), the site, boards and edits answer in `settings.json`, and the local copy of your boards in `cache.db`. Git ignores `instances/`. `bun run setup mine --check` checks the saved setup against Jira and changes nothing. Run setup again to change boards or the edits answer, then restart `bun start mine`. You can also add a board from the sidebar ("Add space").
+
+For a second Jira site or account, set up another name (`bun run setup other`, then `PORT=3001 bun start other`). Each copy keeps its own folder and never reads another's. `bun start` alone lists the copies you have.
 
 ## What goes to Jira
 
@@ -44,7 +46,7 @@ git pull
 bun install
 ```
 
-Then stop `bun start` (Ctrl+C) and run it again.
+Then stop `bun start mine` (Ctrl+C) and run it again.
 
 ## Back up
 
@@ -52,12 +54,12 @@ Click the download icon in the footer for a backup of everything kept in this br
 
 ## Troubleshooting
 
-- **The app shows "Couldn't load your Jira data", or the footer shows a red "Not syncing with Jira" line.** The message says what is wrong and what to do. Run `bun run setup --check` for the same checks in the terminal.
-- **"Jira rejected your email and API token (401)".** The token was revoked or expired, or the email isn't the one you sign in with. Create a new token and run `bun run setup`.
-- **"Can't read board N (403)" or "Board N doesn't exist (404)".** Ask the board's admin for access, or pick other boards with `bun run setup`.
+- **The app shows "Couldn't load your Jira data", or the footer shows a red "Not syncing with Jira" line.** The message says what is wrong and what to do. Run `bun run setup mine --check` for the same checks in the terminal.
+- **"Jira rejected your email and API token (401)".** The token was revoked or expired, or the email isn't the one you sign in with. Create a new token and run `bun run setup mine`.
+- **"Can't read board N (403)" or "Board N doesn't exist (404)".** Ask the board's admin for access, or pick other boards with `bun run setup mine`.
 - **"Can't reach the better-jira server".** `bun start` stopped; start it again.
-- **A board looks stale or wrong.** Stop the server and delete its cache file, `cache-<site>-<id>.db`, in this folder; the next start syncs it again. Local edits in the browser are kept.
-- **Port 3000 is taken.** Set `PORT=3001` in `.env`.
+- **A board looks stale or wrong.** Stop the server and delete its cache, `instances/mine/cache.db`; the next start syncs it again. Local edits in the browser are kept.
+- **Port 3000 is taken.** Set `PORT=3001` in `instances/mine/.env`, or start with `PORT=3001 bun start mine`.
 
 `bun start` listens on your machine only. Don't expose it to a network: it holds your Jira token.
 
@@ -72,7 +74,7 @@ Cmd/Ctrl+K opens the command menu, Cmd/Ctrl+/ lists every shortcut, `?` opens He
 ## Development
 
 ```sh
-bun run dev     # never writes to Jira
+bun run dev mine   # hot reload; never writes to Jira
 bun test
 bun check
 bunx oxlint

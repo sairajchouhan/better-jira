@@ -1,6 +1,6 @@
 /**
  * Every lazy chunk is a loadable: fetched once on first use, and fetched anyway at idle after start-up, so a later
- * rebuild of dist/app can't break the tab. Linear's ComponentLoader (startup-entry.Dt5YDWdY.js `F8.protectedLoadable`):
+ * rebuild of dist/<name> can't break the tab. Linear's ComponentLoader (startup-entry.Dt5YDWdY.js `F8.protectedLoadable`):
  * each loadable is filed under its `preloadOrder` (`"last"` = `P8` 9000, larger numbers clamp to it, `"skip"` is never
  * preloaded; routes default to 500); LoadApplicationLayout.C6gKgsF9.js `Tr` then walks them in order, one per
  * `requestIdleCallback`, skipping the walk while offline and logging a failure without stopping.

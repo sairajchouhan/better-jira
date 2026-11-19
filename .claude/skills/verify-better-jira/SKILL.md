@@ -7,29 +7,31 @@ description: Drive better-jira (the Linear clone on Jira) the way a user does an
 
 Two surfaces. Pick by what the proof needs.
 
-- **Real Jira (primary).** A production build of the app on its own port, writing only to https://cloudsairaj.atlassian.net, driven in the `raj-chrome` browser with the browse MCP. Proves what real Jira does with the app's writes.
+- **Real Jira (primary).** A production build of the app writing only to https://cloudsairaj.atlassian.net, driven in the `raj-chrome` browser with the browse MCP. Proves what real Jira does with the app's writes.
 - **Fake Jira.** The Playwright suite in `e2e/` against `scripts/fixture-server.ts`. Use it for states real Jira can't make on demand: refused writes, unanswered writes, a change "made in Jira" mid-test, a dropped connection at an exact moment.
 
-Never drive :3000 (work Jira, read-only) and never use :3002 for edits. :3002 is the `bun --hot` dev server, and the app writes to Jira only from a production server (`canWrite` in `src/server/jira.ts`), so every edit there fails.
+Never drive :3000 (work Jira, read-only).
 
 ## Launch
 
-From the repo root:
+**Main checkout:** drive :3002 directly. It is `bun start personal`, a production server on the personal instance (`instances/personal/`), so its edits reach cloudsairaj. It runs the code it was built from: after a change, the main session restarts it, and nothing reloads on its own. `up` and `down` refuse here.
+
+**Worktree:** start a throwaway build of the worktree's code, from its root:
 
 ```sh
 .claude/skills/verify-better-jira/verify.sh up        # port 3031; or: verify.sh up <port>
 ```
 
-It builds the app into `dist/verify` and starts it in a Rex window `verify-<port>` with `NODE_ENV=production`, `JIRA_WRITES=https://cloudsairaj.atlassian.net`, its own cache `dist/verify/cache.db`, and the personal credentials from `.env.personal`. Shell env beats `--env-file`, so the pinned values always win. It is ready when `/api/issues` answers a non-empty list, about 5 s, and `up` then runs `doctor`. The state of the running instance is in `.raj/tmp/verify/instance`.
+It runs `bun scripts/instance.ts start /Users/sairaj.chouhan/cs/better-jira/instances/personal` in a Rex window `verify-<port>`, with `PORT=<port>`, `JIRA_WRITES=https://cloudsairaj.atlassian.net` and its own cache `dist/verify-cache.db`. That builds the worktree into `dist/personal` and runs it in production on the personal instance's credentials and settings. Shell env beats the instance's `.env`, so the pinned values always win. It is ready when `/api/issues` answers a non-empty list, and `up` then runs `doctor`. The state of the running instance is in `.raj/tmp/verify/instance`.
 
-The browse tab: open your own named tab in `raj-chrome`, allowed onto the instance only.
+The browse tab: open your own named tab in `raj-chrome`, allowed onto the instance only (`3002`, or the worktree's port).
 
 ```js
 // mcp__browse__tabs
-{ action: "new", id: "verify-better-jira", browser: "raj-chrome", url: "http://localhost:3031/", allowedOrigins: ["http://localhost:3031"] }
+{ action: "new", id: "verify-better-jira", browser: "raj-chrome", url: "http://localhost:3002/", allowedOrigins: ["http://localhost:3002"] }
 ```
 
-Teardown: `verify.sh down` and close the tab (see Cleanup).
+Teardown: close the tab, and in a worktree run `verify.sh down` (see Cleanup).
 
 ## Doctor
 
@@ -37,7 +39,7 @@ Teardown: `verify.sh down` and close the tab (see Cleanup).
 .claude/skills/verify-better-jira/verify.sh doctor
 ```
 
-Read-only. It passes only when the port is held by the pid `up` recorded, `/api/client` reports `site` = cloudsairaj and `writable: true`, and the instance holds issues. It warns when a file under `src/` is newer than the build: a proof of new code then needs `verify.sh down && verify.sh up`. Run it first, and again whenever anything looks off. If it reports another site, stop and run `down`. Never drive that instance.
+Read-only. In the main checkout it checks :3002; in a worktree, the instance `up` started, held by the pid it recorded. It passes only when `/api/client` reports `site` = cloudsairaj and `writable: true`, and the instance holds issues. It warns when a file under `src/` is newer than `dist/personal/index.js`: a proof of new code then needs a restart of :3002, or `verify.sh down && verify.sh up` in a worktree. Run it first, and again whenever anything looks off. If it reports another site, stop and never drive that instance.
 
 ## Drive
 
@@ -74,13 +76,13 @@ D=$(.claude/skills/verify-better-jira/verify.sh evidence <run-id>)   # .raj/tmp/
 ## Cleanup
 
 1. Put back any Jira data the run changed, through the UI, and confirm with `verify.sh jira`. cloudsairaj is shared by every run.
-2. `verify.sh down` closes the Rex window, kills only the pid it recorded, and removes `dist/verify` and its cache. Evidence in `.raj/tmp/verify/runs/` stays. Delete it once the work it proves is merged.
+2. In a worktree, `verify.sh down` kills only the pid it recorded, closes the Rex window, and removes `dist/personal` and `dist/verify-cache.db`. Evidence in `.raj/tmp/verify/runs/` stays. Delete it once the work it proves is merged.
 3. Close the tab: `mcp__browse__tabs { action: "close", tab: "verify-better-jira" }`.
 
 ## Gotchas
 
-- One instance per checkout: `up` refuses while `.raj/tmp/verify/instance` exists. In a worktree, `.env.personal` is missing. Link it from the main checkout without reading it: `ln -s /Users/sairaj.chouhan/cs/better-jira/.env.personal .env.personal`.
+- One throwaway per worktree: `up` refuses while `.raj/tmp/verify/instance` exists. It reads the personal instance from the main checkout, so nothing needs linking.
 - Rex session: `verify.sh` opens its window in the user's session `session:01a1e801-…`. Set `REX_SESSION` when that session is gone (`rex session list`).
 - Two runs editing the same cloudsairaj issue at once clobber each other. Pick distinct issues.
-- Never add or remove a board on the verify instance. Board choices are saved to `.better-jira.local.json`, which the :3000 prod app also reads.
+- Never add or remove a board on a worktree's throwaway. Board choices are saved to `instances/personal/settings.json`, which :3002 also reads.
 - The `raj-chrome` browser must be connected (`browse status` lists it). If it isn't, ask the user to open that Chrome profile. Don't fall back to `work-chrome`.

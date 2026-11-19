@@ -2,7 +2,7 @@ import { localSettings, serverAuth } from "./server-config";
 import type { LocalSettings } from "./config";
 
 /** Whether edits go to Jira. The switch is setup's: `writes: true` saved with the site it configured
- *  (.better-jira.local.json), read only by the production server (`bun start`), so `bun run dev` or a bare build never
+ *  (the instance's settings.json), read only by the production server (`bun start`), so `bun run dev` or a bare build never
  *  writes. Env `JIRA_WRITES=off` turns it off; `JIRA_WRITES=<site>` turns it on for that exact site. No site is writable
  *  by name in the code. */
 export const canWrite = (

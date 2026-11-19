@@ -3,13 +3,11 @@ export type Configuration = JiraAuth & {
   boards: number[];
   /** The boards setup names (JIRA_BOARDS or saved `boards`); the rest of `boards` were added in the app and may be removed. */
   setupBoards: number[];
-  cachePath: string;
   port: number;
 };
 export type LocalSettings = {
   site?: string;
   boards?: number[];
-  cachePath?: string;
   port?: number;
   /** Boards added from the app, by site origin: a union over JIRA_BOARDS or `boards`, never shared with another site. */
   addedBoards?: Record<string, number[]>;
@@ -53,32 +51,24 @@ export function jiraAuth(env: Environment, local: LocalSettings = {}): JiraAuth 
     token = env.JIRA_TOKEN;
   if (!site || !email?.trim() || !token?.trim())
     throw new Error(
-      "Jira setup is incomplete. Run bun run setup, or set JIRA_URL, JIRA_EMAIL, JIRA_TOKEN, and JIRA_BOARDS in .env.",
+      "Jira setup is incomplete. Run bun run setup <name>, or set JIRA_URL, JIRA_EMAIL, JIRA_TOKEN, and JIRA_BOARDS in the instance's .env.",
     );
   return { site: siteURL(site), email: email.trim(), token: token.trim() };
 }
 export function configuration(env: Environment, local: LocalSettings = {}): Configuration {
-  // Saved boards, port and cache belong to the saved site; another site in env must not reuse them.
+  // Saved boards and port belong to the saved site; another site in env must not reuse them.
   const auth = jiraAuth(env, local),
     own = !local.site || siteURL(local.site) === auth.site ? local : {};
   const setupBoards = env.JIRA_BOARDS ? boardIDs(env.JIRA_BOARDS) : (own.boards ?? []);
   if (!setupBoards.length && !local.addedBoards?.[auth.site]?.length)
     throw new Error(
-      "No Jira boards are chosen yet. Run bun run setup to pick your boards, or set JIRA_BOARDS in .env.",
+      "No Jira boards are chosen yet. Run bun run setup <name> to pick your boards, or set JIRA_BOARDS in the instance's .env.",
     );
   const boards = boardIDs([...setupBoards, ...(local.addedBoards?.[auth.site] ?? [])]),
     port = Number(env.PORT || own.port || 3000);
   if (!Number.isSafeInteger(port) || port < 1 || port > 65535)
     throw new Error("PORT must be between 1 and 65535.");
-  const source = new URL(auth.site).hostname.replace(/[^a-z0-9.-]/gi, "_");
-  const identity = Bun.hash(`${auth.site}\n${auth.email}`).toString(16);
-  return {
-    ...auth,
-    boards,
-    setupBoards,
-    port,
-    cachePath: env.JIRA_CACHE || own.cachePath || `cache-${source}-${identity}.db`,
-  };
+  return { ...auth, boards, setupBoards, port };
 }
 /** The settings with `board` added for `site` alone. */
 export const withAddedBoard = (

@@ -1,3 +1,5 @@
+# Bun never loads a .env on its own here: each instance's .env is passed by scripts/instance.ts, and a stray root .env must not leak in.
+env = false
 
 [serve.static]
 plugins = ["bun-plugin-tailwind"]

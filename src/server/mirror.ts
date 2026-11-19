@@ -17,7 +17,7 @@ import {
 } from "@/shared/pull-requests";
 import { missingLinkTitles, recentlyTouched, storeRemoteLinks } from "./remote-links";
 import { attachmentGateway, jiraAttachmentReader } from "@/shared/attachment-media";
-import { saveAddedBoard, serverAuth } from "./server-config";
+import { cachePath, saveAddedBoard, serverAuth } from "./server-config";
 import { threadParent } from "@/shared/jira-ops";
 import { statusDates, type History } from "@/shared/issue-properties";
 import {
@@ -62,7 +62,7 @@ const FULL_SYNC_EVERY_MS = 6 * 3600_000; // full sync also sweeps out issues tha
 const PAGE = 100;
 const PARALLEL = 4;
 
-const db = new Database(configuration.cachePath, { create: true, strict: true });
+const db = new Database(cachePath(), { create: true, strict: true });
 // Every open tab re-reads the views when one changes; `notify` is defined below and only runs after a write.
 export const views = viewRepository(db, () => notify("views"));
 db.run("PRAGMA journal_mode = WAL");

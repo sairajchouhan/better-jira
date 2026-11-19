@@ -1,5 +1,5 @@
 /**
- * A lazy chunk that has gone (`bun start` rebuilt dist/app under new hashed names while this tab was open) reloads the
+ * A lazy chunk that has gone (`bun start` rebuilt dist/<name> under new hashed names while this tab was open) reloads the
  * tab once its writes are safe, at most a couple of times. Linear's guard, from startup-entry.Dt5YDWdY.js:
  * - `M8` (a dynamic import failed): reload only when online, not already tried on this page (`y8`, the
  *   `sw-cache-recovery-attempted` flag) and under `b8` = 2 tries (`chunk-failure-reload-attempts`), both kept in

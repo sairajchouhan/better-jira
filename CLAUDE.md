@@ -15,15 +15,16 @@ We are cloning Linear on a Jira backend: the app should look and work exactly li
 
 # Sites and servers
 
-- **:3000** is the prod app on work Jira: open and read it, but never edit, drag, create or delete anything there.
-- **:3002**, https://cloudsairaj.atlassian.net and live Linear are the user's personal sites: check and edit anything.
-- Servers run in Rex, never as background shells. Only the main session stops or restarts :3000 and :3002: after each finished change, restart :3000 with `.raj/restart-3000.sh`; after a merge that adds files, make sure :3002 still returns 200. Never use port 6000.
+- Each copy of the app is an instance: its `.env`, `settings.json` and `cache.db` live in `instances/<name>/`, and `bun start <name>` builds it to `dist/<name>/` and runs it in production.
+- **:3000** is `bun start work`, the prod app on work Jira: open and read it, but never edit, drag, create or delete anything there.
+- **:3002** is `bun start personal`, a production app that writes to https://cloudsairaj.atlassian.net. It, cloudsairaj and live Linear are the user's personal sites: check and edit anything.
+- Servers run in Rex, never as background shells. Only the main session stops or restarts :3000 and :3002: after each finished change, restart :3000 with `.raj/restart-3000.sh` and restart :3002 too. Neither reloads on its own. Never use port 6000.
 - Never write to work Jira, through any app instance, script or tool. Anything that writes uses the user's personal Jira (cloudsairaj) and personal Linear.
 - Browse MCP profiles: `work-chrome` (default) is for work Jira; `raj-chrome` is for personal Jira (cloudsairaj) and Linear. Pass `browser` when opening a tab.
 
 # Safety
 
-- Never read, print or commit `.env`, `.env.personal` or `.env.second`.
+- Never read, print or commit `.env`, `.env.personal`, `.env.second` or anything in `instances/`.
 - Work Jira is read-only for agents: no Atlassian MCP write or destructive tool (executeWrite, executeDestructive, createJiraIssue, editJiraIssue, addOrEditJiraIssueComment, transitionJiraIssue). Reads only.
 - Never commit real company data. Fixtures copy only the shape, with made-up keys, names and text.
 - Browse MCP: your own named session, deleted when done; never touch the user's tabs. Never `tabs_cleanup` with idle 0.

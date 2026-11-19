@@ -4,13 +4,12 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "bun --hot src/server/index.ts",
-    "start": "bun run build:server && NODE_ENV=production bun --env-file=.env dist/app/index.js",
+    "dev": "bun scripts/instance.ts dev",
+    "start": "bun scripts/instance.ts start",
     "build:server": "bun scripts/build-server.ts",
     "build": "bun run build.ts",
     "typecheck": "bun check",
-    "setup": "bun scripts/setup.ts",
-    "dev:personal": "bun --env-file=.env.personal --hot src/server/index.ts",
+    "setup": "bun scripts/instance.ts setup",
     "lint": "oxlint",
     "lint:fix": "oxlint --fix",
     "test:e2e": "playwright test"

@@ -1,65 +1,78 @@
 #!/bin/zsh
-# Verification instance of better-jira that writes only to the personal Jira (cloudsairaj). See SKILL.md.
-#   verify.sh up [port]      build to dist/verify, start it in a Rex window, wait until it is usable
-#   verify.sh doctor         read-only: is the running instance ours, current, on cloudsairaj and writable?
+# better-jira on the personal Jira (cloudsairaj), writing for real. See SKILL.md.
+#   verify.sh doctor         read-only: is the instance ours, current, on cloudsairaj and writable? (:3002 in the main checkout)
 #   verify.sh jira <path>    read-only GET on cloudsairaj's REST API, prints JSON (e.g. /rest/api/3/issue/SAM1-2)
-#   verify.sh evidence <id>  makes and prints a run's evidence folder (kept by `down`)
-#   verify.sh down           stops the instance this script started and removes its build and cache
+#   verify.sh evidence <id>  makes and prints a run's evidence folder
+#   verify.sh up [port]      worktree only: build this checkout and start it in a Rex window on port 3031, wait until usable
+#   verify.sh down           worktree only: stop the instance `up` started and remove its build and cache
 set -u
 SELF=${0:A}
 cd "${SELF:h}/../../.." || exit 1
 SITE=https://cloudsairaj.atlassian.net
+MAIN=/Users/sairaj.chouhan/cs/better-jira
+PERSONAL=$MAIN/instances/personal
 REX_SESSION=${REX_SESSION:-session:01a1e801-0f1c-7df2-846a-a068595cbad8}
 STATE=.raj/tmp/verify/instance
 EVIDENCE=.raj/tmp/verify/runs
+BUILD=dist/personal/index.js
 
 fail() { print -u2 "verify: $*"; exit 1; }
 field() { [ -f $STATE ] && sed -n "s/^$1=//p" $STATE; }
 client() { curl -s --max-time 5 "localhost:$1/api/client"; }
+worktree_only() { [ -f .git ] || fail "this is the main checkout: drive :3002 (bun start personal) directly, and restart it there for new code. $1 is for worktrees."; }
 
 case "${1:-}" in
 up)
+  worktree_only up
   port=${2:-3031}
   [ -f $STATE ] && fail "an instance is already recorded on port $(field port). Run doctor, or down first."
+  [[ $port == 3000 || $port == 3002 || $port == 3003 || $port == 6000 ]] && fail "port $port is reserved."
   lsof -iTCP:$port -sTCP:LISTEN >/dev/null && fail "port $port is taken by a process this script didn't start. Pick another: verify.sh up <port>"
-  [[ $port == 3000 || $port == 3002 || $port == 6000 ]] && fail "port $port is reserved."
-  bun scripts/build-server.ts src/server/index.ts dist/verify >/dev/null || fail "build failed: run bun scripts/build-server.ts src/server/index.ts dist/verify to see why."
-  build=$(git rev-parse --short HEAD)$(jj diff --stat 2>/dev/null | grep -q 'file' && print '+changes')
+  build=$(git rev-parse --short HEAD)$(git status --porcelain | grep -q . && print '+changes')
   mkdir -p ${STATE:h}
-  # Shell env beats --env-file: the instance is production, on its own port and cache, and may write to cloudsairaj only.
+  # Shell env beats the instance's .env: its own port and cache, and writes to cloudsairaj only. It builds to dist/personal.
   window=$(rex window new -s $REX_SESSION verify-$port -c $PWD --keep-open --focus=false --json -- \
-    env NODE_ENV=production PORT=$port JIRA_WRITES=$SITE JIRA_CACHE=dist/verify/cache.db \
-    bun --env-file=.env.personal dist/verify/index.js | python3 -c 'import sys,json;print(json.load(sys.stdin)["window_id"])') ||
+    env PORT=$port JIRA_WRITES=$SITE JIRA_CACHE=dist/verify-cache.db \
+    bun scripts/instance.ts start $PERSONAL | python3 -c 'import sys,json;print(json.load(sys.stdin)["window_id"])') ||
     fail "rex couldn't open a window in $REX_SESSION. Set REX_SESSION to a session from: rex session list"
-  for i in {1..90}; do
+  for i in {1..180}; do
     pid=$(lsof -tiTCP:$port -sTCP:LISTEN 2>/dev/null | head -1)
     [ -n "$pid" ] && [ "$(curl -s --max-time 5 localhost:$port/api/issues | head -c 2)" = '[{' ] && break
     /bin/sleep 1
   done
-  [ -z "${pid:-}" ] && { rex window close -s $REX_SESSION $window >/dev/null 2>&1; fail "no server on $port after 90 s. Its output: rex window read -s $REX_SESSION verify-$port"; }
-  print "port=$port\npid=$pid\nwindow=$window\nbuild=$build\nbuilt=$(date +%s)" > $STATE
+  [ -z "${pid:-}" ] && { rex window close -s $REX_SESSION $window >/dev/null 2>&1; fail "no server on $port after 180 s (build or start failed). Its output: rex window read -s $REX_SESSION verify-$port"; }
+  print "port=$port\npid=$pid\nwindow=$window\nbuild=$build" > $STATE
   print "up: http://localhost:$port (pid $pid, build $build, Rex window verify-$port)"
   exec $SELF doctor
   ;;
 doctor)
-  port=$(field port); pid=$(field pid)
-  [ -n "$port" ] || fail "no instance recorded. Start one: verify.sh up"
-  listener=$(lsof -tiTCP:$port -sTCP:LISTEN 2>/dev/null | head -1)
-  [ "$listener" = "$pid" ] || fail "port $port is held by pid '${listener:-none}', not our pid $pid. Run verify.sh down, then up."
+  if [ -f .git ]; then
+    port=$(field port); pid=$(field pid)
+    [ -n "$port" ] || fail "no instance recorded in this worktree. Start one: verify.sh up"
+    listener=$(lsof -tiTCP:$port -sTCP:LISTEN 2>/dev/null | head -1)
+    [ "$listener" = "$pid" ] || fail "port $port is held by pid '${listener:-none}', not our pid $pid. Run verify.sh down, then up."
+    redo="verify.sh down && verify.sh up"
+  else
+    port=3002
+    lsof -iTCP:$port -sTCP:LISTEN >/dev/null || fail "nothing listens on :3002. Ask the main session to start bun start personal."
+    redo="a restart of :3002 (bun start personal)"
+  fi
   c=$(client $port)
   site=$(print -r -- "$c" | python3 -c 'import sys,json;print(json.load(sys.stdin)["site"])' 2>/dev/null)
   writable=$(print -r -- "$c" | python3 -c 'import sys,json;print(json.load(sys.stdin)["writable"])' 2>/dev/null)
-  [ "$site" = "$SITE" ] || fail "instance is on '$site', not $SITE. Stop and do not drive it: verify.sh down"
-  [ "$writable" = "True" ] || fail "instance can't write to Jira (writable=$writable)."
+  [ "$site" = "$SITE" ] || fail ":$port is on '$site', not $SITE. Stop and do not drive it."
+  [ "$writable" = "True" ] || fail ":$port can't write to Jira (writable=$writable)."
   issues=$(curl -s --max-time 10 localhost:$port/api/issues | python3 -c 'import sys,json;print(len(json.load(sys.stdin)))' 2>/dev/null)
-  [ "${issues:-0}" -gt 0 ] || fail "instance answers but holds no issues yet: still syncing, or JIRA_BOARDS is empty."
-  stale=$(find src -newer $STATE -type f | head -1)
-  [ -n "$stale" ] && print "doctor: WARNING build is older than $stale. Proofs of new code need: verify.sh down && verify.sh up"
-  print "doctor: ok http://localhost:$port site=$site writable issues=$issues build=$(field build)"
+  [ "${issues:-0}" -gt 0 ] || fail ":$port answers but holds no issues yet: still syncing, or no boards are chosen."
+  stale=$( [ -f $BUILD ] && find src -newer $BUILD -type f | head -1)
+  [ -f $BUILD ] || stale="(no $BUILD)"
+  [ -n "$stale" ] && print "doctor: WARNING the build is older than $stale. Proofs of new code need $redo"
+  print "doctor: ok http://localhost:$port site=$site writable issues=$issues${pid:+ pid=$pid build=$(field build)}"
   ;;
 jira)
   [ -n "${2:-}" ] || fail "usage: verify.sh jira /rest/api/3/issue/<KEY>"
-  bun --env-file=.env.personal -e '
+  [ -f $PERSONAL/.env ] || fail "no $PERSONAL/.env: the personal instance isn't set up."
+  bun --env-file=$PERSONAL/.env -e '
     const site = process.env.JIRA_URL ?? "", path = process.argv.at(-1);
     if (new URL(site).hostname !== "cloudsairaj.atlassian.net") { console.error(`verify: refusing ${new URL(site).hostname}`); process.exit(2); }
     const auth = btoa(`${process.env.JIRA_EMAIL}:${process.env.JIRA_TOKEN}`);
@@ -72,12 +85,13 @@ evidence)
   mkdir -p $EVIDENCE/$2 && print ${PWD}/$EVIDENCE/$2
   ;;
 down)
+  worktree_only down
   port=$(field port); pid=$(field pid); window=$(field window)
   [ -n "$port" ] || { print "down: nothing recorded"; exit 0; }
-  [ -n "$window" ] && rex window close -s $REX_SESSION $window >/dev/null 2>&1
   [ "$(lsof -tiTCP:$port -sTCP:LISTEN 2>/dev/null | head -1)" = "$pid" ] && kill $pid
-  rm -rf dist/verify $STATE
+  [ -n "$window" ] && rex window close -s $REX_SESSION $window >/dev/null 2>&1
+  rm -rf dist/personal dist/verify-cache.db dist/verify-cache.db-wal dist/verify-cache.db-shm $STATE
   print "down: stopped port $port; evidence kept in $PWD/$EVIDENCE"
   ;;
-*) sed -n "2,8p" $SELF; exit 2 ;;
+*) sed -n "2,7p" $SELF; exit 2 ;;
 esac

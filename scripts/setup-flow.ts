@@ -1,3 +1,4 @@
+import path from "node:path";
 import { boardFromInput, boardIDs, configuration, siteURL, type LocalSettings } from "../src/server/config";
 import { canWrite, JiraError, JiraTimeout } from "../src/server/jira";
 import { jiraProblem, NotJiraAnswer, TOKEN_PAGE } from "../src/server/jira-problem";
@@ -10,7 +11,7 @@ export type SetupIO = {
   /** The API token, typed without echo; Enter keeps `saved`. */
   secret: (saved: string) => Promise<string>;
   log: (line: string) => void;
-  /** Writes the credentials to .env and the site and boards to .better-jira.local.json. */
+  /** Writes the credentials to the instance's .env and the site and boards to its settings.json. */
   save: (credentials: { email: string; token: string }, local: LocalSettings) => Promise<void>;
 };
 type Environment = Record<string, string | undefined>;
@@ -81,7 +82,7 @@ export async function runSetup(
   if (!boards.length)
     throw new SetupError("No boards are chosen yet. Run bun run setup and enter your board IDs.");
   const config = configuration(
-    { JIRA_URL: site, JIRA_EMAIL: email, JIRA_TOKEN: token, JIRA_BOARDS: boards.join(",") },
+    { PORT: env.PORT, JIRA_URL: site, JIRA_EMAIL: email, JIRA_TOKEN: token, JIRA_BOARDS: boards.join(",") },
     local,
   );
   for (const id of config.setupBoards) {
@@ -114,8 +115,12 @@ export async function runSetup(
   );
   await io.save({ email, token }, { ...local, site, boards, writes });
   io.log(`\nSetup saved. ${writeMode(canWrite(site, { site, writes }, { ...env, NODE_ENV: "production" }), host, name)}`);
-  io.log(`Run bun start, then open http://localhost:${config.port}.`);
+  io.log(`Run bun start ${instanceName(env.BETTER_JIRA_HOME)}, then open http://localhost:${config.port}.`);
 }
+
+/** How \`bun start\` names the instance at `home`: its name in instances/, else its path. */
+const instanceName = (home = "") =>
+  path.dirname(home) === path.resolve("instances") ? path.basename(home) : home || "<name>";
 
 /** The mode \`bun start\` runs in, as setup's last word on it. The footer shows the same mode. */
 const writeMode = (writes: boolean, host: string, name: string) =>
