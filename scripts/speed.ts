@@ -1,4 +1,4 @@
-/** `bun run speed [port] [--runs N] [--status KEY]`: times the app's core actions on a running copy (default :3054), inside the
+/** `bun run speed [port] [--runs N] [--status KEY]`: times the app's core actions on a running copy (default :3002), inside the
  *  page (e2e/speed.ts), in headless Chromium at 1440×900, and prints the median and p95 of each.
  *
  *  Read-only except `--status KEY`, which changes KEY's status and puts it back on every run; it needs a writable copy.
@@ -24,7 +24,7 @@ const flag = (name: string) => {
 };
 const runs = Number(flag("--runs") ?? 10);
 const statusKey = flag("--status");
-const port = Number(args[0] ?? 3054);
+const port = Number(args[0] ?? 3002);
 const base = `http://localhost:${port}`;
 
 const client = (await (await fetch(`${base}/api/client`)).json()) as { site: string; writable: boolean };

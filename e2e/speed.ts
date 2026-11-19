@@ -297,19 +297,19 @@ export async function changeStatus(page: Page, key: string, runs: number) {
   const other = columns.find((c) => c !== original)!;
   const shown: number[] = [],
     saved: number[] = [];
-  let current = original;
   const pick = async (status: string) => {
     await control.click();
     const item = page.getByRole("menuitem", { name: new RegExp(`^${status.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\b`) });
     await item.waitFor();
     shown.push(await timed(page, "status", statusShows, { key, status }, "click", () => item.click()));
     saved.push(await savedAfterStart(page, key));
-    current = status;
   };
+  const shows = () => control.getAttribute("title");
   try {
-    for (let i = 0; i < runs; i++) await pick(current === original ? other : original);
+    for (let i = 0; i < runs; i++) await pick((await shows()) === original ? other : original);
   } finally {
-    if (current !== original) await pick(original);
+    // From what the card shows, so a run that failed after its click still goes back.
+    if ((await shows()) !== original) await pick(original);
   }
   return { shown, saved };
 }
