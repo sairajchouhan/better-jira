@@ -3,6 +3,7 @@ import { Text } from "@/client/components/text";
 import { Button } from "@/client/components/button";
 import { EmptyState } from "@/client/components/empty-state";
 import { BootScreen } from "@/client/boot-screen";
+import { ChunkUnreachableError } from "@/client/lib/chunk-reload";
 
 /** What a fallback reads (`useFailure`): the error, and `reset` to render the children again. */
 export type Failure = { error: unknown; reset: () => void };
@@ -38,6 +39,24 @@ export class ErrorBoundary extends Component<
 export const errorText = (error: unknown) =>
   (error instanceof Error ? error.message : String(error ?? "")) || "Unknown error";
 
+/** Linear's error boundary picks its screen by the error (startup-root `Rv`): code that couldn't load offline is a network
+ *  error, titled so, and only a reload gets past it (TanStack keeps a failed load's error until the next preload). */
+export const isNetworkError = (error: unknown) => error instanceof ChunkUnreachableError;
+const reloadButton = (
+  <Button variant="primary" size="medium" onClick={() => location.reload()}>
+    Reload
+  </Button>
+);
+
+/** A screen whose code couldn't load offline, in its own place: Linear's full network error (startup-root `oOe`). */
+export function NetworkError({ error, className }: { error: unknown; className?: string }) {
+  return (
+    <EmptyState role="alert" title="Network error" className={className} actions={reloadButton}>
+      <p>{errorText(error)}</p>
+    </EmptyState>
+  );
+}
+
 /** Downloads the browser's local data; loaded on demand so a broken app module graph can still offer it. */
 const backup = () =>
   import("@/client/state/local-database").then(
@@ -52,15 +71,19 @@ const backup = () =>
  */
 export function AppError() {
   const { error } = useFailure();
+  if (isNetworkError(error))
+    return (
+      <BootScreen role="alert" title="Network error" actions={reloadButton}>
+        <Text color="muted">{errorText(error)}</Text>
+      </BootScreen>
+    );
   return (
     <BootScreen
       role="alert"
       title="Something went wrong"
       actions={
         <>
-          <Button variant="primary" size="medium" onClick={() => location.reload()}>
-            Reload
-          </Button>
+          {reloadButton}
           <Button variant="secondary" size="medium" onClick={() => void backup()}>
             Download backup
           </Button>
@@ -76,6 +99,7 @@ export function AppError() {
 /** One board failed to render: the rest of the app keeps working. Try again renders the board afresh. */
 export function SurfaceError({ title }: { title: string }) {
   const { error, reset } = useFailure();
+  if (isNetworkError(error)) return <NetworkError error={error} className="flex-1" />;
   return (
     <EmptyState
       role="alert"

@@ -28,6 +28,7 @@ import type { Scope } from "@/shared/view-model";
 import { AppLoading, EmptyState, LoadingState } from "@/client/components/empty-state";
 import { NotFoundMessage } from "@/client/components/not-found";
 import { Button } from "@/client/components/button";
+import { ErrorBoundary, isNetworkError, NetworkError, SurfaceError } from "@/client/components/error-boundary";
 import { useStore } from "@/client/state/store";
 import { boardFor } from "@/shared/board-membership";
 
@@ -136,9 +137,11 @@ const InboxScreen = lazyRouteComponent(inboxChunk.load, "InboxScreen");
 export function InboxHost() {
   const shown = useStore(inboxShown);
   return shown ? (
-    <Suspense>
-      <InboxScreen />
-    </Suspense>
+    <ErrorBoundary fallback={<SurfaceError title="Couldn't show the inbox" />}>
+      <Suspense>
+        <InboxScreen />
+      </Suspense>
+    </ErrorBoundary>
   ) : null;
 }
 const NoScreen = () => null;
@@ -472,6 +475,7 @@ export function NotFound({ data }: Pick<NotFoundRouteProps, "data">) {
   return <NotFoundMessage title={notFoundTitle(data)} className="absolute inset-0 z-10 bg-panel" />;
 }
 function RouteError({ error, reset }: ErrorComponentProps) {
+  if (isNetworkError(error)) return <NetworkError error={error} className="absolute inset-0 z-10 bg-panel" />;
   return (
     <EmptyState role="alert" title="Something went wrong" actions={<Button variant="secondary" size="medium" onClick={reset}>Try again</Button>} className="absolute inset-0 z-10 bg-panel">
       <p>{error instanceof Error ? error.message : String(error)}</p>

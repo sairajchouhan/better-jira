@@ -56,7 +56,7 @@ test("4. the footer says when Jira or the better-jira server can't be reached", 
   ).toBeVisible();
 });
 
-test.fail("5. a screen whose code can't load while offline shows a network error, not an out-of-date tab", async ({ page, app }) => {
+test("5. a screen whose code can't load while offline shows a network error, not an out-of-date tab", async ({ page, app }) => {
   // The inbox's code is held until the browser is offline, then fails as a dropped connection does, as Linear's chunks fail
   // offline (startup-root `Rv`: "> Network error", with Reload).
   const INBOX_CHUNK = /\/inbox-[^/]*\.js$/;

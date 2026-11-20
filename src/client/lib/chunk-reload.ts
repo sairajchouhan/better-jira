@@ -39,6 +39,18 @@ export class ChunkGoneError extends Error {
   }
 }
 
+/** Linear's network-error wording (startup-root `oOe`), naming no app. */
+const NETWORK_ERROR = "We detected a network error. Something might be wrong with your internet connection. Try reloading the app.";
+/** A chunk that couldn't load because the browser is offline: no new deploy, so Linear's error boundary shows it as a network
+ *  error (startup-root `Rv`: "Failed to fetch dynamically imported module" is `isBrowserNetworkError`). Its message matches no
+ *  `MISSING` prefix, so TanStack doesn't reload the tab into the browser's offline page. */
+export class ChunkUnreachableError extends Error {
+  constructor(cause: unknown) {
+    super(NETWORK_ERROR, { cause });
+    this.name = "ChunkUnreachableError";
+  }
+}
+
 export type ChunkReloadPorts = {
   /** sessionStorage, or a getter that throws where the browser refuses it. */
   storage: () => Pick<Storage, "getItem" | "setItem" | "removeItem">;
@@ -128,6 +140,8 @@ export function createChunkReload(ports: ChunkReloadPorts) {
     unloading() {
       unloadingUntil = ports.now() + UNLOAD_GRACE;
     },
+    /** Whether the browser is offline, where a missing chunk is the connection, not a new deploy. */
+    offline: () => !ports.online(),
     /** What must hold before reloading: no local save running or failed, no Jira write unsent. */
     whenSettled(predicate: () => boolean) {
       settled = predicate;
@@ -150,14 +164,16 @@ if (browser) addEventListener("beforeunload", () => chunkReload.unloading());
 
 /**
  * Every lazy import goes through this. A chunk that has gone starts the guarded reload and rejects with a
- * `ChunkGoneError`; any other failure rejects unchanged. Linear's import rejects too: a promise that never settled would
- * hang the screen whenever writes never settle.
+ * `ChunkGoneError`, or a `ChunkUnreachableError` while offline; any other failure rejects unchanged. Linear's import
+ * rejects too: a promise that never settled would hang the screen whenever writes never settle.
  */
 export async function retryImport<T>(load: () => Promise<T>, reload = chunkReload): Promise<T> {
   try {
     return await load();
   } catch (error) {
     if (!isChunkMissing(error)) throw error;
-    throw new ChunkGoneError(error, reload.failed(error));
+    const reloading = reload.failed(error);
+    if (!reloading && reload.offline()) throw new ChunkUnreachableError(error);
+    throw new ChunkGoneError(error, reloading);
   }
 }
