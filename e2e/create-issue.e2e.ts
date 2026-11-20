@@ -209,3 +209,50 @@ test("22 a sub-issue created under an issue shows in its Sub-issues and is its c
   await expect(page.getByRole("textbox", { name: "Issue title", exact: true })).toHaveValue("Browser fixture 2");
   await expect(subIssues.getByText("Child of fixture 2", { exact: true })).toBeVisible();
 });
+
+test.fail("a create Jira refuses while ⌘K is open brings the composer back with the draft once ⌘K closes", async ({ page, app }) => {
+  await app.seed({ writable: true, createSuccess: true });
+  await app.refuse(["create"], "Jira refused: the summary has a banned word.");
+  // The first send gets no answer, so Jira's refusal lands on the retry, after ⌘K has opened over the board.
+  await app.unanswered(1);
+  await pressC(page);
+  await composer(page).getByRole("textbox", { name: "Issue title", exact: true }).fill("Refused under the palette");
+  await composer(page).getByRole("textbox", { name: "Issue description" }).click();
+  await page.keyboard.type("Typed before the palette opened");
+  await composer(page).getByRole("button", { name: "Create issue" }).click();
+  await expect(composer(page)).toHaveCount(0);
+  const palette = page.getByRole("dialog", { name: "Search issues and commands" });
+  await page.keyboard.press("ControlOrMeta+k");
+  await expect(palette).toBeVisible();
+
+  await expect(saveStatus(page)).toContainText("Jira refused: the summary has a banned word.", { timeout: 15_000 });
+  await expect(page.getByRole("row", { name: /Refused under the palette/ })).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(palette).toHaveCount(0);
+  await expect(composer(page).getByRole("textbox", { name: "Issue title", exact: true })).toHaveValue("Refused under the palette");
+  await expect(composer(page).getByRole("textbox", { name: "Issue description" })).toContainText("Typed before the palette opened");
+});
+
+test.fail("the sub-issue composer's due date chip reads the day, as the New issue composer's does", async ({ page, app }) => {
+  await app.seed({ writable: true, createSuccess: true });
+  await column(page, "Todo")
+    .getByRole("row", { name: "TEST-2 Browser fixture 2", exact: true })
+    .getByText("Browser fixture 2", { exact: true })
+    .click();
+  const subIssues = page.getByRole("region", { name: "Sub-issues" });
+  await subIssues.getByRole("button", { name: "Add sub-issues" }).click();
+  await subIssues.getByRole("textbox", { name: "Sub-issue title" }).fill("Due tomorrow");
+  await subIssues.getByRole("button", { name: "Sub-issue due date. No due date" }).click();
+  await page.getByRole("menuitem", { name: /^Tomorrow/ }).click();
+
+  const chip = subIssues.getByRole("button", { name: "Sub-issue due date. Tomorrow" });
+  await expect(chip).toHaveText("Tomorrow");
+  await subIssues.getByRole("button", { name: "Create", exact: true }).click();
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const day = `${tomorrow.getFullYear()}-${String(tomorrow.getMonth() + 1).padStart(2, "0")}-${String(tomorrow.getDate()).padStart(2, "0")}`;
+  await expect(saveStatus(page)).toHaveText("Saved to Jira");
+  expect(await creates(app.jiraWrites())).toEqual([
+    expect.objectContaining({ fields: expect.objectContaining({ summary: "Due tomorrow", due: day }) }),
+  ]);
+});
