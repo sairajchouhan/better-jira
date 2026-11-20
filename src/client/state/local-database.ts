@@ -9,7 +9,7 @@ import type { Attachment } from "@/shared/attachment-media";
  */
 import { createActor, fromPromise, waitFor } from "xstate";
 import { inspector, storageMachine } from "./machines";
-import { emptyLocalState, LocalDatabase, type LocalState } from "./local-data";
+import { emptyLocalState, LocalDatabase, type LocalChange, type LocalState } from "./local-data";
 import { commit, get, set } from "./store";
 
 type Opened =
@@ -115,6 +115,9 @@ export async function claimChanges(tab: string, live: Set<string>, only?: Set<st
   const claimed = await database!.claim(tab, live, only);
   return { claimed, changes: (await database!.stored()).changes };
 }
+/** Changes `claimChanges` read, with what this tab changed since kept: the copy read may lack an edit made after it. */
+export const withOwnChanges = (stored: LocalChange[]) =>
+  database && contents ? database.merged(contents.snapshot().changes, stored) : stored;
 
 // --- Local numbers ---
 /** Local numbers (PREFIX-NEWn keys, local comment ids) come from blocks this tab reserves in IndexedDB, one transaction per

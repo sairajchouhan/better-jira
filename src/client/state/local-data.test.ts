@@ -272,6 +272,46 @@ test("R1-D6/D7: only changes of closed tabs are claimed, and only once", async (
   expect([...(await db.claim("other", new Set(["alive", "me"])))]).toEqual([]);
   db.close();
 });
+test("changes another tab saved, read back to take over, point their kept files at this page's links", async () => {
+  const factory = new IDBFactory();
+  let db = await LocalDatabase.open("takeover-files", factory);
+  const file = await db.addFile(new File(["bytes"], "picked.png", { type: "image/png" }));
+  await db.save({
+    ...emptyLocalState(),
+    changes: [{ key: "TEST-2", issue: { ...issue, key: "TEST-2", attachments: [file] }, issueFields: ["attachments"], fullFields: [], created: false, tab: "closed" }],
+  });
+  // That page is gone, and its links with it.
+  db.close();
+  db = await LocalDatabase.open("takeover-files", factory);
+  await db.load();
+  const [change] = (await db.stored()).changes;
+  const url = change!.issue!.attachments![0]!.url;
+  expect(url).not.toBe(file.url);
+  expect(await (await fetch(url)).text()).toBe("bytes");
+  db.close();
+});
+test("changes read back to take over keep what this tab changed since, even when its save lands after the read", async () => {
+  const db = await LocalDatabase.open("takeover-merge", new IDBFactory());
+  const change = (summary: string, tab?: string) => ({
+    key: "TEST-2",
+    issue: { ...issue, key: "TEST-2", summary },
+    issueFields: ["summary"],
+    fullFields: [],
+    created: false,
+    ...(tab ? { tab } : {}),
+  });
+  await db.save({ ...emptyLocalState(), changes: [change("Saved by the closed tab", "closed")] });
+  await db.load();
+  // This tab edits the issue: its save goes out just after the read for the takeover, so the copy read lacks it.
+  const mine = [change("Typed here")];
+  const read = db.stored(),
+    saved = db.save({ ...emptyLocalState(), changes: mine });
+  const { changes } = await read;
+  await saved;
+  expect(changes[0]!.issue!.summary).toBe("Saved by the closed tab");
+  expect(db.merged(mine, changes)[0]!.issue!.summary).toBe("Typed here");
+  db.close();
+});
 test("corrupt raw data is backed up and an unknown schema remains protected", async () => {
   const factory = new IDBFactory(),
     name = "better-jira:local:v1:corrupt",

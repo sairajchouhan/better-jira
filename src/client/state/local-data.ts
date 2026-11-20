@@ -501,6 +501,8 @@ export class LocalDatabase {
   private writable = true;
   /** This tab's changes as of its last load or save: the common base for merging with other tabs. */
   private base = new Map<string, LocalChange>();
+  /** The base as of each `stored` read, for merging that read later (`merged`). */
+  private readBases = new WeakMap<LocalChange[], Map<string, LocalChange>>();
   /** The key moves (app key → Jira key) as of this tab's last load or save. */
   moved: Record<string, string> = {};
   private constructor(private db: IDBDatabase) {}
@@ -546,25 +548,34 @@ export class LocalDatabase {
       store.put({ ...parsed.state, revision: revision + 1 }, "workspace");
     }
     await done;
-    let missingFiles = 0;
-    const visited = new WeakSet<object>();
-    const restore = async (issue: Issue | undefined | null) => {
-      if (!issue || visited.has(issue)) return;
-      visited.add(issue);
-      for (const attachment of issue.attachments ?? []) {
+    const missingFiles = await this.relink([
+      ...parsed.state.changes.map((change) => change.issue),
+      ...[...parsed.state.undo, ...parsed.state.redo].flatMap((edit) =>
+        [...edit.before, ...edit.after].map((snapshot) => snapshot.issue),
+      ),
+    ]);
+    return { ...parsed, missingFiles };
+  }
+  /** Points the kept files of saved `issues` at this page's links (the saved ones ended with the page that made them); a
+   *  file the database lost is marked missing. Returns how many are missing. */
+  private async relink(issues: (Issue | null | undefined)[]) {
+    let missing = 0;
+    for (const issue of new Set(issues))
+      for (const attachment of issue?.attachments ?? []) {
         if (attachment.url?.startsWith("/api/issues/")) continue;
         const url = await this.fileURL(attachment.id);
         attachment.url = url ?? "";
         if (!url) {
           attachment.missing = true;
-          missingFiles++;
+          missing++;
         } else delete attachment.missing;
       }
-    };
-    for (const change of parsed.state.changes) await restore(change.issue);
-    for (const edit of [...parsed.state.undo, ...parsed.state.redo])
-      for (const snapshot of [...edit.before, ...edit.after]) await restore(snapshot.issue);
-    return { ...parsed, missingFiles };
+    return missing;
+  }
+  /** `stored` (changes `stored()` read) merged with `mine` as a save then would have merged them: what this tab changed
+   *  since stays, a save of its own landing meanwhile included. */
+  merged(mine: LocalChange[], stored: LocalChange[]) {
+    return mergeChanges(this.readBases.get(stored) ?? this.base, mine, stored, this.moved);
   }
   /** Writes `state`, merged with whatever other tabs saved since this tab's last load or save (see mergeChanges), so no tab's write is lost (R2-issue-fields-D1). This tab's undo history wins. Returns the sequence written; `moved` then holds the key moves. */
   async save(state: LocalState): Promise<number> {
@@ -618,6 +629,8 @@ export class LocalDatabase {
       done = completed(tx),
       [raw] = await Promise.all([request(tx.objectStore("state").get("workspace")), done]),
       { state } = parseLocalState(raw);
+    this.readBases.set(state.changes, this.base);
+    await this.relink(state.changes.map((change) => change.issue));
     return {
       keys: state.keys ?? {},
       created: new Set(state.changes.filter((c) => c.created).map((c) => c.key)),

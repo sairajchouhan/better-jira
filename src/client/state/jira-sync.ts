@@ -24,7 +24,7 @@ import { rewriteHistory } from "./undo-history";
 import { jiraAnswered, rekeyNotification, showNotification } from "./app-notifications";
 import { returnRejectedComment } from "@/client/features/comments/rejected-comment";
 import { navigate } from "@/client/features/navigation/app-navigation";
-import { claimChanges, flushLocalChanges, localDataOpen, queueSave, storedChanges } from "./local-database";
+import { claimChanges, flushLocalChanges, localDataOpen, queueSave, storedChanges, withOwnChanges } from "./local-database";
 import { get, set, subscribe } from "./store";
 import { refusedSelectionCreate, forgetSelectionCreate } from "./selection-create";
 import { actions, beginCreate } from "./issue-actions";
@@ -423,12 +423,14 @@ export function resumeSync(saved: LocalChange[]) {
                 const remote: Issue[] = await response.json();
                 loaded = { ...loaded, remote, inJira: new Map(remote.map(i => [i.key, i])) };
               }
+              // The copy read back may lack what this tab changed since (a document draft put back): that stays.
+              const merged = withOwnChanges(changes).filter((c) => claimed.has(c.key));
               const issues = new Map(get().issues),
                 full = new Map(get().full);
-              install(saved, issues, full);
+              install(merged, issues, full);
               set({ issues, full });
               for (const key of claimed) writes.release(key);
-              await replay(claimed, saved);
+              await replay(claimed, merged);
             }),
           )
       : undefined;

@@ -509,7 +509,7 @@ test("57 a file put into a new sub-issue's description offline is refused as Lin
   expect(await app.uploads()).toEqual([]);
 });
 
-test.fail("57 a document's image stays in Jira after the uploads settle", async ({ page, app }) => {
+test("57 a document's image stays in Jira after the uploads settle", async ({ page, app }) => {
   await app.seed({ writable: true });
   await openIssue(page, "TEST-2", "Browser fixture 2");
   await page.getByRole("button", { name: "Issue options" }).click();
@@ -527,8 +527,7 @@ test.fail("57 a document's image stays in Jira after the uploads settle", async 
   await expect.poll(async () => (await app.uploads()).length).toBe(1);
   await expect(body).not.toHaveAttribute("aria-busy", "true");
   await expect(body.locator('[aria-busy="true"]')).toHaveCount(0);
-  // Saved here before the reload: its reload draft goes once the document is saved (an immediate reload can still lose a
-  // document's last edit, text as much as files: a separate bug).
+  // Saved before the reload, so the document itself, not its reload draft, holds the file for the cleaner.
   await expect
     .poll(() => page.evaluate(() => Object.keys(localStorage).some((k) => k.startsWith("better-jira:resource-draft:"))))
     .toBe(false);
