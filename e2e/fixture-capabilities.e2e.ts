@@ -253,7 +253,7 @@ test("a file whose upload answer was lost is found by its id on a later load and
   await page.getByRole("button", { name: "Attach images, files, or videos" }).last().click();
   await (await chooser).setFiles(image);
   await expect.poll(app.uploads).toHaveLength(1);
-  await page.unrouteAll();
+  await page.unrouteAll({ behavior: "wait" });
 
   // The user comes back after the upload has settled.
   await page.clock.install({ time: Date.now() + 3 * 60_000 });
