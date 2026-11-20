@@ -65,6 +65,61 @@ test("52. a notification marked unread offline stays unread, and Jira gets it on
   expect(await unreadWrites()).toEqual([{ action: "unread", groups: [group(4)] }]);
 });
 
+test.fail("52. a mark made while the server can't reach Jira stays, and goes again until Jira takes it once", async ({ page, app, fixtureUrl }) => {
+  // With the server on this machine, a dropped connection reaches the server but not Jira: it answers 503 `retry`.
+  await app.seed({ writable: true, inboxNoAnswer: 1 });
+  await inboxLink(page).click();
+  await row(page, "Read", "TEST-4").click();
+  await expect(page.getByRole("textbox", { name: "Issue title" })).toBeVisible();
+  const unreadWrites = async () =>
+    (await app.requests())
+      .filter((r) => r.method === "POST" && r.path === "/api/inbox" && (r.body as { action: string }).action === "unread")
+      .map((r) => ({ status: r.status, body: r.body }));
+
+  await page.keyboard.press("u");
+
+  await expect.poll(unreadWrites).toEqual([{ status: 503, body: { action: "unread", groups: [group(4)] } }]);
+  await expect(row(page, "Unread", "TEST-4")).toBeVisible();
+  await expect(page.getByText("Update failed")).toHaveCount(0);
+  await expect
+    .poll(unreadWrites, { timeout: 10_000 })
+    .toEqual([
+      { status: 503, body: { action: "unread", groups: [group(4)] } },
+      { status: 200, body: { action: "unread", groups: [group(4)] } },
+    ]);
+  await expect.poll(() => jiraUnread(fixtureUrl)).toContain(group(4));
+  await expect(row(page, "Unread", "TEST-4")).toBeVisible();
+});
+
+test("53. mark all as read offline, then undo offline: each reaches Jira once the browser is back online", async ({ page, app, fixtureUrl }) => {
+  await app.seed({ writable: true });
+  const before = [1, 2, 3, 6, 9].map(group).sort();
+  await inboxLink(page).click();
+  await expect(row(page, "Unread", "TEST-1")).toBeVisible();
+  const writesOf = async (action: string) => (await inboxWrites(app)).filter((w) => w.action === action);
+
+  await page.context().setOffline(true);
+  await page.getByRole("button", { name: "Notification actions" }).click();
+  await page.getByRole("menuitem", { name: /Mark all as read/ }).click();
+  for (const key of ["TEST-2", "TEST-1", "TEST-3", "TEST-6", "OUT-9"]) await expect(row(page, "Read", key)).toBeVisible();
+  await page.waitForTimeout(1500);
+  await expect(row(page, "Read", "TEST-1")).toBeVisible();
+  await expect(page.getByText("Update failed")).toHaveCount(0);
+  await page.context().setOffline(false);
+  await expect.poll(() => jiraUnread(fixtureUrl)).toEqual([]);
+  expect(await writesOf("read-all")).toEqual([{ action: "read-all" }]);
+
+  await page.context().setOffline(true);
+  await page.keyboard.press("z");
+  for (const key of ["TEST-2", "TEST-1", "TEST-3", "TEST-6", "OUT-9"]) await expect(row(page, "Unread", key)).toBeVisible();
+  await page.waitForTimeout(1500);
+  await expect(page.getByText("Update failed")).toHaveCount(0);
+  expect(await writesOf("unread")).toEqual([]);
+  await page.context().setOffline(false);
+  await expect.poll(() => jiraUnread(fixtureUrl)).toEqual(before);
+  expect(await writesOf("read-all")).toEqual([{ action: "read-all" }]);
+});
+
 test("53. mark all as read, then undo, and Jira receives both", async ({ page, app, fixtureUrl }) => {
   await app.seed({ writable: true });
   const before = [1, 2, 3, 6, 9].map(group).sort();

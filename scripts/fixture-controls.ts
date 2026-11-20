@@ -47,6 +47,8 @@ export type FixtureSettings = Partial<{
   inboxExtraUnread: boolean;
   inboxRichOutside: boolean;
   inboxFail: boolean;
+  /** The next this many inbox writes answer 503 `retry`, as the server does when Jira gave no answer (nothing changes). */
+  inboxNoAnswer: number;
   inboxDelay: number;
   inboxWriteDelays: number[];
 }>;

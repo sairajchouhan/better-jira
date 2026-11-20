@@ -807,6 +807,8 @@ const INBOX_PAGE = 20;
 let inbox = freshInbox(),
   /** Writes (read, unread, read-all) answer 502, as when Jira refuses. */
   inboxFail = false,
+  /** How many more writes (read, unread, read-all) answer 503 `retry`, as when Jira gave no answer. */
+  inboxNoAnswer = 0,
   /** Milliseconds each feed read waits, like Jira's slow gateway. */
   inboxDelay = 0,
   /** Milliseconds each read/unread write waits before Jira applies it, in order of arrival; overlapping writes then land out of order. */
@@ -855,6 +857,10 @@ async function inboxRoute(req: Request, url: URL) {
     if (inboxFail && action !== "seen") {
       status = 502;
       body = { error: "Jira did not update the notification." };
+    } else if (inboxNoAnswer > 0 && action !== "seen") {
+      inboxNoAnswer--;
+      status = 503;
+      body = { error: "Jira didn't answer.", retry: true };
     } else if (action === "read" || action === "unread")
       inbox.nodes
         .filter((n) => groups.includes(n.groupId))
@@ -1310,6 +1316,7 @@ async function handle(req: Request) {
     };
     inbox = freshInbox(settings.inboxExtra ?? 0, settings.inboxExtraUnread ?? false, settings.inboxRichOutside ?? false);
     inboxFail = settings.inboxFail ?? false;
+    inboxNoAnswer = settings.inboxNoAnswer ?? 0;
     inboxDelay = settings.inboxDelay ?? 0;
     inboxWriteDelays = settings.inboxWriteDelays ?? [];
     requests.length = 0;
