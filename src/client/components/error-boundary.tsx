@@ -42,16 +42,19 @@ export const errorText = (error: unknown) =>
 /** Linear's error boundary picks its screen by the error (startup-root `Rv`): code that couldn't load offline is a network
  *  error, titled so, and only a reload gets past it (TanStack keeps a failed load's error until the next preload). */
 export const isNetworkError = (error: unknown) => error instanceof ChunkUnreachableError;
-const reloadButton = (
-  <Button variant="primary" size="medium" onClick={() => location.reload()}>
-    Reload
-  </Button>
-);
-
 /** A screen whose code couldn't load offline, in its own place: Linear's full network error (startup-root `oOe`). */
 export function NetworkError({ error, className }: { error: unknown; className?: string }) {
   return (
-    <EmptyState role="alert" title="Network error" className={className} actions={reloadButton}>
+    <EmptyState
+      role="alert"
+      title="Network error"
+      className={className}
+      actions={
+        <Button variant="primary" size="medium" onClick={() => location.reload()}>
+          Reload
+        </Button>
+      }
+    >
       <p>{errorText(error)}</p>
     </EmptyState>
   );
@@ -71,19 +74,15 @@ const backup = () =>
  */
 export function AppError() {
   const { error } = useFailure();
-  if (isNetworkError(error))
-    return (
-      <BootScreen role="alert" title="Network error" actions={reloadButton}>
-        <Text color="muted">{errorText(error)}</Text>
-      </BootScreen>
-    );
   return (
     <BootScreen
       role="alert"
       title="Something went wrong"
       actions={
         <>
-          {reloadButton}
+          <Button variant="primary" size="medium" onClick={() => location.reload()}>
+            Reload
+          </Button>
           <Button variant="secondary" size="medium" onClick={() => void backup()}>
             Download backup
           </Button>
