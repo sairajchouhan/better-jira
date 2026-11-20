@@ -219,6 +219,11 @@ test.fail("a create Jira refuses while ⌘K is open brings the composer back wit
   await composer(page).getByRole("textbox", { name: "Issue title", exact: true }).fill("Refused under the palette");
   await composer(page).getByRole("textbox", { name: "Issue description" }).click();
   await page.keyboard.type("Typed before the palette opened");
+  await composer(page).getByRole("textbox", { name: "Issue title", exact: true }).focus();
+  await page.keyboard.press("Control+l");
+  await composer(page).getByRole("textbox", { name: "New issue link URL" }).fill("https://example.com/spec");
+  await page.keyboard.press("Enter");
+  await expect(composer(page).getByRole("button", { name: /^Remove link / })).toBeVisible();
   await composer(page).getByRole("button", { name: "Create issue" }).click();
   await expect(composer(page)).toHaveCount(0);
   const palette = page.getByRole("dialog", { name: "Search issues and commands" });
@@ -231,6 +236,7 @@ test.fail("a create Jira refuses while ⌘K is open brings the composer back wit
   await expect(palette).toHaveCount(0);
   await expect(composer(page).getByRole("textbox", { name: "Issue title", exact: true })).toHaveValue("Refused under the palette");
   await expect(composer(page).getByRole("textbox", { name: "Issue description" })).toContainText("Typed before the palette opened");
+  await expect(composer(page).getByRole("button", { name: /^Remove link / })).toBeVisible();
 });
 
 test("the sub-issue composer's due date chip reads the day, as the New issue composer's does", async ({ page, app }) => {
@@ -255,4 +261,28 @@ test("the sub-issue composer's due date chip reads the day, as the New issue com
   expect(await creates(app.jiraWrites())).toEqual([
     expect.objectContaining({ fields: expect.objectContaining({ summary: "Due tomorrow", due: day }) }),
   ]);
+});
+
+test.fail("a create refused while Create more keeps the composer open comes back after it, and the next one typed there is kept in Saved drafts", async ({ page, app }) => {
+  await app.seed({ writable: true, createSuccess: true });
+  await app.refuse(["create"], "Jira refused: the summary has a banned word.");
+  await app.unanswered(1);
+  await pressC(page);
+  const title = composer(page).getByRole("textbox", { name: "Issue title", exact: true });
+  await title.fill("First, refused");
+  await composer(page).getByText("Create more", { exact: true }).click();
+  await composer(page).getByRole("button", { name: "Create issue" }).click();
+  await expect(title).toHaveValue("");
+  await title.fill("Second, typed while the first was sent");
+  await composer(page).getByRole("textbox", { name: "Issue description" }).click();
+  await page.keyboard.type("Second's words");
+  await expect(saveStatus(page)).toContainText("Jira refused: the summary has a banned word.", { timeout: 15_000 });
+
+  // A press outside minimizes the composer, keeping the second as its draft; then the first comes back.
+  await page.mouse.click(8, 8);
+  await expect(title).toHaveValue("First, refused");
+  await composer(page).getByRole("button", { name: /^Saved drafts \(\d+\)$/ }).click();
+  await page.getByRole("dialog", { name: "Saved drafts" }).getByRole("button", { name: "Finish Second, typed while the first was sent" }).click();
+  await expect(title).toHaveValue("Second, typed while the first was sent");
+  await expect(composer(page).getByRole("textbox", { name: "Issue description" })).toContainText("Second's words");
 });
