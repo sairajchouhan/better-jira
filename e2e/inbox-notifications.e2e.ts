@@ -39,6 +39,32 @@ test("52. the inbox lists notifications, and opening one marks it read in Jira",
   await expect(inboxLink(page)).toHaveAccessibleName("Inbox 4");
 });
 
+test.fail("52. a notification marked unread offline stays unread, and Jira gets it once the browser is back online", async ({ page, app, fixtureUrl }) => {
+  await app.seed({ writable: true });
+  await inboxLink(page).click();
+  await row(page, "Read", "TEST-4").click();
+  await expect(page.getByRole("textbox", { name: "Issue title" })).toBeVisible();
+  const unreadWrites = async () => (await inboxWrites(app)).filter((w) => w.action === "unread");
+
+  await page.context().setOffline(true);
+  await page.keyboard.press("u");
+
+  // Linear keeps the mark and queues the write (startup-entry `CF.markAllAsUnread`: `markAsUnread()` then a plain `save()`).
+  await expect(row(page, "Unread", "TEST-4")).toBeVisible();
+  await page.waitForTimeout(1500);
+  await expect(row(page, "Unread", "TEST-4")).toBeVisible();
+  await expect(page.getByText("Update failed")).toHaveCount(0);
+  expect(await unreadWrites()).toEqual([]);
+
+  await page.context().setOffline(false);
+  await expect.poll(unreadWrites).toEqual([{ action: "unread", groups: [group(4)] }]);
+  await expect.poll(() => jiraUnread(fixtureUrl)).toContain(group(4));
+
+  await page.reload();
+  await expect(row(page, "Unread", "TEST-4")).toBeVisible();
+  expect(await unreadWrites()).toEqual([{ action: "unread", groups: [group(4)] }]);
+});
+
 test("53. mark all as read, then undo, and Jira receives both", async ({ page, app, fixtureUrl }) => {
   await app.seed({ writable: true });
   const before = [1, 2, 3, 6, 9].map(group).sort();

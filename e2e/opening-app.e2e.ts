@@ -55,3 +55,28 @@ test("4. the footer says when Jira or the better-jira server can't be reached", 
     page.getByRole("grid", { name: "Todo" }).getByRole("row", { name: "TEST-2 Changed while the server is down", exact: true }),
   ).toBeVisible();
 });
+
+test.fail("5. a screen whose code can't load while offline shows a network error, not an out-of-date tab", async ({ page, app }) => {
+  // The inbox's code is held until the browser is offline, then fails as a dropped connection does, as Linear's chunks fail
+  // offline (startup-root `Rv`: "> Network error", with Reload).
+  const INBOX_CHUNK = /\/inbox-[^/]*\.js$/;
+  let dropped!: () => void;
+  const offline = new Promise<void>((resolve) => (dropped = resolve));
+  await page.route(INBOX_CHUNK, async (route) => (await offline, route.abort("internetdisconnected")));
+  await app.seed();
+  await expect(todoCard(page)).toBeVisible();
+  await page.context().setOffline(true);
+  dropped();
+
+  await page.getByRole("navigation", { name: "Main navigation" }).getByRole("link", { name: /^Inbox/ }).click();
+
+  const error = page.getByRole("alert").filter({ has: page.getByRole("heading", { name: "Network error" }) });
+  await expect(error).toBeVisible();
+  await expect(error).toContainText("Something might be wrong with your internet connection.");
+  await expect(page.getByText("This tab is out of date")).toHaveCount(0);
+
+  await page.context().setOffline(false);
+  await page.unroute(INBOX_CHUNK);
+  await error.getByRole("button", { name: "Reload" }).click();
+  await expect(page.getByRole("region", { name: "Inbox" })).toBeVisible();
+});
