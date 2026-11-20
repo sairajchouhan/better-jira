@@ -39,7 +39,7 @@ test("52. the inbox lists notifications, and opening one marks it read in Jira",
   await expect(inboxLink(page)).toHaveAccessibleName("Inbox 4");
 });
 
-test.fail("52. a notification marked unread offline stays unread, and Jira gets it once the browser is back online", async ({ page, app, fixtureUrl }) => {
+test("52. a notification marked unread offline stays unread, and Jira gets it once the browser is back online", async ({ page, app, fixtureUrl }) => {
   await app.seed({ writable: true });
   await inboxLink(page).click();
   await row(page, "Read", "TEST-4").click();

@@ -1,6 +1,7 @@
 import { type Issue, type Status } from "@/shared/issue-model";
 import { showNotification, INBOX_NOTIFICATION_ID } from "./app-notifications";
 import { toasts } from "@/client/components/toast-queue";
+import { Unreachable } from "./jira-media";
 /** Inbox state, ordered writes and undo. Each instance owns its caches and queues; IO enters through ports. */
 import {
   InfiniteQueryObserver,
@@ -66,6 +67,9 @@ export const READ_DELAY = 300;
 /** Linear's toast for a failed mutation (`handleTransactionError`), and its description when the error has no message (`tb`). */
 export const UPDATE_FAILED = "Update failed";
 const ROLLED_BACK = "An unknown error occurred updating your data and changes have been rolled back.";
+/** How long a send that couldn't reach the server waits before going again, unless the browser comes back online first
+ *  (outbox.ts `UNREACHABLE_WAIT`). */
+const UNREACHABLE_WAIT = 5000;
 /** The most pages the inbox loads to show or delete the whole feed: about 1,000 notifications (ponytail). */
 export const MAX_PAGES = 20;
 /** Whether `data` holds as much of the feed as the inbox ever loads at once: every page, or `MAX_PAGES`. */
@@ -360,10 +364,35 @@ export function createInboxStore(ports: InboxPorts) {
   }
   const selectedRow = () => shownRows().find((r) => r.id === selectedId);
 
-  /** The server takes 50 groups per call. */
-  async function sendGroups(action: "read" | "unread", groups: string[]) {
+  /** Resolves when the browser is back online, or after `UNREACHABLE_WAIT`, whichever comes first. */
+  const reconnected = () =>
+    new Promise<void>((resolve) => {
+      const done = () => {
+        cancel();
+        globalThis.removeEventListener?.("online", done);
+        resolve();
+      };
+      const cancel = (ports.later ?? timeout)(done, UNREACHABLE_WAIT);
+      globalThis.addEventListener?.("online", done);
+    });
+  /** A send that couldn't reach the server reached nothing, so it goes again once the connection is back, as Linear queues an
+   *  offline `save()` (startup-entry `CF.markAllAsUnread`). Only Jira's refusal rejects. */
+  async function reach<T>(sendOnce: () => Promise<T>): Promise<T> {
+    for (;;)
+      try {
+        return await sendOnce();
+      } catch (error) {
+        if (!(error instanceof Unreachable)) throw error;
+        await reconnected();
+      }
+  }
+  /** The server takes 50 groups per call. Groups whose newest mark is no longer `value` are left out, also on a resend. */
+  async function sendGroups(value: boolean, groups: string[]) {
     for (let i = 0; i < groups.length; i += 50)
-      await send({ action, groups: groups.slice(i, i + 50) });
+      await reach(async () => {
+        const due = groups.slice(i, i + 50).filter((g) => wanted.get(g) === value);
+        if (due.length) await send({ action: value ? "read" : "unread", groups: due });
+      });
   }
   /** Per group: the newest read state asked for, and its queue of sends. A group's sends run one at a time and a stale one is skipped,
    *  so rapid U presses end where the last one did, here and in Jira; sent together they could land out of order (R2-inbox-D1). */
@@ -409,18 +438,16 @@ export function createInboxStore(ports: InboxPorts) {
       if (all) {
         const changed =
           (
-            await send(
-              all.except.length
-                ? { action: "read-all", except: all.except }
-                : { action: "read-all" },
+            await reach(() =>
+              send(
+                all.except.length
+                  ? { action: "read-all", except: all.except }
+                  : { action: "read-all" },
+              ),
             )
           )?.groups ?? [];
         groups.push(...changed.filter((g) => !groups.includes(g)));
-      } else
-        await sendGroups(
-          value ? "read" : "unread",
-          mine.filter((g) => wanted.get(g) === value),
-        );
+      } else await sendGroups(value, mine);
     });
     const queued = job.catch(() => {});
     for (const group of mine) queues.set(group, queued);
