@@ -15,6 +15,8 @@ const turn = async <T>(value: () => T) => {
 };
 // Jira's copy of the issue, read after the write.
 let refreshing = (..._args: unknown[]): Promise<any> => turn(() => undefined);
+// Where the mirror last saw each issue in its workflow.
+let places: Record<string, { project: string; type: string; status: string }> = {};
 import { Database } from "bun:sqlite";
 import { writeLedger } from "./write-ledger";
 const ledger = writeLedger(new Database(":memory:"));
@@ -28,6 +30,7 @@ mock.module("./jira", () => ({
 mock.module("./mirror", () => ({
   ESTIMATES: [],
   refresh: (...args: unknown[]) => refreshing(...args),
+  workflowPlace: (key: string) => places[key],
   ledger,
 }));
 const { applyOps, SETTLE_WAIT } = await import("./jira-writes");
@@ -57,9 +60,13 @@ const jiraAnswers = (path: string, init?: RequestInit) => {
     return { key: `K-${calls.filter((c) => c === "POST /rest/api/3/issue").length + 10}` };
   if (path.endsWith("/transitions") && init?.method === "POST")
     return void moved.add(path.split("/")[5]!);
-  if (path.endsWith("?fields=status"))
+  if (path.includes("?fields=status"))
     return {
-      fields: { status: { id: moved.has(path.split("/")[5]!.split("?")[0]!) ? "3" : "1" } },
+      fields: {
+        status: { id: moved.has(path.split("/")[5]!.split("?")[0]!) ? "3" : "1" },
+        project: { id: "10" },
+        issuetype: { id: path.includes("K-3") ? "7" : "3" },
+      },
     };
   if (path.endsWith("/transitions")) return { transitions: [{ id: "31", to: { id: "3" } }] };
   if (path === "/rest/api/3/issueLinkType")
@@ -286,6 +293,61 @@ test("BJ-352: a refused write whose read of Jira's copy fails names the issue fo
     expect(result).not.toHaveProperty("issue");
     expect(result.unsettled).toEqual(["K-61"]);
   } finally {
+    refreshing = () => turn(() => undefined);
+  }
+});
+
+test.failing("a status change answers once Jira has the transition, which goes alone from a status Jira listed transitions for before", async () => {
+  const { JiraError } = await import("./jira");
+  places = Object.fromEntries(
+    ["K-30", "K-31", "K-32", "K-33", "K-34"].map((key) => [key, { project: "10", type: "7", status: "1" }]),
+  );
+  let refused = false;
+  answer = (path, init) => {
+    if (path === "/rest/api/3/issue/K-33/transitions" && init?.method === "POST" && !refused) {
+      refused = true;
+      throw Object.assign(new JiraError("POST", path, 400, "{}"), { status: 400, reason: "not valid" });
+    }
+    return jiraAnswers(path, init);
+  };
+  let reads = 0;
+  refreshing = () => (reads++, new Promise(() => {}));
+  const status = (key: string, to = "3") => applyOps(key, [{ op: "status", status: to }], 1);
+  try {
+    // The first change from a status reads where Jira has the issue and its transitions from there; the answer doesn't
+    // wait for Jira's copy, which the tab reads again.
+    calls.length = 0;
+    expect(await status("K-30")).toEqual({ key: "K-30", created: {}, others: [], unsettled: ["K-30"] });
+    expect(calls).toEqual([
+      "GET /rest/api/3/issue/K-30?fields=status,project,issuetype",
+      "GET /rest/api/3/issue/K-30/transitions",
+      "POST /rest/api/3/issue/K-30/transitions",
+    ]);
+    expect(reads).toBe(0);
+    // Another issue in that workflow and status: the transition alone, as Jira's own page sends it.
+    calls.length = 0;
+    expect((await status("K-31")).unsettled).toEqual(["K-31"]);
+    expect(calls).toEqual(["POST /rest/api/3/issue/K-31/transitions"]);
+    // A resend (an earlier send's answer was lost) reads first: Jira has it there already, so nothing is sent.
+    calls.length = 0;
+    await applyOps("K-31", [{ op: "status", status: "3" }], 1, true, true);
+    expect(calls.filter((c) => c.startsWith("POST"))).toEqual([]);
+    // Jira refuses a transition it listed before (its workflow changed): the change reads the transitions again and goes.
+    calls.length = 0;
+    expect((await status("K-33")).error).toBe(undefined);
+    expect(calls).toEqual([
+      "POST /rest/api/3/issue/K-33/transitions",
+      "GET /rest/api/3/issue/K-33?fields=status,project,issuetype",
+      "GET /rest/api/3/issue/K-33/transitions",
+      "POST /rest/api/3/issue/K-33/transitions",
+    ]);
+    // A change Jira has no transition for is refused, and waits for Jira's copy to roll back to.
+    refreshing = () => turn(() => ({ issue: { key: "K-34", status: "1" }, full: null }));
+    const refusal = await applyOps("K-34", [{ op: "status", status: "9" }], 1);
+    expect(refusal.error).toContain("no transition");
+    expect(refusal.issue).toEqual({ key: "K-34", status: "1" });
+  } finally {
+    places = {};
     refreshing = () => turn(() => undefined);
   }
 });

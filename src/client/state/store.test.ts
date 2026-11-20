@@ -1049,7 +1049,7 @@ test("outbox: an issue's edits queued behind its write in flight merge into one 
   }
 });
 
-test("outbox: rapid status changes reach Jira as one transition", async () => {
+test.failing("outbox: a status change goes to Jira at once, and the rest of a burst as one transition to its last status", async () => {
   const { get, set } = await import("./store");
   const { actions } = await import("./issue-actions");
   const jira = await fakeJiraWrites();
@@ -1073,14 +1073,20 @@ test("outbox: rapid status changes reach Jira as one transition", async () => {
     });
     actions.status("OS-1", "done");
     await Bun.sleep(100);
+    expect(jira.sent.map((s) => s.ops)).toEqual([[{ op: "status", status: "done" }]]);
     actions.status("OS-1", "todo");
     await Bun.sleep(100);
     actions.status("OS-1", "done");
-    // The hold restarts with each change (the exact timing is in outbox.test.ts).
+    await Bun.sleep(100);
+    actions.status("OS-1", "todo");
+    // The rest of the burst waits for its last change (the exact timing is in outbox.test.ts).
     await Bun.sleep(250);
-    expect(jira.sent).toEqual([]);
+    expect(jira.sent).toHaveLength(1);
     await jira.settled();
-    expect(jira.sent.map((s) => s.ops)).toEqual([[{ op: "status", status: "done" }]]);
+    expect(jira.sent.map((s) => s.ops)).toEqual([
+      [{ op: "status", status: "done" }],
+      [{ op: "status", status: "todo" }],
+    ]);
   } finally {
     set({ writable: false });
     jira.restore();

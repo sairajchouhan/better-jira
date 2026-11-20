@@ -261,16 +261,28 @@ test("edits queued behind an issue's write merge into one; a change that queued 
   ]);
 });
 
-test("rapid status changes wait 400 ms after the last and reach Jira as one transition", async () => {
+test.failing("a status change goes to Jira at once; the rest of a burst waits 400 ms after its last change and goes as one transition", async () => {
   const h = harness();
   const a = issue("ST-1");
   h.send(edit(a, { status: "done" }));
-  await h.advance(300);
+  await h.advance(0);
+  expect(h.sent.map((s) => [s.at, s.ops])).toEqual([[0, [{ op: "status", status: "done" }]]]);
+  await h.advance(100);
   h.send(edit({ ...a, status: "done" }, { status: "doing" }));
+  await h.advance(300);
+  h.send(edit({ ...a, status: "doing" }, { status: "review" }));
   await h.advance(399);
-  expect(h.sent).toEqual([]);
+  expect(h.sent).toHaveLength(1);
   await h.advance(1);
-  expect(h.sent.map((s) => [s.at, s.ops])).toEqual([[700, [{ op: "status", status: "doing" }]]]);
+  expect(h.sent.map((s) => [s.at, s.ops])).toEqual([
+    [0, [{ op: "status", status: "done" }]],
+    [800, [{ op: "status", status: "review" }]],
+  ]);
+  // A change well after the burst goes at once again.
+  await h.advance(1000);
+  h.send(edit({ ...a, status: "review" }, { status: "todo" }));
+  await h.advance(0);
+  expect(h.sent.at(-1)).toMatchObject({ at: 1800, ops: [{ op: "status", status: "todo" }] });
 });
 
 test("a comment delete waits out the 8 s undo window, and undoing it inside the window sends nothing", async () => {
