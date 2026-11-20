@@ -10,7 +10,7 @@ import { navigate, router, showAnchorSoon, ui } from "@/client/features/navigati
 import { createInboxStore, type Category, type DeleteConfirmation, type Feed } from "@/client/state/inbox-store";
 import type { InfiniteData } from "@tanstack/query-core";
 import { readStored, writeStored } from "@/client/state/stored-state";
-import { Unreachable } from "@/client/state/jira-media";
+import { NoAnswer, Unreachable } from "@/client/state/jira-media";
 
 const storageKey = (name: string) =>
   `better-jira:inbox-${name}:v1:${get().namespace}`;
@@ -42,6 +42,7 @@ async function send(body: object) {
     throw new Unreachable(cause);
   });
   const reply = await res.json().catch(() => null);
+  if (res.status === 503 && reply?.retry) throw new NoAnswer(reply.error);
   if (!res.ok) throw new Error(reply?.error ?? "Jira refused");
   return reply as { groups?: string[] } | null;
 }

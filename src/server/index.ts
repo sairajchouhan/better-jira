@@ -159,6 +159,8 @@ const server = serve({
           return Response.json({ ok: true });
         } catch (e) {
           console.error("[inbox]", String(e).slice(0, 300));
+          // No answer: the tab sends the same mark again; any answer from Jira is its refusal.
+          if (e instanceof inbox.NoAnswer) return Response.json({ error: "Jira didn't answer.", retry: true }, { status: 503 });
           return Response.json({ error: "Jira did not update the notification." }, { status: 502 });
         }
       }),

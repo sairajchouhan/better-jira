@@ -1,7 +1,7 @@
 import { type Issue, type Status } from "@/shared/issue-model";
 import { showNotification, INBOX_NOTIFICATION_ID } from "./app-notifications";
 import { toasts } from "@/client/components/toast-queue";
-import { Unreachable } from "./jira-media";
+import { NoAnswer, Unreachable } from "./jira-media";
 /** Inbox state, ordered writes and undo. Each instance owns its caches and queues; IO enters through ports. */
 import {
   InfiniteQueryObserver,
@@ -375,14 +375,15 @@ export function createInboxStore(ports: InboxPorts) {
       const cancel = (ports.later ?? timeout)(done, UNREACHABLE_WAIT);
       globalThis.addEventListener?.("online", done);
     });
-  /** A send that couldn't reach the server reached nothing, so it goes again once the connection is back, as Linear queues an
-   *  offline `save()` (startup-entry `CF.markAllAsUnread`). Only Jira's refusal rejects. */
+  /** A send that couldn't reach the server, or that Jira didn't answer, goes again once the connection is back, as Linear
+   *  queues an offline `save()` (startup-entry `CF.markAllAsUnread`); a mark is the same however often it lands. Only
+   *  Jira's refusal rejects. */
   async function reach<T>(sendOnce: () => Promise<T>): Promise<T> {
     for (;;)
       try {
         return await sendOnce();
       } catch (error) {
-        if (!(error instanceof Unreachable)) throw error;
+        if (!(error instanceof Unreachable || error instanceof NoAnswer)) throw error;
         await reconnected();
       }
   }

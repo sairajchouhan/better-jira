@@ -8,6 +8,12 @@ import { GROUP_FIRST, GROUP_PAGE, groupPage, mapFeed, type InboxFeed, type Inbox
 import { serverAuth } from "./server-config";
 
 const PAGE = 50;
+/** Jira gave no answer: the connection failed or timed out. A mark is the same however often it lands, so it can go again. */
+export class NoAnswer extends Error {}
+const answered = (request: Promise<Response>) =>
+  request.catch((cause: unknown) => {
+    throw new NoAnswer(`Jira didn't answer: ${String(cause)}`, { cause });
+  });
 
 async function gateway<T = any>(
   operationName: string,
@@ -18,7 +24,8 @@ async function gateway<T = any>(
   if (/^\s*mutation/.test(query) && !canWrite(site))
     throw new Error(`Jira writes are disabled for ${site}.`);
   // A stalled gateway must fail like any Jira read, not leave the inbox loading forever.
-  const res = await fetch(`${site}/gateway/api/graphql`, {
+  const ari = await routingAri();
+  const res = await answered(fetch(`${site}/gateway/api/graphql`, {
     method: "POST",
     signal: AbortSignal.timeout(jiraTimeouts.request),
     headers: {
@@ -29,9 +36,9 @@ async function gateway<T = any>(
     body: JSON.stringify({
       operationName,
       query,
-      variables: { ...variables, ari: await routingAri() },
+      variables: { ...variables, ari },
     }),
-  });
+  }));
   const body: any = await res.json().catch(() => null);
   if (!res.ok || !body?.data)
     throw new Error(
@@ -45,9 +52,11 @@ let ari: Promise<string> | undefined;
 function routingAri() {
   return (ari ??= (async () => {
     const { cloudId } = await (
-      await fetch(`${serverAuth().site}/_edge/tenant_info`, {
-        signal: AbortSignal.timeout(jiraTimeouts.request),
-      })
+      await answered(
+        fetch(`${serverAuth().site}/_edge/tenant_info`, {
+          signal: AbortSignal.timeout(jiraTimeouts.request),
+        }),
+      )
     ).json();
     if (!cloudId) throw new Error("Jira did not return a cloud ID");
     return `ari:cloud:platform::site/${cloudId}`;

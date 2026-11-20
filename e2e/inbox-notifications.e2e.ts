@@ -65,7 +65,7 @@ test("52. a notification marked unread offline stays unread, and Jira gets it on
   expect(await unreadWrites()).toEqual([{ action: "unread", groups: [group(4)] }]);
 });
 
-test.fail("52. a mark made while the server can't reach Jira stays, and goes again until Jira takes it once", async ({ page, app, fixtureUrl }) => {
+test("52. a mark made while the server can't reach Jira stays, and goes again until Jira takes it once", async ({ page, app, fixtureUrl }) => {
   // With the server on this machine, a dropped connection reaches the server but not Jira: it answers 503 `retry`.
   await app.seed({ writable: true, inboxNoAnswer: 1 });
   await inboxLink(page).click();
