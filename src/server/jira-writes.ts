@@ -1,5 +1,5 @@
 import { jira, JiraError } from "./jira";
-import { ESTIMATES, ledger, refresh } from "./mirror";
+import { ESTIMATES, ledger, refresh, workflowPlace } from "./mirror";
 import { DESCRIPTION_CONFLICT, renameCommentIds, type Op } from "@/shared/jira-ops";
 import { descriptionBases } from "@/shared/document";
 import { inwardKind, jiraLinkType, LINEAR_TYPES } from "@/shared/relations";
@@ -84,22 +84,50 @@ async function typeFor(project: string, type: string | undefined, parent: string
   return subtask.name as string;
 }
 
-async function transition(key: string, status: string) {
+type Place = { project: string; type: string; status: string };
+/** The transitions Jira listed out of each status, by workflow (its project and issue type) and status. */
+const transitionsFrom = new Map<string, { id: string; to: { id: string } }[]>();
+const placeKey = (place: Place) => `${place.project} ${place.type} ${place.status}`;
+/** Where a transition sent from here left each issue, and when: the mirror's copy lags the write until the tab reads it
+ *  again (well inside `MOVED_FRESH`), so a change made soon after goes from where Jira has the issue. */
+const movedTo = new Map<string, { place: Place; at: number }>();
+const MOVED_FRESH = 10_000;
+async function transition(key: string, status: string, replay = false) {
+  const post = async (id: string, from: Place) => {
+    await jira(`${at(key)}/transitions`, { method: "POST", body: JSON.stringify({ transition: { id } }) });
+    movedTo.set(key, { place: { ...from, status }, at: Date.now() });
+  };
+  // A first send goes from where the issue was last seen, by the transition Jira listed from there before: the one round
+  // trip Jira's own page makes. A transition only ever leads to its own status, so a stale place can only be refused, and
+  // a refusal reads Jira's transitions again below. A resend reads first: the earlier send may have landed.
+  const moved = movedTo.get(key),
+    place = replay ? undefined : moved && Date.now() - moved.at < MOVED_FRESH ? moved.place : workflowPlace(key);
+  const known = place && place.status !== status && transitionsFrom.get(placeKey(place))?.find((t) => t.to.id === status);
+  if (known)
+    try {
+      return await post(known.id, place);
+    } catch (e) {
+      if (!(e instanceof JiraError && e.status >= 400 && e.status < 500)) throw e;
+      transitionsFrom.delete(placeKey(place));
+      movedTo.delete(key);
+    }
   // Both reads at once (R2-create-D2).
   const [current, { transitions }] = await Promise.all([
-    jira<{ fields: { status: { id: string } } }>(`${at(key)}?fields=status`),
+    jira<{ fields: { status: { id: string }; project: { id: string }; issuetype: { id: string } } }>(
+      `${at(key)}?fields=status,project,issuetype`,
+    ),
     jira<{ transitions: { id: string; to: { id: string } }[] }>(`${at(key)}/transitions`),
   ]);
-  if (current.fields.status.id === status) return;
+  const { status: from, project, issuetype } = current.fields,
+    here = { project: project.id, type: issuetype.id, status: from.id };
+  transitionsFrom.set(placeKey(here), transitions);
+  if (from.id === status) return void movedTo.set(key, { place: here, at: Date.now() });
   const found = transitions.find((t) => t.to.id === status);
   if (!found)
     throw new UserError(
       "Jira's workflow has no transition from the current status to that status.",
     );
-  await jira(`${at(key)}/transitions`, {
-    method: "POST",
-    body: JSON.stringify({ transition: { id: found.id } }),
-  });
+  await post(found.id, here);
 }
 
 type Context = {
@@ -396,13 +424,15 @@ async function run(ctx: Context, op: Op) {
         });
       // Jira answers 204 yet keeps the old type for a name it doesn't know.
       if (rest.type) {
+        // Another type may follow another workflow.
+        movedTo.delete(key);
         const now = (await jira(`${at(key)}?fields=issuetype`)).fields.issuetype?.name;
         if (now !== rest.type) throw refused(`Jira kept it as ${now}.`);
       }
       return;
     }
     case "status":
-      return transition(key, op.status);
+      return transition(key, op.status, ctx.replay);
     case "watcher": {
       await jira(`${at(key)}/watchers${op.add ? "" : `?accountId=${encodeURIComponent(op.id)}`}`, {
         method: op.add ? "POST" : "DELETE",
@@ -470,7 +500,7 @@ async function run(ctx: Context, op: Op) {
         });
       }
       if (status)
-        await transition(made.id, status).catch((e) => {
+        await transition(made.id, status, ctx.replay).catch((e) => {
           ctx.warning = `Created ${made.id}, but Jira could not move it to the chosen status: ${e instanceof JiraError ? e.reason : e.message}`;
         });
       return;
@@ -685,6 +715,10 @@ export async function applyOps(
     error = e instanceof JiraError ? e.reason : (e as UserError).message;
   }
   error ??= ctx.warning;
+  // Jira's copy adds nothing to a status change the tab waits on: it answers once Jira has the transition, as Jira's own
+  // page does, and the tab reads the copy apart from its queue (R3-palette-shortcuts-D7).
+  if (!error && ops.length && ops.every((op) => op.op === "status"))
+    return { key: ctx.key, created: ctx.created, others: [], ...(settle ? { unsettled: [ctx.key] } : {}) };
   const reads = Promise.all([
     // The board places only a new issue (issue-store.ts `claim`): an edit to an issue no board holds must not put it on one.
     settle ? refresh(ctx.key, ops.some((op) => op.op === "create") ? board : undefined).catch(() => undefined) : undefined,

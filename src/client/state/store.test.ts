@@ -1049,7 +1049,7 @@ test("outbox: an issue's edits queued behind its write in flight merge into one 
   }
 });
 
-test.failing("outbox: a status change goes to Jira at once, and the rest of a burst as one transition to its last status", async () => {
+test("outbox: a status change goes to Jira at once, and the rest of a burst as one transition to its last status", async () => {
   const { get, set } = await import("./store");
   const { actions } = await import("./issue-actions");
   const jira = await fakeJiraWrites();

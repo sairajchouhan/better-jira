@@ -297,10 +297,10 @@ test("BJ-352: a refused write whose read of Jira's copy fails names the issue fo
   }
 });
 
-test.failing("a status change answers once Jira has the transition, which goes alone from a status Jira listed transitions for before", async () => {
+test("a status change answers once Jira has the transition, which goes alone from a status Jira listed transitions for before", async () => {
   const { JiraError } = await import("./jira");
   places = Object.fromEntries(
-    ["K-30", "K-31", "K-32", "K-33", "K-34"].map((key) => [key, { project: "10", type: "7", status: "1" }]),
+    ["K-30", "K-31", "K-32", "K-33", "K-34", "K-35"].map((key) => [key, { project: "10", type: "7", status: "1" }]),
   );
   let refused = false;
   answer = (path, init) => {
@@ -308,6 +308,8 @@ test.failing("a status change answers once Jira has the transition, which goes a
       refused = true;
       throw Object.assign(new JiraError("POST", path, 400, "{}"), { status: 400, reason: "not valid" });
     }
+    if (path.endsWith("/transitions") && !init?.method)
+      return { transitions: [{ id: "31", to: { id: "3" } }, { id: "11", to: { id: "1" } }] };
     return jiraAnswers(path, init);
   };
   let reads = 0;
@@ -341,6 +343,11 @@ test.failing("a status change answers once Jira has the transition, which goes a
       "GET /rest/api/3/issue/K-33/transitions",
       "POST /rest/api/3/issue/K-33/transitions",
     ]);
+    // A change made before the mirror has the last one goes from where the last left it, not from the mirror's old status.
+    calls.length = 0;
+    await status("K-35");
+    await status("K-35", "1");
+    expect(calls).toEqual(["POST /rest/api/3/issue/K-35/transitions", "POST /rest/api/3/issue/K-35/transitions"]);
     // A change Jira has no transition for is refused, and waits for Jira's copy to roll back to.
     refreshing = () => turn(() => ({ issue: { key: "K-34", status: "1" }, full: null }));
     const refusal = await applyOps("K-34", [{ op: "status", status: "9" }], 1);

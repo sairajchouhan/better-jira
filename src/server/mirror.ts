@@ -687,6 +687,14 @@ export const issue = async (key: string) => {
   );
   return details.read(key);
 };
+/** Where the mirror last saw `key` in its workflow: the project and type that pick the workflow, and the status. */
+export const workflowPlace = (key: string) =>
+  db
+    .query<{ project: string; type: string; status: string }, [string]>(
+      `SELECT json_extract(full,'$.fields.project.id') AS project, json_extract(full,'$.fields.issuetype.id') AS type,
+        json_extract(full,'$.fields.status.id') AS status FROM issues WHERE key = ?`,
+    )
+    .get(key) ?? undefined;
 const histories = historyCache(
   db,
   (key) => readHistory(jira, key),

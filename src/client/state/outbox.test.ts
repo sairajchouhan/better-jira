@@ -261,7 +261,7 @@ test("edits queued behind an issue's write merge into one; a change that queued 
   ]);
 });
 
-test.failing("a status change goes to Jira at once; the rest of a burst waits 400 ms after its last change and goes as one transition", async () => {
+test("a status change goes to Jira at once; the rest of a burst waits 400 ms after its last change and goes as one transition", async () => {
   const h = harness();
   const a = issue("ST-1");
   h.send(edit(a, { status: "done" }));

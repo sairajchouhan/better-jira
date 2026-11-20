@@ -8,15 +8,16 @@ import type { LocalChange } from "./local-data";
  * The Jira write outbox: the user's edits that Jira doesn't have yet.
  *
  * Changes go in (`queue`, then `flush`); the outbox turns them into one job per issue, merges a job's later edits into it
- * while it waits, orders creates before the writes that name them, holds status changes and comment deletes, sends one
- * job at a time, retries what Jira couldn't settle with backoff, follows new issues to the keys Jira gives them, and
- * waits for (or takes over) issues other tabs are creating. What happens comes out through `OutboxEvents`.
+ * while it waits, orders creates before the writes that name them, holds the rest of a burst of status changes and
+ * comment deletes, sends one job at a time, retries what Jira couldn't settle with backoff, follows new issues to the keys
+ * Jira gives them, and waits for (or takes over) issues other tabs are creating. What happens comes out through `OutboxEvents`.
  *
  * Seams: the server's write route, time, and the saved data and lock this browser's tabs share are passed in
  * (`OutboxPorts`). The store passes the browser's; tests pass fakes.
  */
 
-/** `hold`: a status change waits until then, so rapid changes reach Jira as one transition (R2-issue-fields-D13). */
+/** `hold`: a status change made soon after the issue's last waits until then, so the rest of a burst reaches Jira as one
+ *  transition (R2-issue-fields-D13). */
 type Job = {
   key: string;
   /** The board a new issue was made on; none for an issue no board holds. */
@@ -109,7 +110,7 @@ const RETRY_WAIT = 5000,
   RETRY_WAIT_MAX = 60_000,
   RETRY_SHOWN = 4,
   UNREACHABLE_WAIT = 5000;
-// ponytail: fixed 400 ms debounce on status writes; tune if single status edits must settle faster.
+// ponytail: fixed 400 ms debounce on the rest of a burst of status writes; tune if bursts need other pacing.
 const STATUS_HOLD = 400;
 /**
  * Jira can't restore a deleted comment's id, time or thread, so a comment delete waits out the undo window and ⌘Z
@@ -126,6 +127,8 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
   const jiraKeys = new Map<string, string>(),
     jiraComments = new Map<string, string>();
   const heldDeletes = new Map<string, unknown>();
+  /** When each issue's status last changed, to tell a burst's later changes from a lone one. */
+  const statusChanged = new Map<string, number>();
   /** Which open tab sends each saved change (absent: this tab). */
   const owners = new Map<string, string>();
   /** Issues another open tab made and is still creating in Jira, with that tab's id: edits here wait for the Jira key it gets. */
@@ -523,7 +526,11 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
         const waiting = afterCreate || create
           ? undefined
           : outbox.findLast((job) => job.key === key && !job.started);
-        const hold = ops.some((op) => op.op === "status") ? clock.now() + STATUS_HOLD : undefined;
+        // A status change goes at once, as Linear's does; one soon after the issue's last waits for the rest of the burst.
+        const status = ops.some((op) => op.op === "status"),
+          last = statusChanged.get(key),
+          hold = status && last !== undefined && clock.now() - last < STATUS_HOLD ? clock.now() + STATUS_HOLD : undefined;
+        if (status) statusChanged.set(key, clock.now());
         if (waiting) {
           waiting.ops = mergeOps(waiting.ops, ops);
           if (hold) waiting.hold = hold;

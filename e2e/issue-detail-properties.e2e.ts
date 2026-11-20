@@ -206,7 +206,6 @@ test("24 epic: adding the issue to an epic from its pill and taking it out with 
 });
 
 test("25 a fast run of status changes reaches Jira as the first change at once, then one transition to the last", async ({ page, app }) => {
-  test.fail();
   await app.seed({ writable: true, jiraEdits: true });
   const detail = await openIssue(page, "TEST-4", "Browser fixture 4");
 
