@@ -253,6 +253,9 @@ test("a file whose upload answer was lost is found by its id on a later load and
   await page.getByRole("button", { name: "Attach images, files, or videos" }).last().click();
   await (await chooser).setFiles(image);
   await expect.poll(app.uploads).toHaveLength(1);
+  // The editor sends it once more at once; only once that send is lost too does it give the file up, and no draft holds it.
+  // (Unrouted earlier, the second send's answer arrives and the draft keeps the file, which then rightly stays in Jira.)
+  await expect(page.getByRole("alertdialog", { name: /File failed to upload/ })).toBeVisible();
   await page.unrouteAll({ behavior: "wait" });
 
   // The user comes back after the upload has settled.
