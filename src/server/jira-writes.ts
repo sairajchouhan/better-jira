@@ -98,8 +98,9 @@ async function transition(key: string, status: string, replay = false) {
     movedTo.set(key, { place: { ...from, status }, at: Date.now() });
   };
   // A first send goes from where the issue was last seen, by the transition Jira listed from there before: the one round
-  // trip Jira's own page makes. A transition only ever leads to its own status, so a stale place can only be refused, and
-  // a refusal reads Jira's transitions again below. A resend reads first: the earlier send may have landed.
+  // trip Jira's own page makes. Within one workflow a transition leads only to its own status, so a stale status costs a
+  // refusal, which reads Jira's transitions again below (or, for a global transition, a move to the status Jira already
+  // has). A resend reads first: the earlier send may have landed.
   const moved = movedTo.get(key),
     place = replay ? undefined : moved && Date.now() - moved.at < MOVED_FRESH ? moved.place : workflowPlace(key);
   const known = place && place.status !== status && transitionsFrom.get(placeKey(place))?.find((t) => t.to.id === status);
