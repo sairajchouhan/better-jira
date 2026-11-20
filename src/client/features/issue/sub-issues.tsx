@@ -502,11 +502,11 @@ export function SubIssues({ issue }: { issue: Issue }) {
           <div className="flex gap-1">
             <FieldMenuButton
               className={button}
-              aria-label={`Sub-issue due date. ${draft.due ?? "No due date"}`}
+              aria-label={`Sub-issue due date. ${draft.due ? shortDate(draft.due, undefined, true) : "No due date"}`}
               menu={DueMenu}
               menuProps={{ board, value: draft.due ?? null, onChange: (due) => setProperties({ due }) }}
             >
-              {draft.due ?? "Due date"}
+              {draft.due ? shortDate(draft.due, undefined, true) : "Due date"}
             </FieldMenuButton>
             {/* Linear names the value on each chip: "Priority", the assignee, "Labels". */}
             <FieldMenuButton

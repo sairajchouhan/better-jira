@@ -233,7 +233,7 @@ test.fail("a create Jira refuses while ⌘K is open brings the composer back wit
   await expect(composer(page).getByRole("textbox", { name: "Issue description" })).toContainText("Typed before the palette opened");
 });
 
-test.fail("the sub-issue composer's due date chip reads the day, as the New issue composer's does", async ({ page, app }) => {
+test("the sub-issue composer's due date chip reads the day, as the New issue composer's does", async ({ page, app }) => {
   await app.seed({ writable: true, createSuccess: true });
   await column(page, "Todo")
     .getByRole("row", { name: "TEST-2 Browser fixture 2", exact: true })
