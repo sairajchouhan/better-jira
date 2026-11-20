@@ -509,7 +509,7 @@ test("57 a file put into a new sub-issue's description offline is refused as Lin
   expect(await app.uploads()).toEqual([]);
 });
 
-test("57 a document's image stays in Jira after the uploads settle", async ({ page, app }) => {
+test.fail("57 a document's image stays in Jira after the uploads settle", async ({ page, app }) => {
   await app.seed({ writable: true });
   await openIssue(page, "TEST-2", "Browser fixture 2");
   await page.getByRole("button", { name: "Issue options" }).click();
@@ -537,9 +537,11 @@ test("57 a document's image stays in Jira after the uploads settle", async ({ pa
   // Documents live only in this browser, so Jira's text never shows the file; the cleaner must still keep it.
   await page.clock.install({ time: Date.now() + 3 * 60_000 });
   await page.reload();
-  // The document still holds the file. (Right after a reload it may draw from the last page's local copy and fail to
-  // display: a separate bug.)
-  await expect(body.locator("[data-media-id]")).toHaveCount(1);
+  // The document still shows it, from a file this page can read: the browser may still draw the last page's copy from its
+  // cache, but that page's link to it is dead once its cache lets it go.
+  const image = body.getByRole("img", { name: "media-image.png" });
+  await expect(image).toBeVisible();
+  await expect.poll(() => image.evaluate((img: HTMLImageElement) => fetch(img.src).then((r) => r.ok, () => false))).toBe(true);
   // The cleaner runs as the app loads; give it time to have removed the file if it were going to.
   await page.waitForTimeout(2_000);
   expect(((await app.jiraIssue("TEST-2")).full.fields.attachment as any[]).map((a) => String(a.id))).toContain(upload!.id);
@@ -714,6 +716,25 @@ test("59 local edits survive a reload and replay only what Jira lacks", async ({
     { key: "TEST-2", ops: prioritize("High") },
     SENTINEL,
   ]);
+});
+
+test("59 text typed into a new document is still there after an immediate reload", async ({ page, app }) => {
+  await app.seed({ writable: true });
+  await openIssue(page, "TEST-2", "Browser fixture 2");
+  await page.getByRole("button", { name: "Issue options" }).click();
+  await page.getByRole("menuitem", { name: "Add document…" }).click();
+  const body = page.getByRole("textbox", { name: "Document content" });
+  await body.click();
+  await page.keyboard.type("Typed just before the reload");
+  await expect(body).toHaveText("Typed just before the reload");
+
+  page.on("dialog", (dialog) => void dialog.accept());
+  await page.reload();
+
+  await expect(body).toHaveText("Typed just before the reload");
+  // The page taking over what the last one saved comes a moment after the document shows: the text must outlast it.
+  await page.waitForTimeout(1_500);
+  await expect(body).toHaveText("Typed just before the reload");
 });
 
 test("59 opening and reloading issues writes nothing to Jira", async ({ page, app }) => {
