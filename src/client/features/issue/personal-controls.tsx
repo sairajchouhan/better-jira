@@ -25,7 +25,7 @@ import { attachmentSplit } from "./issue-attachments";
 import { parentInProject, switchBoard } from "./composer-draft";
 import { TITLE_MAX } from "@/shared/issue-title";
 import { useTitleLimit } from "@/client/features/editor/title-limit";
-import { draftEligible, readLocalDraft, resumeDraft, useComposerLocalDraft } from "./composer-local-draft";
+import { draftEligible, parseSavedDrafts, readLocalDraft, resumeDraft, savedDraftsKey, useComposerLocalDraft, type SavedComposerDraft } from "./composer-local-draft";
 import { shortDate } from "@/client/lib/due-date";
 import { useHotkey } from "@tanstack/react-hotkeys";
 import { createContext, use, useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
@@ -94,8 +94,6 @@ import { boardIssues } from "@/client/state/board-issues";
 import { sharesBoard } from "@/shared/board-membership";
 
 const NO_FILES: NonNullable<Issue["attachments"]> = [];
-type SavedComposerDraft = { id: string; title: string; fields: IssueDraft };
-const parseComposerDrafts = (raw: unknown): SavedComposerDraft[] => Array.isArray(raw) ? raw.filter(d => d && typeof d.id === "string" && typeof d.title === "string" && d.fields && typeof d.fields === "object") : [];
 /** Linear's composer relation chip ("1 blocked", startup-root `yZn`/`hZn`): it opens "Open blocked issues", the pending
  *  relation's issue under its heading, which opens the issue or, from its × button, drops the relation before creating. */
 const PENDING_RELATION = {
@@ -195,7 +193,7 @@ export function CreateIssue() {
   });
   const [attachments, setAttachments] = useState<Issue["attachments"]>(start.attachments);
   const [filesBusy, setFilesBusy] = useState(false);
-  const [saved, setSaved] = useStoredState<SavedComposerDraft[]>(`better-jira:composer-drafts:v1:${account}`, parseComposerDrafts, [], "Could not save drafts locally");
+  const [saved, setSaved] = useStoredState<SavedComposerDraft[]>(savedDraftsKey(account), parseSavedDrafts, [], "Could not save drafts locally");
   // The saved draft being finished: kept with the local draft, so a reload still knows which one to take off the list.
   const [savedId, setSavedId] = useState<string | null>(start.saved ?? null);
   const [draftsOpen, setDraftsOpen] = useState(false);
@@ -274,7 +272,7 @@ export function CreateIssue() {
   const saveDraft = () => {
     const id = savedId ?? crypto.randomUUID();
     const next = [...saved.filter(d => d.id !== id), { id, title, fields: { ...fields, title, descriptionDoc: description, attachments, labels: labelList } }];
-    if (!writeStored(`better-jira:composer-drafts:v1:${account}`, next, "Could not save drafts locally")) return;
+    if (!writeStored(savedDraftsKey(account), next, "Could not save drafts locally")) return;
     setSaved(next);
     localDraft.clear();
     closeNow();

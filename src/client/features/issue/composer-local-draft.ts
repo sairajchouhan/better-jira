@@ -84,6 +84,24 @@ export function writeLocalDraft(namespace: string, draft: ComposerLocalDraft | u
   return written;
 }
 
+/** The drafts list ("Saved drafts (n)"), per account. */
+export type SavedComposerDraft = { id: string; title: string; fields: IssueDraft };
+export const savedDraftsKey = (namespace: string) => `better-jira:composer-drafts:v1:${namespace}`;
+export const parseSavedDrafts = (raw: unknown): SavedComposerDraft[] =>
+  Array.isArray(raw)
+    ? raw.filter((d) => d && typeof d.id === "string" && typeof d.title === "string" && d.fields && typeof d.fields === "object")
+    : [];
+/** Moves the kept draft to the drafts list, as Save to drafts does, before the composer opens with something else. */
+export function shelveLocalDraft(namespace: string) {
+  const local = readLocalDraft(namespace);
+  if (!local) return;
+  const id = local.saved ?? crypto.randomUUID(),
+    saved = readStored(savedDraftsKey(namespace), parseSavedDrafts, []),
+    fields = { ...local.fields, title: local.title, descriptionDoc: local.description, attachments: local.attachments, labels: local.labels };
+  if (writeStored(savedDraftsKey(namespace), [...saved.filter((d) => d.id !== id), { id, title: local.title, fields }], "Could not save drafts locally"))
+    writeLocalDraft(namespace, undefined);
+}
+
 /** Told of every write in this tab; another tab's write comes as the browser's storage event. */
 const draftChanged = new EventTarget();
 

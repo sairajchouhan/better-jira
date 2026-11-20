@@ -1,4 +1,4 @@
-import { type Full, type Issue } from "@/shared/issue-model";
+import { type Full, type Issue, type IssueDraft } from "@/shared/issue-model";
 /**
  * Sending local edits to Jira. Each edit's before/after (`send`) becomes ops that the outbox (outbox.ts) sends one job
  * at a time per issue; Jira's answer gives created issues and comments their Jira ids everywhere (`currentKey`,
@@ -25,9 +25,10 @@ import { jiraAnswered, rekeyNotification, showNotification } from "./app-notific
 import { returnRejectedComment } from "@/client/features/comments/rejected-comment";
 import { navigate } from "@/client/features/navigation/app-navigation";
 import { claimChanges, flushLocalChanges, localDataOpen, queueSave, storedChanges } from "./local-database";
-import { get, set } from "./store";
+import { get, set, subscribe } from "./store";
 import { refusedSelectionCreate, forgetSelectionCreate } from "./selection-create";
 import { actions, beginCreate } from "./issue-actions";
+import { shelveLocalDraft } from "@/client/features/issue/composer-local-draft";
 
 /** Marks issues changed by this tab, so other tabs take its copy. */
 export const touch = (...keys: string[]) => writes.touch(...keys);
@@ -246,12 +247,14 @@ function discard(key: string, reopen = true) {
   if (get().selected === key) navigate({ selected: null, panel: false });
   queueSave();
   if (reopen) tabChannel?.postMessage({ discarded: key });
-  // The composer comes back with what was typed, so a create Jira refuses loses nothing (R2-comments-D3).
-  if (reopen && issue && !get().overlay)
-    beginCreate({
+  // The composer comes back with what was typed, so a create Jira refuses loses nothing (R2-comments-D3), as Linear's
+  // opens again on a failed submit (`restoreFailedSubmission`). Over another dialog, it comes back once that one closes.
+  if (reopen && issue)
+    reopenComposer({
       title: issue.summary,
       descriptionDoc: description,
       attachments: issue.attachments,
+      resources: issue.resources,
       status: issue.status,
       type: issue.type,
       priority: issue.priority,
@@ -262,6 +265,21 @@ function discard(key: string, reopen = true) {
       due: issue.due,
       milestones: issue.milestones,
     });
+}
+/** Opens the composer with `draft` now, or once no dialog is open. A draft kept from an earlier composer goes to the drafts
+ *  list first, so neither is lost. */
+function reopenComposer(draft: IssueDraft) {
+  if (!get().overlay) {
+    shelveLocalDraft(get().namespace);
+    beginCreate(draft);
+    return;
+  }
+  const stop = subscribe(() => {
+    if (get().overlay) return;
+    stop();
+    // A turn later, once the closed dialog is gone and a closing composer has written its draft.
+    setTimeout(() => reopenComposer(draft));
+  });
 }
 export const dismissWriteError = () => set({ writeError: null });
 /** A new issue's app key becomes Jira's key everywhere: issues, references, undo history and queued writes. */

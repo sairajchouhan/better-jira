@@ -210,7 +210,7 @@ test("22 a sub-issue created under an issue shows in its Sub-issues and is its c
   await expect(subIssues.getByText("Child of fixture 2", { exact: true })).toBeVisible();
 });
 
-test.fail("a create Jira refuses while ⌘K is open brings the composer back with the draft once ⌘K closes", async ({ page, app }) => {
+test("a create Jira refuses while ⌘K is open brings the composer back with the draft once ⌘K closes", async ({ page, app }) => {
   await app.seed({ writable: true, createSuccess: true });
   await app.refuse(["create"], "Jira refused: the summary has a banned word.");
   // The first send gets no answer, so Jira's refusal lands on the retry, after ⌘K has opened over the board.
@@ -263,7 +263,7 @@ test("the sub-issue composer's due date chip reads the day, as the New issue com
   ]);
 });
 
-test.fail("a create refused while Create more keeps the composer open comes back after it, and the next one typed there is kept in Saved drafts", async ({ page, app }) => {
+test("a create refused while Create more keeps the composer open comes back after it, and the next one typed there is kept in Saved drafts", async ({ page, app }) => {
   await app.seed({ writable: true, createSuccess: true });
   await app.refuse(["create"], "Jira refused: the summary has a banned word.");
   await app.unanswered(1);
