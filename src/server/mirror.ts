@@ -879,7 +879,7 @@ async function enrichProperties() {
         Array.from({ length: 4 }, async () => {
           for (let row; (row = queue.shift());) {
             const errors: string[] = [];
-            const data: any = { status: row.issue.status };
+            const data: Record<string, unknown> = { status: row.issue.status };
             if (historyError) errors.push("Status history unavailable");
             else
               Object.assign(

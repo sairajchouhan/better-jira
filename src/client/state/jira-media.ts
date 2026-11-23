@@ -1,5 +1,6 @@
 import type { Op } from "@/shared/jira-ops";
 import { issueAttachments, type Attachment } from "@/shared/attachment-media";
+import { assertNever, sendWriteRequest } from "@/shared/write-transport";
 import { localFile, localFileURL, retainJiraFile } from "./local-database";
 
 /** `found`: matched after a lost answer rather than answered by Jira (see uploadAttachment). */
@@ -63,14 +64,23 @@ async function postAttachment(
     const body = new FormData();
     body.append("file", file, name);
     body.append("client", client);
-    const response = await request(`/api/issues/${encodeURIComponent(key)}/attachments`, {
-      method: "POST",
-      body,
-    });
-    const result = await response.json().catch(() => ({}));
-    if (response.status === 503) throw new NoAnswer(result.error ?? "Jira didn't answer.");
-    if (!response.ok) throw new UploadRefused(result.error ?? "Could not upload the file to Jira.");
-    return result as Uploaded;
+    const outcome = await sendWriteRequest<Uploaded>(
+      `/api/issues/${encodeURIComponent(key)}/attachments`,
+      { method: "POST", body },
+      { fallbackError: "Could not upload the file to Jira." },
+    );
+    switch (outcome.kind) {
+      case "ok":
+        return outcome.data;
+      case "unreachable":
+        throw new Unreachable(outcome.cause);
+      case "no_answer":
+        throw new NoAnswer(outcome.error);
+      case "refused":
+        throw new UploadRefused(outcome.error);
+      default:
+        return assertNever(outcome);
+    }
   } finally {
     uploading--;
   }

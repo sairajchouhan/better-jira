@@ -1,4 +1,4 @@
-import { type Issue } from "@/shared/issue-model";
+import { copyIssueField, isIssueField, type Issue } from "@/shared/issue-model";
 /**
  * Undo history: this tab's local edits as undoable steps, kept across a reload (R2-inbox-D3) but never shared with
  * another tab, as Linear's per-client history is. `record` makes one step of whatever `fn` changes; undo and redo send
@@ -135,15 +135,15 @@ function restore(edit: LocalEdit, snapshots: Snapshot[]) {
         before = edit.before[index]!,
         after = edit.after[index]!;
       if (!target.issue || !now.issue) return target;
-      const changed = (a: any, b: any, field: string) =>
+      const changed = (a: Record<string, unknown> | undefined, b: Record<string, unknown> | undefined, field: string) =>
         JSON.stringify(a?.[field]) !== JSON.stringify(b?.[field]);
       const issue = { ...now.issue };
       for (const field of new Set([
         ...Object.keys(before.issue ?? {}),
         ...Object.keys(after.issue ?? {}),
       ]))
-        if (changed(before.issue, after.issue, field))
-          (issue as any)[field] = (target.issue as any)[field];
+        if (isIssueField(field) && changed(before.issue, after.issue, field))
+          copyIssueField(issue, target.issue, field);
       const full =
         now.full && target.full ? { ...now.full, fields: { ...now.full.fields } } : target.full;
       // Comment edits and deletes live in commentStates; once Jira has them, undo needs the comment list back too.

@@ -232,6 +232,21 @@ export function once(
  * the send: a lost answer is matched to a file this account attached since, of the same name and size, that no other
  * upload owns. Such a match is marked `found`: it may be the user's own file, so cleanup never deletes it.
  */
+type JiraAttachmentRow = {
+  id: string | number;
+  filename?: string;
+  mimeType?: string;
+  size?: number;
+  created: string;
+  author?: { accountId?: string };
+};
+type JiraIssueLinkRow = {
+  id: string;
+  type: { name: string };
+  outwardIssue?: { key: string };
+  inwardIssue?: { key: string };
+};
+
 export async function uploadAttachment(
   key: string,
   file: File,
@@ -240,10 +255,12 @@ export async function uploadAttachment(
   // Jira's answer to the send names the attachment, and the issue read before it gives the issue's id, so the tab's
   // answer needs no read after the send (BJ-233). A replay has neither and reads the issue then.
   let issueId: string | undefined, sent: JiraAttachment | undefined;
-  const attachments = async () => {
-    const issue = await jira(`${at(key)}?fields=attachment`);
-    issueId = issue.id && String(issue.id);
-    return (issue.fields.attachment ?? []) as any[];
+  const attachments = async (): Promise<JiraAttachmentRow[]> => {
+    const issue = await jira<{ id?: string | number; fields: { attachment?: JiraAttachmentRow[] } }>(
+      `${at(key)}?fields=attachment`,
+    );
+    issueId = issue.id ? String(issue.id) : undefined;
+    return issue.fields.attachment ?? [];
   };
   const ledgerClient = client && `upload:${client}`;
   const made = await once(
@@ -606,15 +623,19 @@ async function run(ctx: Context, op: Op) {
       const ends = linkEnds(key, op.target, op.kind);
       ctx.touched.add(op.target);
       // A remove reads the issue's links alongside the link type, not after it (R2-issue-fields-D13).
-      const read = op.remove ? jira(`${at(key)}?fields=issuelinks`) : undefined;
+      const read = op.remove
+        ? jira<{ fields: { issuelinks?: JiraIssueLinkRow[] } }>(`${at(key)}?fields=issuelinks`)
+        : undefined;
       read?.catch(() => {});
       const type = await linkType(op.kind);
       if (!op.remove) {
         // A resent job (an earlier send's answer was lost) or a replayed create may have linked it already.
         if (ctx.replay) {
-          const links = (await jira(`${at(key)}?fields=issuelinks`)).fields.issuelinks as any[];
+          const links =
+            (await jira<{ fields: { issuelinks?: JiraIssueLinkRow[] } }>(`${at(key)}?fields=issuelinks`)).fields
+              .issuelinks ?? [];
           if (
-            links?.some(
+            links.some(
               (l) =>
                 l.type.name === type.name && (l.outwardIssue ?? l.inwardIssue)?.key === op.target,
             )
@@ -631,7 +652,7 @@ async function run(ctx: Context, op: Op) {
         });
         return;
       }
-      const links = (await read!).fields.issuelinks as any[];
+      const links = (await read!).fields.issuelinks ?? [];
       const outwardFromKey = ends.outward === key;
       const link =
         links.find(

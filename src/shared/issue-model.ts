@@ -76,6 +76,7 @@ export type Issue = {
    *  project, kept on no configured board) shows. Read it through `issueStatus` (board-catalog.ts). */
   jiraStatus?: Status;
   type?: string;
+  typeIcon?: string;
   priority?: string;
   assignee: User | null;
   labels: string[];
@@ -132,6 +133,77 @@ export type Issue = {
   mediaEdits?: Record<string, MediaEdit>;
   descriptionHistory?: { text: string; document?: AdfDocument; at: string }[];
 };
+export const ISSUE_FIELDS = [
+  "key",
+  "boards",
+  "summary",
+  "status",
+  "jiraStatus",
+  "type",
+  "typeIcon",
+  "priority",
+  "assignee",
+  "labels",
+  "parent",
+  "level",
+  "parentLevel",
+  "rank",
+  "rankAnchor",
+  "comments",
+  "updated",
+  "resolved",
+  "created",
+  "creator",
+  "due",
+  "project",
+  "description",
+  "commentText",
+  "links",
+  "linkTitles",
+  "resources",
+  "commentStates",
+  "reminder",
+  "activity",
+  "relations",
+  "milestones",
+  "prCount",
+  "prStatus",
+  "prNumber",
+  "statusSince",
+  "started",
+  "watchers",
+  "watchersComplete",
+  "watching",
+  "estimate",
+  "attachments",
+  "reactions",
+  "mediaEdits",
+  "descriptionHistory",
+] as const satisfies readonly (keyof Issue)[];
+export type IssueField = keyof Issue;
+const ISSUE_FIELD_SET = new Set<string>(ISSUE_FIELDS);
+export const isIssueField = (name: string): name is IssueField => ISSUE_FIELD_SET.has(name);
+export const getIssueField = <K extends IssueField>(issue: Issue, field: K): Issue[K] => issue[field];
+export function setIssueField<K extends IssueField>(
+  target: Partial<Issue>,
+  field: K,
+  value: Issue[K],
+): void {
+  target[field] = value;
+}
+export function copyIssueField<K extends IssueField>(
+  target: Partial<Issue>,
+  source: Partial<Issue>,
+  field: K,
+): void {
+  target[field] = source[field];
+}
+export function pickIssueFields(source: Partial<Issue>, fields: Iterable<IssueField>): Partial<Issue> {
+  const out: Partial<Issue> = {};
+  for (const field of fields) copyIssueField(out, source, field);
+  return out;
+}
+
 /**
  * The issue fields the mirror projects onto every issue it sends: server issue-projection.ts `slim` (which must name each one,
  * no more and no fewer) and the one pull request's number (mirror.ts `slimOf`). A row is the whole projection and JSON drops a

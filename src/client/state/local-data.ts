@@ -1,4 +1,4 @@
-import { activityFields, type Full, type Issue } from "@/shared/issue-model";
+import { activityFields, getIssueField, isIssueField, type Full, type Issue, type IssueField } from "@/shared/issue-model";
 import { validCommentStates } from "@/client/features/comments/comment-thread";
 import { resourceURL, validDocumentProperties, validLinkPreview } from "@/shared/issue-resource";
 
@@ -11,7 +11,7 @@ import { withMembership } from "@/shared/board-membership";
 export type Snapshot = {
   issue?: Issue;
   full?: Full;
-  issueFields?: string[];
+  issueFields?: IssueField[];
   fullFields?: string[];
 };
 /** `tab` is the tab that made the edit; only it can undo it (R2-inbox-D3). */
@@ -26,7 +26,7 @@ export type LocalChange = {
   key: string;
   issue: Issue | null;
   full?: Full;
-  issueFields: string[];
+  issueFields: IssueField[];
   fullFields: string[];
   created: boolean;
   /** The tab that sends this change to Jira; a change whose tab has closed is replayed by the next tab to load. */
@@ -53,46 +53,8 @@ const object = (value: unknown): value is Record<string, any> =>
   !!value && typeof value === "object" && !Array.isArray(value);
 const strings = (value: unknown): value is string[] =>
   Array.isArray(value) && value.every((v) => typeof v === "string");
-const issueFields = new Set([
-  "key",
-  "boards",
-  "summary",
-  "status",
-  "type",
-  "priority",
-  "assignee",
-  "labels",
-  "parent",
-  "rank",
-  "rankAnchor",
-  "comments",
-  "updated",
-  "resolved",
-  "created",
-  "creator",
-  "due",
-  "project",
-  "description",
-  "links",
-  "resources",
-  "commentStates",
-  "reminder",
-  "relations",
-  "milestones",
-  "prCount",
-  "prStatus",
-  "prNumber",
-  "statusSince",
-  "started",
-  "watchers",
-  "watchersComplete",
-  "estimate",
-  "attachments",
-  "reactions",
-  "mediaEdits",
-  "descriptionHistory",
-  "activity",
-]);
+const isIssueFieldList = (value: unknown): value is IssueField[] =>
+  strings(value) && value.every(isIssueField);
 const user = (v: unknown) =>
   v === null || (object(v) && typeof v.id === "string" && typeof v.name === "string");
 const optionalArray = (value: unknown, valid: (v: any) => boolean) =>
@@ -211,8 +173,7 @@ const isSnapshot = (v: unknown, key: string): v is Snapshot =>
   object(v) &&
   (v.issue === undefined || isIssue(v.issue, key)) &&
   (v.full === undefined || isFull(v.full, key)) &&
-  (v.issueFields === undefined ||
-    (strings(v.issueFields) && v.issueFields.every((f) => issueFields.has(f)))) &&
+  (v.issueFields === undefined || isIssueFieldList(v.issueFields)) &&
   (v.fullFields === undefined ||
     (strings(v.fullFields) && v.fullFields.every((f) => ["description", "comment"].includes(f))));
 function isEdit(v: unknown): v is LocalEdit {
@@ -266,8 +227,7 @@ export function parseLocalState(saved: unknown): {
     typeof v.key === "string" &&
     (v.issue === null || isIssue(v.issue, v.key)) &&
     (v.full === undefined || isFull(v.full, v.key)) &&
-    strings(v.issueFields) &&
-    v.issueFields.every((f) => issueFields.has(f)) &&
+    isIssueFieldList(v.issueFields) &&
     strings(v.fullFields) &&
     v.fullFields.every((f) => ["description", "comment"].includes(f)) &&
     typeof v.created === "boolean" &&
@@ -362,7 +322,7 @@ function fieldsOf(change: LocalChange | undefined): Map<string, unknown> {
   if (!change) return fields;
   if (change.issue === null) fields.set("$deleted", true);
   if (change.created) fields.set("$created", true);
-  for (const f of change.issueFields) fields.set(f, (change.issue as any)?.[f]);
+  for (const f of change.issueFields) fields.set(f, change.issue ? getIssueField(change.issue, f) : undefined);
   for (const f of change.fullFields) fields.set("full:" + f, change.full?.fields[f]);
   // A description Jira refused sits on the record beside its fields, and is cleared without any field changing (Keep mine).
   const { descriptionRejected, descriptionError } = change.full ?? {};
@@ -444,12 +404,14 @@ function build(
   if (values.get("$deleted")) return { ...owner, issue: null };
   const fields = (full: boolean) =>
     [...values.keys()].filter((f) => !f.startsWith("$") && f.startsWith("full:") === full);
-  const issueFields = fields(false),
+  const issueFields = fields(false).filter(isIssueField),
     fullFields = fields(true).map((f) => f.slice(5)),
     created = !!values.get("$created");
   if (!issueFields.length && !fullFields.length && !created) return undefined;
-  const issue = { ...(owner.issue ?? m?.issue ?? t?.issue)! } as Issue;
-  for (const f of issueFields) (issue as any)[f] = values.get(f);
+  const issue: Issue = Object.assign(
+    { ...(owner.issue ?? m?.issue ?? t?.issue)! },
+    Object.fromEntries(issueFields.map((f) => [f, values.get(f)])),
+  );
   const fullBase = owner.full ?? m?.full ?? t?.full;
   const { descriptionRejected: _r, descriptionError: _e, ...record } = fullBase ?? ({} as Full);
   const full = fullBase && {
