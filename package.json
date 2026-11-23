@@ -10,7 +10,7 @@
     "build": "bun run build.ts",
     "typecheck": "bun check",
     "setup": "bun scripts/instance.ts setup",
-    "lint": "oxlint",
+    "lint": "oxlint --deny-warnings",
     "lint:fix": "oxlint --fix",
     "test:e2e": "playwright test",
     "test:real": "playwright test -c playwright.real.config.ts",

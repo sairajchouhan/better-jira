@@ -156,6 +156,7 @@ export function CodeBlockControls({
     displayButton = useRef<HTMLButtonElement>(null),
     popup = useRef<HTMLDivElement>(null);
   const [menu, setMenu] = useState<"language" | "display" | null>(null);
+  const [languageAnchor, setLanguageAnchor] = useState<HTMLButtonElement | null>(null);
   const keep = (event: { preventDefault: () => void }) => event.preventDefault();
   return (
     <>
@@ -174,7 +175,13 @@ export function CodeBlockControls({
           aria-haspopup={setLanguage ? "menu" : undefined}
           aria-expanded={setLanguage ? menu === "language" : undefined}
           data-readonly={setLanguage ? undefined : "true"}
-          onClick={setLanguage && (() => setMenu(menu === "language" ? null : "language"))}
+          onClick={
+            setLanguage &&
+            (() => {
+              setLanguageAnchor(languageButton.current);
+              setMenu(menu === "language" ? null : "language");
+            })
+          }
         >
           {languageLabel(language, detected)}
           {setLanguage && <Icon name="down" size={12} />}
@@ -210,7 +217,7 @@ export function CodeBlockControls({
       {menu === "language" && setLanguage && (
         <ActionMenu
           label="Language"
-          anchor={languageButton.current}
+          anchor={languageAnchor}
           highlight="first"
           entries={languageEntries(language, setLanguage)}
           close={() => setMenu(null)}
@@ -270,7 +277,7 @@ export function ReadonlyCodeBlock({ text, language }: { text: string; language: 
     const observer = new ResizeObserver(measure);
     observer.observe(code.current);
     return () => observer.disconnect();
-  }, [text, view.lineWrap, highlight]);
+  }, [view.lineWrap]);
   return (
     <pre className="code-block" {...codeBlockAttributes(lines, collapsed, view)}>
       <div ref={gutter} className="cb-gutter" aria-hidden>

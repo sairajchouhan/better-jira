@@ -1,11 +1,16 @@
 {
   "$schema": "./node_modules/oxlint/configuration_schema.json",
   "plugins": ["typescript", "unicorn", "oxc", "react", "import"],
+  "jsPlugins": ["./lint/better-jira-rules.mjs"],
   "categories": {
     "correctness": "error",
     "suspicious": "warn"
   },
   "rules": {
+    "better-jira/no-hardcoded-jira-type-name": "error",
+    "better-jira/no-raw-popover-on-open-change": "error",
+    "better-jira/no-raw-write-fetch": "error",
+    "better-jira/no-prod-as-any": "error",
     "react/react-in-jsx-scope": "off",
     "react/refs": "warn",
     "react/set-state-in-effect": "warn",
@@ -13,6 +18,12 @@
     "react/immutability": "warn",
     "react/globals": "warn",
     "react-hooks/exhaustive-deps": "warn",
+    "no-underscore-dangle": [
+      "warn",
+      {
+        "allow": ["__TSR_key", "__TSR_index", "_instance", "__typename"]
+      }
+    ],
     "no-unused-vars": [
       "error",
       {
@@ -27,11 +38,12 @@
     "unicorn/no-array-sort": "off",
     "unicorn/no-array-reverse": "off",
     "unicorn/prefer-add-event-listener": "off",
+    "unicorn/require-post-message-target-origin": "off",
     "import/no-unassigned-import": "off"
   },
   "env": {
     "builtin": true,
     "browser": true
   },
-  "ignorePatterns": [".raj/**", "dist/**"]
+  "ignorePatterns": [".raj/**", "dist/**", ".agents/**", ".claude/**"]
 }
