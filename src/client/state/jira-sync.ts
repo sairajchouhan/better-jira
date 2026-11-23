@@ -70,7 +70,6 @@ async function jiraLinks(key: string) {
 }
 
 export const UNREACHABLE = "Can't reach the better-jira server. Retrying…";
-// --- Jira writes: each edit's before/after becomes ops, which the outbox sends one job at a time (see outbox.ts) ---
 const writes = createOutbox(
   {
     post: (key, body) =>

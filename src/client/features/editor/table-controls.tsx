@@ -1,4 +1,3 @@
-/* oxlint-disable react/refs -- The controls are measured from the editor's DOM on each render the editor triggers. */
 import { useEffect, useState, type ReactNode, type RefObject } from "react";
 import { toggleMark } from "prosemirror-commands";
 import { TextSelection, type Command } from "prosemirror-state";

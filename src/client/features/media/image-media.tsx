@@ -1,8 +1,6 @@
 import { IconButton } from "@/client/components/button";
 import { Toolbar } from "@/client/components/toolbar";
 import { notifyMedia } from "./media-toast";
-/* oxlint-disable react/immutability -- Session callbacks and mutable imperative models are intentionally owned outside React state. */
-/* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useHotkeys } from "@tanstack/react-hotkeys";
 import type { Attachment } from "@/shared/attachment-media";
@@ -77,7 +75,7 @@ export function ImageMedia({
       live = false;
       if (url) URL.revokeObjectURL(url);
     };
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Crop values, rather than mirror object identity, control expensive image decoding.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- Crop values, rather than mirror object identity, control expensive image decoding.
   }, [file.url, JSON.stringify(edit?.crop)]);
   const [selected, setSelected] = useState(false),
     [open, setOpen] = useState(false);

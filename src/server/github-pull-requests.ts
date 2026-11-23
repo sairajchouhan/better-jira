@@ -132,7 +132,6 @@ export type GitHubNode = {
 };
 
 /** Linear's `isBotReviewer`: a bot account (GitHub's `Bot` type, or a `[bot]` login). */
-// oxlint-disable-next-line no-underscore-dangle -- GitHub's GraphQL type name
 const isBot = (review: Review) => review.author?.__typename === "Bot" || !!review.author?.login?.endsWith("[bot]");
 /** Linear's `statusBasedOnReviews` (`uU`/`dU`) for a pull request GitHub reports: merged, closed, draft, else by its people's latest
  *  reviews (bots' don't count). A change request wins and is in review; an approval is approved; any other submitted review
@@ -194,7 +193,6 @@ export function ownersOf(nodes: { repository?: { owner?: { login?: string; __typ
   const owners = new Set<string>();
   for (const node of nodes) {
     const owner = node.repository?.owner;
-    // oxlint-disable-next-line no-underscore-dangle -- GitHub's GraphQL type name
     if (owner?.login) owners.add(`${owner.__typename === "User" ? "user" : "org"}:${owner.login}`);
   }
   return [...owners].sort();

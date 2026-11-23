@@ -10,8 +10,6 @@ import { Dialog, ConfirmDialog } from "@/client/components/dialog";
 import { TextInput } from "@/client/components/field";
 import { Button, IconButton } from "@/client/components/button";
 import { SectionDisclosure } from "@/client/components/section-disclosure";
-/* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
-/* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
 import { Fragment, useMemo, useRef, useState, type ReactNode } from "react";
 import { useSubIssueComposer } from "./use-sub-issue-composer";
 import { DropIndicator, GridList, GridListItem, useDragAndDrop } from "react-aria-components";
@@ -228,7 +226,7 @@ export function SubIssues({ issue }: { issue: Issue }) {
   const [manualOrder, setManualOrder] = useStoredState<string[]>(`${namespace}:manual-order:v1:${issue.key}`, raw => Array.isArray(raw) ? raw.filter((key): key is string => typeof key === "string") : [], []);
   const model = useMemo(
     () => subIssueRows(issue.key, all, display, status, Date.now(), reveal, manualOrder),
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Draft listeners retain their session; derived rows invalidate on boards rather than render-local status helpers.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- Draft listeners retain their session; derived rows invalidate on boards rather than render-local status helpers.
     [issue.key, all, boards, display, reveal, manualOrder],
   );
   const manual = display.ordering === "manual";

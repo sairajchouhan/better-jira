@@ -1,5 +1,4 @@
 /* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
-/* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
 import { useHotkeys, useHotkey } from "@tanstack/react-hotkeys";
 import { adfToText } from "./adf";
 import { discardLateMedia, documentHasMedia, lateMediaDiscarded } from "@/shared/document";
@@ -503,7 +502,7 @@ export function RichEditor(props: EditorEngineProps) {
         if (view.current === editor) view.current = null;
       });
     };
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- The editor mounts once with initial props.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- The editor mounts once with initial props.
   }, []);
   useEffect(() => {
     for (const media of mediaViews.current) media.updateContext();

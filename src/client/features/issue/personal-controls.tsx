@@ -17,8 +17,6 @@ import { ConfirmDialog, Dialog } from "@/client/components/dialog";
 import { TextInput, NO_AUTOFILL } from "@/client/components/field";
 import { Button, IconButton } from "@/client/components/button";
 import { createSubIssue, issueMenuEntries, type IssueMenuDialog } from "./issue-menu";
-/* oxlint-disable react/memo-dependencies -- Memo keys describe semantic invalidation; render-local adapters are intentionally excluded. */
-/* oxlint-disable react/set-state-in-effect -- Synchronize local UI state with external resources or reset it when the resource identity changes. */
 import { SubIssues } from "./sub-issues";
 import { statusOf } from "./sub-issue-model";
 import { attachmentSplit } from "./issue-attachments";

@@ -802,7 +802,7 @@ export function InboxList() {
     if (row) {
       inbox.restoreSelection(row.id);
     }
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Re-select the issue when its mirror row becomes available, or when an order that waits for the whole feed shows its rows.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- Re-select the issue when its mirror row becomes available, or when an order that waits for the whole feed shows its rows.
   }, [issueKey, rowId, known, loading]);
   useEffect(() => {
     if (!end.current || !hasNextPage || isFetchingNextPage) return;
@@ -813,7 +813,6 @@ export function InboxList() {
     );
     observer.observe(end.current);
     return () => observer.disconnect();
-    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- Reobserve the load sentinel after a page appends rows.
   }, [hasNextPage, isFetchingNextPage, pages, fetchNextPage]);
   // The selected notification's issue opens in the pane, which reads its history; j moves to the next row's, so that one's
   // history is read ahead, once the selection rests.

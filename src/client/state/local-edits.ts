@@ -43,9 +43,6 @@ const editCounts = new Map<string, number>();
 /** The last property-poll entry per issue, so an unchanged one costs nothing. */
 const lastProperties = new Map<string, string>();
 
-// --- Local edits ---
-
-/** Edits issue fields; the edited fields stay local until Jira's answer to their write. */
 export function patchIssue(key: string, patch: Partial<Issue>) {
   refusals.delete(key);
   const state = get(),
@@ -92,16 +89,12 @@ export const hasLocalJiraChanges = (key: string) =>
   [...(localFields.get(key) ?? [])].some((field) => JIRA_ISSUE_FIELDS.includes(field as never)) ||
   !!fullFields.get(key)?.size ||
   hasPendingWrite(key);
-/** "Restore Jira's version": nothing is local any more. */
 export function clearLocalEdits(key: string) {
   localFields.set(key, new Set());
   fullFields.set(key, new Set());
   needsFullRefresh.delete(key);
 }
 
-// --- Undo ---
-
-/** The issue as it is now, with which fields are local: what an undo step restores. */
 export const snapshot = (key: string): Snapshot => ({
   issue: get().issues.get(key),
   full: get().full.get(key),
@@ -497,9 +490,6 @@ export function forgetIssue(key: string) {
   refusals.delete(key);
 }
 
-// --- Saved data ---
-
-/** Starts over before the saved data loads. */
 export function resetLocalEdits() {
   changedKeys.clear();
   createdKeys.clear();

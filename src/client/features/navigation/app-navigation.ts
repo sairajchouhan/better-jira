@@ -235,7 +235,6 @@ const issueOf = (l: ParsedLocation) =>
  */
 function show(place: Place, location: ParsedLocation) {
   if (location.href !== router.latestLocation.href) return;
-  // oxlint-disable-next-line no-underscore-dangle -- TanStack History sets only `__TSR_key` on every entry (`key` is pushes only).
   const entry = location.state.__TSR_key,
     seen = !!entry && shownEntries.has(entry);
   if (entry) shownEntries.add(entry);

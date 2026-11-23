@@ -160,7 +160,7 @@ export const BoardView = memo(function BoardView({
         const near = flat[i + offset];
         if (near) loadFull(near.key);
       }
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Prefetch and draft recovery follow selection/load transitions, not render-local arrays or refreshed full issue objects.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- Prefetch and draft recovery follow selection/load transitions, not render-local arrays or refreshed full issue objects.
   }, [active, selected, visible]);
 
   const hide = (id: string) =>

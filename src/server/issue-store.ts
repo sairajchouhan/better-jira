@@ -67,11 +67,8 @@ export function issueStore(db: Database) {
     put(row: { key: string; slim: unknown; full: unknown }) {
       upsert.run({ key: row.key, slim: JSON.stringify(row.slim), full: JSON.stringify(row.full) });
     },
-    /** When Jira last changed the saved copy ("" when there is none). */
     updated: (key: string) => updatedOf.get(key)?.updated ?? "",
-    /** Every board that holds the issue, configured or not. */
     boardsOf,
-    /** How many issues the mirror has on the board. */
     count: (board: number) =>
       db.query<{ n: number }, [number]>("SELECT count(*) AS n FROM issue_boards WHERE board = ?").get(board)!.n,
     /** After a full sync of `board` that started at `since`: issues it no longer holds leave it, and one that just left its last
@@ -106,14 +103,12 @@ export function issueStore(db: Database) {
         return gone;
       })();
     },
-    /** Jira deleted the issue. */
     remove(key: string) {
       db.transaction(() => {
         db.query("DELETE FROM issue_boards WHERE key = ?").run(key);
         db.query("DELETE FROM issues WHERE key = ?").run(key);
       })();
     },
-    /** The board's issues' stored rows. */
     rowsOn: (board: number) =>
       db
         .query<{ key: string; slim: string; full: string }, [number]>(

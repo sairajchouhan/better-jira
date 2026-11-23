@@ -685,7 +685,7 @@ function Description({ issue }: { issue: Issue }) {
   const loaded = !!f;
   useEffect(() => {
     if (loaded) session.recover(stored);
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Draft recovery follows the load transition, not each refreshed description.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- Draft recovery follows the load transition, not each refreshed description.
   }, [loaded, session]);
   useEffect(() => () => session.flush(), [session]);
   return (

@@ -160,7 +160,6 @@ const server = serve({
           return Response.json({ ok: true });
         } catch (e) {
           console.error("[inbox]", String(e).slice(0, 300));
-          // No answer: the tab sends the same mark again; any answer from Jira is its refusal.
           if (e instanceof inbox.NoAnswer) return retryWriteResponse();
           return Response.json({ error: "Jira did not update the notification." }, { status: 502 });
         }
@@ -274,7 +273,6 @@ const server = serve({
           body.settle !== false,
           body.resend === true,
         );
-        // 503: an earlier send's outcome can't be told yet; the tab sends the same ops again later.
         return writeJsonResponse(result);
       }),
     },

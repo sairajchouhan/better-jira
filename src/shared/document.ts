@@ -137,17 +137,9 @@ export function adfToText(node: any, details?: (url: string) => SmartLinkDetails
   );
 }
 
-/**
- * The text a description edit started from, which the server compares with Jira's text to tell someone else's edit
- * apart (DESCRIPTION_CONFLICT). A smart link reads as its URL, the one part Jira keeps as sent: how a chip reads
- * (key, title) changes with the build and with what the mirror knows, and a base must read the same on every build
- * (#2). Never change what this returns; the server also accepts the forms older builds sent (`descriptionBases`).
- */
 export const descriptionBaseText = (node: unknown): string =>
   plainText(node, (card) => String(card.attrs?.url ?? ""));
 
-/** Every form a build so far may have sent as the base of an edit of `node`: this build's, the chip text builds since
- *  BJ-199 sent, and the URL-only inline card (with empty block cards) earlier builds sent. */
 export const descriptionBases = (node: unknown): string[] => [
   descriptionBaseText(node),
   adfToText(node),

@@ -139,7 +139,6 @@ export function ringsNow(anchor: string, hash: string, entry: string, rung: Set<
 export function useLocationAnchor() {
   const hash = useRouterState({ select: (s) => s.location.hash });
   const entry = useRouterState({
-    // oxlint-disable-next-line no-underscore-dangle -- TanStack History sets only `__TSR_key` on every entry (`key` is pushes only).
     select: (s) => s.location.state.__TSR_key ?? s.location.href,
   });
   return { hash, entry };

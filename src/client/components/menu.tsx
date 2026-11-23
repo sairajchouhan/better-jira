@@ -1,4 +1,3 @@
-/* oxlint-disable react/refs -- Rows, popups and the level's shared state are read from refs in event handlers and layout effects. */
 import { Throttler } from "@tanstack/pacer";
 import {
   createContext,
@@ -1475,7 +1474,6 @@ function OpenSubmenu({
   const placed = place !== null;
   useLayoutEffect(() => {
     if (focusOnOpen(opened, placed)) focusInside();
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- On each opening, once placed; the helper reads the popup.
   }, [opened, placed]);
   // Closing with focus inside hands it back to the parent menu.
   useEffect(() => {
@@ -1484,7 +1482,7 @@ function OpenSubmenu({
       const active = document.activeElement;
       if (!active || active === document.body || node?.contains(active)) parentInput()?.focus();
     };
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Cleanup resolves the parent menu's input when the submenu closes.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- Cleanup resolves the parent menu's input when the submenu closes.
   }, []);
   return (
     <AriaPopover

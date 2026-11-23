@@ -294,11 +294,11 @@ export function VideoPlayer({
       return () => {
         document.body.style.overflow = overflow;
         if (
-          // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Fullscreen cleanup must inspect the current connected controls after DOM changes.
+          // oxlint-disable-next-line react-hooks/exhaustive-deps -- Fullscreen cleanup must inspect the current connected controls after DOM changes.
           root.current?.contains(document.activeElement) ||
           document.activeElement === document.body
         )
-          // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Fullscreen cleanup must inspect the current connected controls after DOM changes.
+          // oxlint-disable-next-line react-hooks/exhaustive-deps -- Fullscreen cleanup must inspect the current connected controls after DOM changes.
           expand.current?.focus();
       };
     }

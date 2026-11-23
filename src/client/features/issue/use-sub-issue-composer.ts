@@ -47,7 +47,7 @@ export function useSubIssueComposer(issue: Issue, board: Board, namespace: strin
       mounted.current = false;
       removeEventListener(`late:${draftKey}`, apply);
     };
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Draft listeners retain their session; derived rows invalidate on boards rather than render-local status helpers.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- Draft listeners retain their session; derived rows invalidate on boards rather than render-local status helpers.
   }, [draftKey]);
   const late = (change: (draft: SubIssueDraft) => Partial<SubIssueDraft>) => {
     if (mounted.current) {
@@ -93,7 +93,7 @@ export function useSubIssueComposer(issue: Issue, board: Board, namespace: strin
     return () => {
       active = false;
     };
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- Draft listeners retain their session; derived rows invalidate on boards rather than render-local status helpers.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- Draft listeners retain their session; derived rows invalidate on boards rather than render-local status helpers.
   }, []);
   const form = useRef<HTMLDivElement>(null),
     titleInput = useRef<HTMLInputElement>(null);

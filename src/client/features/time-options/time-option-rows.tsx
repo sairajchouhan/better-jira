@@ -1,4 +1,3 @@
-/* oxlint-disable react/purity -- The menu's "now" is read once as it opens, as Linear computes its options when the menu opens. */
 import { loadable } from "@/client/lib/loadable";
 import { useEffect, useState } from "react";
 import { Icon } from "@/client/components/icons";

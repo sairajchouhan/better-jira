@@ -1,4 +1,3 @@
-/* oxlint-disable react/purity -- Snapshot the local minimum time on mount; validate against the current time on submit. */
 import { useState } from "react";
 import { Button } from "@/client/components/button";
 import { Field, TextInput } from "@/client/components/field";

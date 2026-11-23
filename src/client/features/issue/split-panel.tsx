@@ -11,7 +11,6 @@ function useParentWidth() {
     if (!parent) return;
     const observer = new ResizeObserver(([entry]) => setWidth(entry!.contentRect.width));
     observer.observe(parent);
-    // oxlint-disable-next-line react/set-state-in-effect -- a layout read, so the first paint already has the panel's width
     setWidth(parent.clientWidth);
     return () => observer.disconnect();
   }, []);

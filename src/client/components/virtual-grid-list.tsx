@@ -420,7 +420,7 @@ export function VirtualGridList<T>({
     resize.observe(parent);
     for (const child of parent.children) resize.observe(child);
     return () => { parent.removeEventListener("scroll", schedule); resize.disconnect(); cancelAnimationFrame(frame); scroller.current = null; };
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- `measure` reads refs only.
+    // oxlint-disable-next-line react/exhaustive-effect-dependencies -- `measure` reads refs only.
   }, []);
   // Every render re-measures before paint, against its own offsets: a layout switch, a collapse or new items never paint a
   // stale window.

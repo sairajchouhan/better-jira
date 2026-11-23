@@ -89,7 +89,7 @@ export function useRejectedComment(
       latest.current(restoreRejectedDraft(draftKey, detail.body));
       return true;
     });
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- The joined parent IDs track membership without reattaching for each new array identity.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- The joined parent IDs track membership without reattaching for each new array identity.
   }, [key, ids, draftKey]);
 }
 

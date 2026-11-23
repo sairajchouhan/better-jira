@@ -5,7 +5,6 @@ import { useSyncExternalStore } from "react";
 import { IconButton } from "@/client/components/button";
 import { FutureTimeStep } from "./future-time-step";
 /* oxlint-disable react/purity -- Display current elapsed time and retain a session reference time on mount. */
-/* oxlint-disable react/refs -- Imperative editor/menu snapshots use refs and explicitly trigger renders when their visible state changes. */
 import { useEffect, useState } from "react";
 import { nextReminder, reminderDistance } from "./reminder-display";
 import { TIME_PLACEHOLDER, TimeOptionRows } from "@/client/features/time-options/time-option-rows";

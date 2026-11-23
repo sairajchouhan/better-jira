@@ -152,7 +152,7 @@ function LoadedMedia({
           setError(reason instanceof Error ? reason.message : "Could not load attachment");
       });
     return () => abort.abort();
-    // oxlint-disable-next-line react-hooks/exhaustive-deps, react/exhaustive-effect-dependencies -- The key remounts this for a new file or retry; mirror object replacements must not refetch.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps -- The key remounts this for a new file or retry; mirror object replacements must not refetch.
   }, []);
   const file = local ?? remote,
     size = intrinsic ?? mediaDimensions(node),
