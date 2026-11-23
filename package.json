@@ -12,6 +12,7 @@
     "setup": "bun scripts/instance.ts setup",
     "lint": "oxlint --deny-warnings",
     "lint:fix": "oxlint --fix",
+    "verify:models": "bun scripts/verify-models.ts",
     "test:e2e": "playwright test",
     "test:real": "playwright test -c playwright.real.config.ts",
     "speed": "bun scripts/speed.ts",
