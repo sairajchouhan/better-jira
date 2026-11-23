@@ -1,4 +1,5 @@
-import { type Full, type Issue, type IssueDraft } from "@/shared/issue-model";
+import { getIssueField, type Full, type Issue, type IssueDraft } from "@/shared/issue-model";
+import { fetchWriteEndpoint } from "@/shared/write-transport";
 /**
  * Sending local edits to Jira. Each edit's before/after (`send`) becomes ops that the outbox (outbox.ts) sends one job
  * at a time per issue; Jira's answer gives created issues and comments their Jira ids everywhere (`currentKey`,
@@ -73,7 +74,7 @@ export const UNREACHABLE = "Can't reach the better-jira server. Retrying…";
 const writes = createOutbox(
   {
     post: (key, body) =>
-      fetch(`/api/issues/${encodeURIComponent(key)}/ops`, {
+      fetchWriteEndpoint(`/api/issues/${encodeURIComponent(key)}/ops`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
@@ -394,7 +395,9 @@ export function resumeSync(saved: LocalChange[]) {
                       ? after.issue?.resources?.filter(
                           (r) => r.kind === "document" || !r.url || !links || links.has(r.url),
                         )
-                      : (known as any)?.[field],
+                      : known
+                        ? getIssueField(known, field)
+                        : undefined,
               ]),
             );
             return [

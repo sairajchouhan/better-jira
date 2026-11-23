@@ -1,4 +1,13 @@
-import { MIRRORED_ISSUE_FIELDS, type CommentState, type Full, type Issue } from "@/shared/issue-model";
+import {
+  copyIssueField,
+  isIssueField,
+  MIRRORED_ISSUE_FIELDS,
+  pickIssueFields,
+  type CommentState,
+  type Full,
+  type Issue,
+  type IssueField,
+} from "@/shared/issue-model";
 /**
  * Issue state and optimistic edits: what the store shows is Jira's copy with this browser's edits on top.
  *
@@ -22,7 +31,7 @@ import { issuesDeletedInJira } from "./deleted-issues";
 
 const now = () => new Date().toISOString();
 /** Issue fields (`Issue`) and record fields (`Full.fields`) edited here and not yet Jira's, per issue. */
-const localFields = new Map<string, Set<string>>(),
+const localFields = new Map<string, Set<IssueField>>(),
   fullFields = new Map<string, Set<string>>();
 /** Issues edited here (saved with the local data), and issues created here that Jira hasn't keyed yet. */
 const changedKeys = new Set<string>(),
@@ -47,7 +56,7 @@ export function patchIssue(key: string, patch: Partial<Issue>) {
     if (activity !== prior) patch = { ...patch, activity: [...activity] };
     localFields.set(
       key,
-      new Set([...(localFields.get(key) ?? []), ...Object.keys(patch), "updated"]),
+      new Set([...(localFields.get(key) ?? []), ...Object.keys(patch).filter(isIssueField), "updated"]),
     );
     set({ issues: new Map(state.issues).set(key, { ...i, ...patch, updated: now() }) });
   }
@@ -374,16 +383,16 @@ export function adoptJira(
   if (!issue) return;
   if (result.full)
     result.issue.attachments = uploadedAttachments(key, result.full, issue.attachments);
-  const local = localFields.get(key) ?? new Set(),
-    fields: Record<string, unknown> = {};
+  const local = localFields.get(key) ?? new Set<IssueField>(),
+    fields: Partial<Issue> = {};
   // Status dates come from the next property poll; keep the optimistic ones until then.
   for (const field of JIRA_ISSUE_FIELDS) {
-    if (field in result.issue) fields[field] = (result.issue as any)[field];
-    else if (!["statusSince", "started"].includes(field)) fields[field] = undefined;
+    if (field in result.issue) copyIssueField(fields, result.issue, field);
+    else if (field !== "statusSince" && field !== "started") fields[field] = undefined;
     local.delete(field);
   }
   localFields.set(key, local);
-  const next: Issue = { ...issue, ...fields } as Issue;
+  const next: Issue = { ...issue, ...fields };
   // A rejected write's Activity entries go with it.
   if (result.error && issue.activity) {
     const activity = rollbackActivity(issue.activity, issue, fields, ME.id);
@@ -439,24 +448,20 @@ export function renameIssue(from: string, to: string) {
     mentions = (v: unknown) => namesKey(v, from);
   const issues = new Map<string, Issue>(),
     full = new Map<string, Full>();
-  const edited = <T>(value: T, copy: any, fields?: Set<string>, nested?: "fields"): T => {
+  const editedIssue = (value: Issue, copy: Issue | undefined, fields?: Set<IssueField>): Issue =>
+    copy && fields?.size ? { ...value, ...pickIssueFields(copy, fields) } : value;
+  const editedFull = (value: Full, copy: Full | undefined, fields?: Set<string>): Full => {
     if (!copy || !fields?.size) return value;
-    const picked = Object.fromEntries(
-      [...fields].map((f) => [f, (nested ? copy[nested] : copy)[f]]),
-    );
-    return (
-      nested
-        ? { ...value, fields: { ...(value as any).fields, ...picked } }
-        : { ...value, ...picked }
-    ) as T;
+    const picked = Object.fromEntries([...fields].map((f) => [f, copy.fields[f]]));
+    return { ...value, fields: { ...value.fields, ...picked } };
   };
   for (const [k, v] of state.issues)
     if (k !== to || !state.issues.has(from))
       issues.set(
         ids.get(k) ?? k,
-        edited(
+        editedIssue(
           mentions(v) ? renameIds(v, ids) : v,
-          k === from && state.issues.get(to),
+          k === from ? state.issues.get(to) : undefined,
           localFields.get(to),
         ),
       );
@@ -465,15 +470,18 @@ export function renameIssue(from: string, to: string) {
       full.set(
         ids.get(k) ?? k,
         k === from
-          ? edited(renameIds(v, ids), state.full.get(to), fullFields.get(to), "fields")
+          ? editedFull(renameIds(v, ids), state.full.get(to), fullFields.get(to))
           : v,
       );
-  for (const map of [localFields, fullFields] as Map<string, Set<string>>[]) {
-    const v = map.get(from);
-    if (v) {
-      map.delete(from);
-      map.set(to, new Set([...v, ...(map.get(to) ?? [])]));
-    }
+  const movedLocal = localFields.get(from);
+  if (movedLocal) {
+    localFields.delete(from);
+    localFields.set(to, new Set([...movedLocal, ...(localFields.get(to) ?? [])]));
+  }
+  const movedFull = fullFields.get(from);
+  if (movedFull) {
+    fullFields.delete(from);
+    fullFields.set(to, new Set([...movedFull, ...(fullFields.get(to) ?? [])]));
   }
   if (changedKeys.delete(from)) changedKeys.add(to);
   createdKeys.delete(from);
@@ -530,9 +538,7 @@ export function installChanges(
     else if (change.created || !inJira.has(change.key)) issues.set(change.key, change.issue);
     else {
       const base = inJira.get(change.key)!;
-      const patch = Object.fromEntries(
-        change.issueFields.map((field) => [field, (change.issue as any)[field]]),
-      );
+      const patch: Partial<Issue> = pickIssueFields(change.issue, change.issueFields);
       if (
         change.full?.fields.comment &&
         (change.fullFields.includes("comment") || change.issue.commentStates)

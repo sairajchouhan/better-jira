@@ -11,6 +11,7 @@ import { createInboxStore, type Category, type DeleteConfirmation, type Feed } f
 import type { InfiniteData } from "@tanstack/query-core";
 import { readStored, writeStored } from "@/client/state/stored-state";
 import { NoAnswer, Unreachable } from "@/client/state/jira-media";
+import { assertNever, sendWriteRequest } from "@/shared/write-transport";
 
 const storageKey = (name: string) =>
   `better-jira:inbox-${name}:v1:${get().namespace}`;
@@ -32,19 +33,28 @@ globalThis.addEventListener?.("pagehide", () => {
   leaving = true;
 });
 async function send(body: object) {
-  const res = await fetch("/api/inbox", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-    keepalive: true,
-  }).catch((cause: unknown) => {
-    if (leaving) return new Promise<never>(() => {});
-    throw new Unreachable(cause);
-  });
-  const reply = await res.json().catch(() => null);
-  if (res.status === 503 && reply?.retry) throw new NoAnswer(reply.error);
-  if (!res.ok) throw new Error(reply?.error ?? "Jira refused");
-  return reply as { groups?: string[] } | null;
+  const outcome = await sendWriteRequest<{ groups?: string[] } | null>(
+    "/api/inbox",
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      keepalive: true,
+    },
+    { fallbackError: "Jira refused", ignoreUnreachable: () => leaving },
+  );
+  switch (outcome.kind) {
+    case "ok":
+      return outcome.data;
+    case "unreachable":
+      throw new Unreachable(outcome.cause);
+    case "no_answer":
+      throw new NoAnswer(outcome.error);
+    case "refused":
+      throw new Error(outcome.error);
+    default:
+      return assertNever(outcome);
+  }
 }
 
 /** The bulk delete waiting for Linear's confirmation dialog (R3-inbox-D6); the inbox screen renders it. */

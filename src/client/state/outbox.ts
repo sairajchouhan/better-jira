@@ -1,5 +1,6 @@
 import { type Full, type Issue } from "@/shared/issue-model";
 import { DESCRIPTION_CONFLICT, mergeOps, opsFor, renameCommentIds, namesKey, renameIds, type Op, type Side } from "@/shared/jira-ops";
+import { assertNever, classifyWriteResponse } from "@/shared/write-transport";
 import { NoAnswer, Unreachable, withoutLocalMedia } from "./jira-media";
 import type { LocalChange } from "./local-data";
 
@@ -407,14 +408,26 @@ export function createOutbox(ports: OutboxPorts, events: OutboxEvents) {
         if (ops) {
           const prepared = ops;
           const response = await reach(job.key, () => post(prepared));
-          if (response.status === 503) {
-            const { error } = await response.json().catch(() => ({}));
-            later(error ?? "Jira didn't answer. The change will be sent again shortly.");
-            continue;
+          const outcome = await classifyWriteResponse<WriteResult>(
+            response,
+            `Server returned ${response.status}`,
+            "Jira didn't answer. The change will be sent again shortly.",
+          );
+          switch (outcome.kind) {
+            case "no_answer":
+              later(outcome.error);
+              continue;
+            case "unreachable":
+              throw new Unreachable(outcome.cause);
+            case "ok":
+              result = outcome.data ?? {};
+              break;
+            case "refused":
+              result = outcome.data ?? { error: outcome.error };
+              break;
+            default:
+              assertNever(outcome);
           }
-          result = await response
-            .json()
-            .catch(() => ({ error: `Server returned ${response.status}` }));
         }
         outbox.shift();
         // A create Jira refused leaves nothing for its follow-up uploads to attach to.

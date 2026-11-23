@@ -8,6 +8,7 @@ import {
   localDataName,
   mergeChanges,
   parseLocalState,
+  type LocalChange,
   type LocalState,
 } from "./local-data";
 
@@ -121,7 +122,7 @@ test("corrupt records are isolated and unknown schema versions cannot overwrite 
   expect(parseLocalState(undefined)).toEqual({ state, recovered: false, readOnly: false });
 });
 test("a drop's rank anchor survives a reload, so a replayed drop still names the card it was dropped beside", () => {
-  const dropped = {
+  const dropped: LocalChange = {
     key: issue.key,
     issue: { ...issue, rank: "c", rankAnchor: { before: "TEST-2" } },
     issueFields: ["rank", "rankAnchor"],
@@ -137,7 +138,7 @@ test("R1-D21/D22: two tabs keep saving; each keeps the other's changes to issues
   const factory = new IDBFactory(),
     one = await LocalDatabase.open("same", factory),
     two = await LocalDatabase.open("same", factory);
-  const change = (key: string, summary: string) => ({
+  const change = (key: string, summary: string): LocalChange => ({
     key,
     issue: { ...issue, key, summary },
     issueFields: ["summary"],
@@ -209,7 +210,7 @@ test("R2-issue-fields-D1: a tab's later saves keep another tab's reminders and a
 });
 test("a refused description this tab cleared stays cleared after a reload, though no other field changed", async () => {
   const database = await LocalDatabase.open("refused", new IDBFactory());
-  const change = (refused?: Pick<Full, "descriptionRejected" | "descriptionError">) => ({
+  const change = (refused?: Pick<Full, "descriptionRejected" | "descriptionError">): LocalChange => ({
     key: "A-1",
     issue: { ...issue, key: "A-1", descriptionHistory: [] },
     full: { key: "A-1", fields: { description: textToAdf("Theirs") }, ...refused },
@@ -233,7 +234,7 @@ test("R2-create-D1: a tab never writes back a create another tab already sent an
   const factory = new IDBFactory(),
     one = await LocalDatabase.open("resurrect", factory),
     two = await LocalDatabase.open("resurrect", factory);
-  const change = (key: string, tab: string) => ({
+  const change = (key: string, tab: string): LocalChange => ({
     key,
     issue: { ...issue, key },
     issueFields: ["summary"],
@@ -256,7 +257,7 @@ test("R2-create-D1: a tab never writes back a create another tab already sent an
 test("R1-D6/D7: only changes of closed tabs are claimed, and only once", async () => {
   const factory = new IDBFactory(),
     db = await LocalDatabase.open("claims", factory);
-  const change = (key: string, tab?: string) => ({
+  const change = (key: string, tab?: string): LocalChange => ({
     key,
     issue: { ...issue, key },
     issueFields: ["summary"],
@@ -292,7 +293,7 @@ test("changes another tab saved, read back to take over, point their kept files 
 });
 test("changes read back to take over keep what this tab changed since, even when its save lands after the read", async () => {
   const db = await LocalDatabase.open("takeover-merge", new IDBFactory());
-  const change = (summary: string, tab?: string) => ({
+  const change = (summary: string, tab?: string): LocalChange => ({
     key: "TEST-2",
     issue: { ...issue, key: "TEST-2", summary },
     issueFields: ["summary"],
@@ -596,7 +597,7 @@ test("R2-comments-D2: reactions made in two tabs on the same issue both survive,
   const factory = new IDBFactory(),
     one = await LocalDatabase.open("tabs", factory),
     two = await LocalDatabase.open("tabs", factory);
-  const change = (reactions: Record<string, string[]>) => ({
+  const change = (reactions: Record<string, string[]>): LocalChange => ({
     key: "KAN-1",
     issue: {
       ...issue,
@@ -702,7 +703,7 @@ test("changes saved while an issue had one board load with its boards, nothing d
 test("Blocker 2: changes saved while local only are not in a writable load's saved data, so nothing of them is sent to Jira", async () => {
   const factory = new IDBFactory(),
     account = "https://example.atlassian.net/me";
-  const played = { key: "TEST-5", issue: { ...issue, key: "TEST-5", status: "done" }, issueFields: ["status"], fullFields: [], created: false };
+  const played: LocalChange = { key: "TEST-5", issue: { ...issue, key: "TEST-5", status: "done" }, issueFields: ["status"], fullFields: [], created: false };
   const local = await LocalDatabase.open(localDataName(account, false), factory);
   await local.save({ ...emptyLocalState(), changes: [played] });
   // The same browser, now writable: its saved changes, the outbox `resumeSync` sends again, hold none of that play.

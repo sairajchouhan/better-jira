@@ -9,6 +9,7 @@ import { serverConfiguration, tripsPath } from "./server-config";
 import { fetchPreview } from "./link-preview";
 import { remoteImage } from "./remote-image";
 import { applyOps, uploadAttachment, uploadFailure } from "./jira-writes";
+import { retryWriteResponse, writeJsonResponse } from "./write-response";
 import { jira, canWrite } from "./jira";
 import * as inbox from "./notifications";
 import { jiraProblem } from "./jira-problem";
@@ -160,7 +161,7 @@ const server = serve({
         } catch (e) {
           console.error("[inbox]", String(e).slice(0, 300));
           // No answer: the tab sends the same mark again; any answer from Jira is its refusal.
-          if (e instanceof inbox.NoAnswer) return Response.json({ error: "Jira didn't answer.", retry: true }, { status: 503 });
+          if (e instanceof inbox.NoAnswer) return retryWriteResponse();
           return Response.json({ error: "Jira did not update the notification." }, { status: 502 });
         }
       }),
@@ -274,9 +275,7 @@ const server = serve({
           body.resend === true,
         );
         // 503: an earlier send's outcome can't be told yet; the tab sends the same ops again later.
-        return Response.json(result, {
-          status: result.retry ? 503 : result.error ? 422 : 200,
-        });
+        return writeJsonResponse(result);
       }),
     },
     "/api/issues/:key/attachments": {
@@ -324,8 +323,7 @@ const server = serve({
             collection: `jira-${made.issueId ?? issue.id}`,
           });
         } catch (e) {
-          const failure = uploadFailure(e);
-          return Response.json(failure, { status: failure.retry ? 503 : 422 });
+          return writeJsonResponse(uploadFailure(e));
         }
       }),
     },
