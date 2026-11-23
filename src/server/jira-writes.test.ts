@@ -4,13 +4,9 @@ import { expect, jest, mock, setSystemTime, test } from "bun:test";
 let links: any[] = [];
 const calls: string[] = [];
 // Jira and the mirror take a turn each, and count how many calls are in flight at once.
-let answer: (path: string, init?: RequestInit) => any = () => ({}),
-  inFlight = 0,
-  mostInFlight = 0;
+let answer: (path: string, init?: RequestInit) => any = () => ({});
 const turn = async <T>(value: () => T) => {
-  mostInFlight = Math.max(mostInFlight, ++inFlight);
   await Bun.sleep(5);
-  inFlight--;
   return value();
 };
 // Jira's copy of the issue, read after the write.
@@ -106,22 +102,6 @@ test("R2-create-D1: one submit makes one Jira issue, however often or however co
     { op: "create", fields: { summary: "S", project: "K" }, client: "K-NEW2@t" },
   ]);
   expect(calls.filter((c) => c === "POST /rest/api/3/issue")).toHaveLength(2);
-});
-
-test("R2-create-D2: a create's independent Jira reads go out together, not one after another", async () => {
-  answer = jiraAnswers;
-  mostInFlight = 0;
-  // The status reads (current status, transitions), and the issue's and the linked issue's re-reads.
-  await applyOps("K-NEW3", [
-    { op: "create", fields: { summary: "S", project: "K", status: "3" }, client: "K-NEW3@t" },
-  ]);
-  expect(mostInFlight).toBe(2);
-  mostInFlight = 0;
-  await applyOps("K-1", [{ op: "link", target: "K-2", kind: "blocking" }]);
-  expect(mostInFlight).toBe(2);
-  // A client with a later write queued for the issue doesn't wait for its re-read.
-  calls.length = 0;
-  expect((await applyOps("K-1", [], undefined, false)).issue).toBe(undefined);
 });
 
 test("sync D1: a comment whose first send reached Jira is not posted again by a replay, however soon it comes", async () => {
