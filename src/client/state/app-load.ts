@@ -1,5 +1,6 @@
 import { chunkReload, retryImport } from "@/client/lib/chunk-reload";
 import { type User, type Issue, type Full, type Board, type JiraOptions } from "@/shared/issue-model";
+import { assertNever, sendWriteRequest } from "@/shared/write-transport";
 /**
  * Loading the app: the account, boards, issues and saved views from the server, this account's saved local data over
  * them, then the poll, Jira sync and the window listeners. The app machine runs a load and keeps its error on
@@ -169,17 +170,30 @@ async function loadApplication() {
           return response.json();
         },
         remove: async (key, id) => {
-          const response = await fetch(`/api/issues/${encodeURIComponent(key)}/ops`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              ops: [{ op: "attachment.delete", id }],
-              // Only places an issue no board holds yet (issue-store.ts `claim`).
-              board: get().issues.get(key)?.boards[0],
-            }),
-          });
-          const result = await response.json().catch(() => ({ error: "No answer" }));
-          if (!response.ok || result.error) throw new Error(result.error);
+          const outcome = await sendWriteRequest<{ error?: string }>(
+            `/api/issues/${encodeURIComponent(key)}/ops`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                ops: [{ op: "attachment.delete", id }],
+                // Only places an issue no board holds yet (issue-store.ts `claim`).
+                board: get().issues.get(key)?.boards[0],
+              }),
+            },
+            { fallbackError: "No answer" },
+          );
+          switch (outcome.kind) {
+            case "ok":
+              if (outcome.data?.error) throw new Error(outcome.data.error);
+              return;
+            case "unreachable":
+            case "no_answer":
+            case "refused":
+              throw new Error(outcome.error);
+            default:
+              return assertNever(outcome);
+          }
         },
       }),
     );

@@ -180,7 +180,7 @@ test("a milestone from Jira's fix versions can be set and survives a reload", as
 
 test("a new issue reads back from Jira with only the fields the composer set", async ({ page, app }) => {
   await app.seed({ writable: true, createSuccess: true });
-
+  await expect(page.getByRole("grid", { name: "Todo" }).getByRole("row").first()).toBeVisible();
   await page.keyboard.press("c");
   await page.getByRole("textbox", { name: "Issue title" }).fill("Composed fixture issue");
   await page.getByRole("button", { name: "Create issue" }).click();
