@@ -1,0 +1,144 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
+/*
+ * The box has no padding (Linear's `jY.content`); each slot carries its own, as Linear's dialogs do. A dialog that pads
+ * differently in Linear (Customize sidebar's 24px `rX`) overrides a slot with utilities, as Linear passes `sx`.
+ */
+@layer components {
+  /* The backdrop: bgModalOverlay over the whole window (Linear's side panel dims with its `g_` backdrop, bgModalOverlay at
+     opacity .95). `.ui-modal` lays the box out by placement; it never transforms, so fixed menus inside stay anchored. */
+  .ui-modal-overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 50;
+    background: var(--modal-overlay);
+  }
+  .ui-modal-overlay[data-placement="side"] {
+    background: color-mix(in srgb, var(--modal-overlay) 95%, transparent);
+  }
+  .ui-modal {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    outline: none;
+  }
+  .ui-modal-box {
+    outline: none;
+  }
+  /* `top`: 12vh down, centred, at most 80vh tall and 12px inside the window's sides. */
+  [data-placement="top"] > .ui-modal {
+    padding: 12vh 12px 0;
+  }
+  [data-placement="top"] .ui-modal-box {
+    flex: none;
+    max-height: 80vh;
+  }
+  /* `third`: Linear's DialogPresenter (`uo.show`, styles `jY`): spacers growing 1 and 2 above and below put the box a third of
+     the free height down, 16px inside the window at the least. */
+  [data-placement="third"] > .ui-modal {
+    padding: 0 16px;
+  }
+  [data-placement="third"] .ui-modal-box {
+    flex: 0 1 auto;
+    max-height: calc(100% - 32px);
+  }
+  .ui-modal-spacer-above,
+  .ui-modal-spacer-below {
+    flex: 1 1 0;
+    min-height: 16px;
+  }
+  .ui-modal-spacer-below {
+    flex-grow: 2;
+  }
+  /* `side`: Linear's keyboard-shortcuts panel (HelpCenter): 360px wide, 12px inside the window's top, right and bottom. */
+  [data-placement="side"] .ui-modal-box {
+    position: absolute;
+    top: 12px;
+    right: 12px;
+    bottom: 12px;
+    width: min(360px, calc(100% - 24px));
+  }
+
+  /* Linear's Modal compound (startup-root.CnUSfl4j.js `qF`/`JF`/`YF`, styles `XF`). The header (`modalHeaderContainer`):
+     a 16px row with 48px on the right for the Close button, which sits 16px in, centred (`closeIconButton`). */
+  .ui-dialog-header {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 16px 48px 16px 16px;
+    line-height: 1.2;
+  }
+  .ui-dialog-header > .ui-dialog-close {
+    position: absolute;
+    top: 50%;
+    right: 16px;
+    transform: translateY(-50%);
+  }
+  /* qF's title: Text regularPlus in labelBase. */
+  .ui-dialog-title {
+    margin: 0;
+    color: var(--fg-2);
+    font-size: 15px;
+    font-weight: 600;
+    line-height: 1.4375rem;
+  }
+  /* `modalContent`: 12px 16px. */
+  .ui-dialog-body {
+    padding: 12px 16px;
+  }
+  /* `modalFooter`: at least 55px, 12px 16px, never shrinking; actions right-aligned 8px apart. */
+  .ui-dialog-footer {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    box-sizing: border-box;
+    min-height: 55px;
+    padding: 12px 16px;
+  }
+
+  /* Linear's confirmation (ConfirmationDialog.72izii5E.js, styles `b`, regular padding): a column with 20px under it; the
+     title 24px in and 24px down with 2px under it; the body 4px 24px; the buttons 16px 24px 4px, 8px apart, at the end, or
+     split when a reject button leads (`buttonRowSpaceBetween`). */
+  .ui-confirm {
+    display: flex;
+    flex-direction: column;
+    width: 100%;
+    min-height: 0;
+    padding-bottom: 20px;
+  }
+  .ui-confirm-title {
+    flex-shrink: 0;
+    margin-bottom: 2px;
+    padding: 24px 24px 0;
+    pointer-events: none;
+  }
+  .ui-confirm-body {
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+    padding: 4px 24px;
+    overflow-y: auto;
+  }
+  .ui-confirm-footer {
+    display: flex;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 16px 24px 4px;
+  }
+  .ui-confirm-footer[data-variant="split"] {
+    justify-content: space-between;
+  }
+  .ui-confirm-actions {
+    display: flex;
+    gap: 8px;
+  }
+}

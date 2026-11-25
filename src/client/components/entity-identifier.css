@@ -1,0 +1,13 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
+@layer components {
+  /* Xxt.entityIdentifier: inline-block, nowrap, Inter's tabular figures, capital spacing and contextual alternates,
+     −.02em tracking (−0.24px at 12px, −0.26px at 13px). */
+  .ui-entity-id {
+    display: inline-block;
+    white-space: nowrap;
+    font-feature-settings: "tnum", "cpsp", "calt";
+    letter-spacing: -0.02em;
+  }
+}

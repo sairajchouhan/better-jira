@@ -1,0 +1,140 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
+@layer components {
+  /* EmptyState `r` (EmptyState.Dw0r4kIJ.js): fills its parent, centres its content, 3px padding, scrolls when short. */
+  .ui-empty-state {
+    display: flex;
+    flex: 1 1 auto;
+    align-items: center;
+    justify-content: center;
+    overflow-y: auto;
+    padding: 3px;
+  }
+  /* ViewEmptyState `x` / `S` (ViewEmptyState.DLTlzQ6O.js): 340px column, 24px between icon, text and actions. */
+  .ui-empty-state-body {
+    display: flex;
+    flex-direction: column;
+    gap: 24px;
+    max-width: 340px;
+  }
+  .ui-empty-state-text {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  /* Text "small" labelMuted, wrap pretty, S.paragraph line-height 1.4. */
+  .ui-empty-state-paragraphs {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    color: var(--fg-3);
+    font-size: 13px;
+    font-weight: 450;
+    line-height: 1.4;
+    text-wrap: pretty;
+  }
+  .ui-empty-state-paragraphs > p {
+    margin: 0;
+  }
+  .ui-empty-state-actions {
+    display: flex;
+    gap: 8px;
+  }
+  @media (max-height: 500px) {
+    .ui-empty-state-body {
+      flex-direction: row;
+    }
+  }
+  /* Linear's document fallback `Jjn` (Yjn.loadingContainer): a flex column, 24px above and below, at least 190px. */
+  .ui-document-loading {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 190px;
+    padding-block: 24px;
+    padding-inline: 0;
+  }
+  /* `Gjn`: fades in after 250ms (react-spring from opacity 0, default spring, about 300ms). */
+  .ui-skeleton-lines {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    animation: ui-skeleton-in 300ms ease-out 250ms both;
+  }
+  /* `Kjn` (qjn.mask): 18px bar, 9px apart, 2px left of the text edge, 12px radius, labelFaint at 20%, pulsing every 2.6s. */
+  .ui-skeleton-line {
+    display: flex;
+    flex: none;
+    height: 18px;
+    margin-bottom: 9px;
+    margin-left: -2px;
+    border-radius: 12px;
+    background-color: color-mix(in lch, var(--fg-4) 20%, transparent);
+    animation: ui-skeleton-pulse 2.6s infinite;
+  }
+  /* The pulse only; the delayed fade still keeps a quick load from flashing the bars. */
+  @media (prefers-reduced-motion: reduce) {
+    .ui-skeleton-line {
+      animation: none;
+    }
+  }
+  /* Linear's loader caret (`KI.loaderCaret` + `positionedLoaderCaretNoPadding`): 8×16, 2px radius, labelBase, absolute at
+     14px from the top and 0 from the left, hidden until its delay ends, then `sx-69pro1-B` every 1s. */
+  .ui-loading-caret {
+    position: absolute;
+    top: 14px;
+    left: 0;
+    width: 8px;
+    height: 16px;
+    border-radius: 2px;
+    background-color: var(--fg-2);
+    opacity: 0;
+    animation: ui-loading-caret-blink 1s cubic-bezier(0.25, 0.46, 0.45, 0.94) var(--ui-loading-caret-delay, 1000ms) infinite;
+  }
+  /* Linear's `.suspenseFadeIn`: what a SuspenseObserver held fades in over 80ms once its fallback had shown. */
+  .ui-suspense-fade-in {
+    animation: 80ms ui-suspense-fade-in;
+  }
+}
+
+/* Linear's `sx-69pro1-B`. */
+@keyframes ui-loading-caret-blink {
+  0%,
+  40%,
+  to {
+    opacity: 1;
+  }
+  50%,
+  90% {
+    opacity: 0.2;
+  }
+}
+@keyframes ui-suspense-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes ui-skeleton-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* Linear's `sx-tut5q7-B`. */
+@keyframes ui-skeleton-pulse {
+  0% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+  to {
+    opacity: 1;
+  }
+}

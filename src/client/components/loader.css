@@ -1,0 +1,66 @@
+@layer properties, theme, base, components, utilities;
+
+@layer components {
+  /* Linear's GridLoaderIcon (`Fv`, `.gli` in startup-root): crisp dot-matrix frame strip stepped with CSS. */
+  .ui-gli {
+    display: inline-block;
+    flex-shrink: 0;
+    overflow: hidden;
+    vertical-align: middle;
+  }
+
+  .ui-gli-strip {
+    will-change: transform;
+    animation-name: ui-gli-shift;
+    animation-iteration-count: infinite;
+    animation-fill-mode: both;
+  }
+
+  /* Linear's Skeleton (`vk` / `nct` in startup-root): subtle rounded block with a 3s shimmer sweep (`sx-1hcuzsw-B`). */
+  .ui-skeleton {
+    position: relative;
+    overflow: hidden;
+    border-radius: 4px;
+    background-color: color-mix(in lch, var(--fg-4) 14%, transparent);
+  }
+
+  .ui-skeleton::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    transform: translateX(-100%);
+    background-image: linear-gradient(
+      90deg,
+      transparent 0%,
+      color-mix(in lch, var(--fg-4) 22%, transparent) 50%,
+      transparent 100%
+    );
+    animation: ui-skeleton-shimmer 3s infinite;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .ui-gli-strip {
+      animation: none !important;
+    }
+    .ui-skeleton::after {
+      animation: none;
+      display: none;
+    }
+  }
+}
+
+@keyframes ui-gli-shift {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(var(--ui-gli-shift));
+  }
+}
+
+/* Linear's `sx-1hcuzsw-B`. */
+@keyframes ui-skeleton-shimmer {
+  to {
+    transform: translateX(100%);
+  }
+}

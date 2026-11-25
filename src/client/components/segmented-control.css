@@ -1,0 +1,75 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
+@layer components {
+  /* J4 list: a pill track, controlTertiarySelected in light and controlTertiary in dark. */
+  .ui-segmented {
+    position: relative;
+    isolation: isolate;
+    display: flex;
+    align-items: center;
+    border-radius: 9999px;
+    background: var(--tab-on);
+  }
+  .ui-segmented[data-width="full"] {
+    width: 100%;
+  }
+  /* $Tr.trigger + eEr sizes (the Button table). */
+  .ui-segment {
+    position: relative;
+    z-index: 1;
+    display: inline-flex;
+    flex: 1 0 auto;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    min-width: 32px;
+    padding: 0 12px;
+    border-radius: 9999px;
+    color: var(--fg-3);
+    font-size: 13px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  .ui-segment:not([data-selected]):is([data-hovered], [data-pressed]):not([data-disabled]) {
+    color: var(--fg-2);
+  }
+  /* The selected segment wears $Tr.indicator: the opposite tertiary fill plus J4.List's ring, `0 0 0 thinPixel
+     elevated.bgBorderThin, elevated.shadowLow` (the elevated shadowLow equals the base one at these contrasts). */
+  .ui-segment[data-selected] {
+    background: var(--tab);
+    box-shadow: 0 0 0 var(--thin-pixel) var(--elevated-border-thin), var(--frame-shadow);
+    color: var(--fg-2);
+  }
+  .ui-segment[data-disabled] {
+    pointer-events: none;
+    opacity: 0.6;
+  }
+  .ui-segmented[data-size="small"] .ui-segment {
+    height: 24px;
+    min-width: 24px;
+    padding: 0 8px;
+    font-size: 12px;
+  }
+  .ui-segmented[data-size="medium"] .ui-segment {
+    height: 28px;
+    min-width: 28px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+  .ui-segmented[data-size="large"] .ui-segment {
+    height: 44px;
+    padding: 0 18px;
+  }
+}
+
+@media (prefers-color-scheme: dark) {
+  @layer components {
+    .ui-segmented {
+      background: var(--tab);
+    }
+    .ui-segment[data-selected] {
+      background: var(--tab-on);
+    }
+  }
+}

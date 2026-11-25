@@ -1,0 +1,162 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
+@layer components {
+  /* Zke trigger: _y.base + lAe sizes. A controlSecondary field (hover controlSecondaryHover), radius 8, labelBase text
+     (labelMuted while showing the placeholder), its ring an ::after of bgBorderAlphaThin + shadowLow, bgBorderSolidAlphaThin
+     on hover. Default size: 30px, 13px text, padding 10 / 28, 1px block margin. */
+  .ui-select {
+    position: relative;
+    box-sizing: border-box;
+    display: flex;
+    align-items: center;
+    max-width: 100%;
+    height: 30px;
+    margin-block: 1px;
+    padding: 0 28px 0 10px;
+    overflow: visible;
+    border: var(--thin-pixel) solid transparent;
+    border-radius: 8px;
+    background: var(--btn);
+    background-clip: padding-box;
+    box-shadow: none;
+    color: var(--fg-2);
+    font-size: 13px;
+    user-select: none;
+    transition-property: background-color, border, color;
+    transition-duration: 0.15s;
+  }
+  .ui-select::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    box-shadow: 0 0 0 var(--thin-pixel) var(--border-alpha-thin), var(--frame-shadow);
+    pointer-events: none;
+    user-select: none;
+    transition: box-shadow 0.15s;
+  }
+  .ui-select:is(:hover, :active):not(:disabled) {
+    background-color: var(--control-secondary-hover);
+    transition-duration: 0s;
+  }
+  .ui-select:is(:hover, :active):not(:disabled)::after {
+    box-shadow: 0 0 0 var(--thin-pixel) var(--border-solid-alpha-thin), var(--frame-shadow);
+    transition-duration: 0s;
+  }
+  .ui-select[aria-expanded="true"] {
+    outline: none;
+  }
+  .ui-select:disabled {
+    opacity: 0.5;
+  }
+  .ui-select-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+    margin-right: 6px;
+  }
+  .ui-select-value {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ui-select-value[data-placeholder] {
+    color: var(--fg-3);
+  }
+  /* py: a 10px-wide column 10px from the right (6px on small and compact), labelMuted. */
+  .ui-select-caret {
+    position: absolute;
+    top: 0;
+    right: 10px;
+    width: 10px;
+    height: 100%;
+    fill: var(--fg-3);
+  }
+  .ui-select:is([data-size="small"], [data-size="compact"]) .ui-select-caret {
+    right: 6px;
+  }
+  .ui-select[data-size="large"] {
+    height: 44px;
+  }
+  .ui-select[data-size="medium"] {
+    height: 26px;
+    font-size: 12px;
+  }
+  .ui-select[data-size="small"] {
+    height: 24px;
+    padding-right: 24px;
+    font-size: 12px;
+  }
+  .ui-select[data-size="compact"] {
+    height: 22px;
+    padding: 0 18px 0 8px;
+    font-size: 12px;
+  }
+}
+
+/* Unlayered, as the shared menu rows in index.css are, so these win over them. */
+/* gy's popup: a thinPixel bgBorderSolidThin ring over shadowMedium instead of the menu border, one elevation above
+   the surface it opened from (menu-surface.tsx). */
+[data-surface="select"] {
+  border-color: transparent;
+  box-shadow: 0 0 0 var(--thin-pixel) var(--border-solid-thin), var(--menu-shadow);
+}
+/* gy's listbox and items ($ke, dAe + fAe by the trigger's size): 400 labelBase, 0 35 0 12 padding; the highlight (the
+   focused row) is controlSecondaryHover inset 0 4px (radius 8); the chosen row's 16px check sits 8px from the right in
+   labelMuted. Rows are 32px at 13px by default, 44 large, 30 medium, 24 small and compact at 12px (live: a medium select's
+   rows in Linear's recurrence form are 30px; Display options' compact ones 24px). The row's name, icon and check reuse the
+   menu's label column (index.css). */
+.ui-select-list {
+  --row: 32px;
+  overflow-y: auto;
+  padding: 6px 0;
+  scroll-padding-block: 6px;
+  font-size: 13px;
+  outline: none;
+}
+.ui-select-list[data-size="large"] {
+  --row: 44px;
+}
+.ui-select-list:is([data-size="medium"], [data-size="small"], [data-size="compact"]) {
+  --row: 24px;
+  font-size: 12px;
+}
+.ui-select-list[data-size="medium"] {
+  --row: 30px;
+}
+.ui-select-option {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  height: var(--row);
+  flex-shrink: 0;
+  align-items: center;
+  padding: 0 35px 0 12px;
+  white-space: nowrap;
+  color: var(--menu-fg);
+  cursor: default;
+  outline: none;
+  user-select: none;
+}
+.ui-select-option::before {
+  content: "";
+  position: absolute;
+  inset: 0 4px;
+  z-index: -1;
+  border-radius: 8px;
+}
+.ui-select-option[data-focused]::before {
+  background: var(--control-secondary-hover);
+}
+.ui-select-option[data-focused] {
+  color: var(--fg);
+}
+.ui-select-option .menu-name {
+  font-weight: 400;
+}
+.ui-select-option .menu-checkmark {
+  position: absolute;
+  right: 8px;
+  color: var(--fg-3);
+}

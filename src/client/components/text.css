@@ -1,0 +1,40 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
+@layer components {
+  /* _4 / d4: Linear's Text, default variant "regular" in labelTitle. */
+  .ui-text {
+    margin: 0;
+    color: var(--fg);
+    font-size: var(--font-size-regular);
+    font-weight: var(--font-weight-normal);
+    font-style: normal;
+    line-height: 1.4375rem;
+  }
+  .ui-text[data-variant="micro"] { font-size: var(--font-size-micro); font-weight: var(--font-weight-normal); line-height: normal; }
+  .ui-text[data-variant="microPlus"] { font-size: var(--font-size-micro); font-weight: var(--font-weight-medium); line-height: normal; }
+  .ui-text[data-variant="mini"] { font-size: var(--font-size-mini); font-weight: var(--font-weight-normal); line-height: normal; }
+  .ui-text[data-variant="miniPlus"] { font-size: var(--font-size-mini); font-weight: var(--font-weight-medium); line-height: normal; }
+  .ui-text[data-variant="small"] { font-size: var(--font-size-small); font-weight: var(--font-weight-normal); line-height: normal; }
+  .ui-text[data-variant="smallPlus"] { font-size: var(--font-size-small); font-weight: var(--font-weight-medium); line-height: normal; }
+  .ui-text[data-variant="regularPlus"] { font-weight: var(--font-weight-semibold); }
+  .ui-text[data-variant="large"] { font-size: var(--font-size-large); font-weight: var(--font-weight-normal); line-height: normal; }
+  .ui-text[data-variant="largePlus"] { font-size: var(--font-size-large); font-weight: var(--font-weight-medium); line-height: normal; }
+  .ui-text[data-variant="title1"] { font-size: var(--font-size-title1); font-weight: var(--font-weight-normal); line-height: 2.875rem; }
+  .ui-text[data-variant="title2"] { font-size: var(--font-size-title2); font-weight: var(--font-weight-medium); line-height: 2rem; letter-spacing: -0.01rem; }
+  .ui-text[data-variant="title3"] { font-size: var(--font-size-title3); font-weight: var(--font-weight-medium); line-height: normal; letter-spacing: -0.01rem; }
+
+  .ui-text[data-color="base"] { color: var(--fg-2); }
+  .ui-text[data-color="muted"] { color: var(--fg-3); }
+  .ui-text[data-color="faint"] { color: var(--fg-4); }
+  .ui-text[data-color="inherit"] { color: inherit; }
+
+  .ui-text[data-align="center"] { text-align: center; }
+  .ui-text[data-align="right"] { text-align: right; }
+  .ui-text[data-wrap="nowrap"] { white-space: nowrap; }
+  .ui-text[data-wrap="truncate"] { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ui-text[data-wrap="pretty"] { text-wrap: pretty; }
+  /* truncateMultiline: Linear's -webkit-box clamp, `--lines` lines long. */
+  .ui-text[data-lines] { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: var(--lines); overflow: hidden; overflow-wrap: anywhere; }
+  .ui-text[data-numeric="tabular"] { font-variant-numeric: tabular-nums; }
+}

@@ -1,0 +1,16 @@
+diff --git a/dist/esm/router.js b/dist/esm/router.js
+index a31886020d1dfff3c10ee27fea6ae781e6211f9a..b5a9e43b8a5c142424270ebb471017107e4c5e3b 100644
+--- a/dist/esm/router.js
++++ b/dist/esm/router.js
+@@ -835,7 +835,10 @@ async function documentNavigation(router, href, { replace, ignoreBlocker }) {
+ * dedicated to HMR.
+ */
+ if (process.env.NODE_ENV !== "production") {
+-	RouterCore.prototype._replaceRouteChunk = replaceRouteChunk;
++	// Called through a wrapper: Bun's dev bundler leaves this circular import null while router.js loads.
++	RouterCore.prototype._replaceRouteChunk = function(route, lazyFn) {
++		return replaceRouteChunk(route, lazyFn);
++	};
+ 	RouterCore.prototype._refreshRoute = async function() {
+ 		this._serverResult = void 0;
+ 		this.updateLatestLocation();

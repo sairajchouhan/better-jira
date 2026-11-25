@@ -1,0 +1,57 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
+@layer components {
+  /* Idi's container (`Rdi.container`, startup-root): at most half the viewport, clipping what it holds. It is the box the
+     owner places (Idi's `sx`/`style`); the search form inside stays `position: relative` for its glyph and button.
+     ContentViewHeaderInlineSearch and the priority inbox both pass `animate`: it comes in from 8px up over 150ms,
+     easeOut (initial {opacity: 0, y: -8}). */
+  .ui-find {
+    max-width: 50vw;
+    overflow: hidden;
+    animation: ui-find-in 0.15s ease-out;
+  }
+  /* FindField.Presence: closing, it leaves the way it came (`rh` exit {opacity: 0, y: -8}, 150ms easeOut), then unmounts. */
+  .ui-find[data-leaving] {
+    animation: ui-find-out 0.15s ease-out forwards;
+    pointer-events: none;
+  }
+  /* Adi's search input at its default appearance (`R7.input` + `jdi.default`): 28px, 32px in for the glyph, 25px kept
+     for the trailing button, a medium weight and a labelMuted placeholder, over the surface it floats on
+     (inputBackground is the theme's bgBase). */
+  .ui-find .ui-input {
+    height: 28px;
+    padding-right: 25px;
+    padding-left: 32px;
+    background: var(--panel);
+    font-weight: 500;
+    transition: border-color 0.15s;
+  }
+  .ui-find .ui-input::placeholder {
+    color: var(--fg-3);
+  }
+  .ui-find .ui-input::-webkit-search-cancel-button {
+    display: none;
+  }
+}
+
+@keyframes ui-find-in {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes ui-find-out {
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ui-find,
+  .ui-find[data-leaving] {
+    animation: none;
+  }
+}

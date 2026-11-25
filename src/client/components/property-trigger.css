@@ -1,0 +1,65 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
+@layer components {
+  /* DetailButton `k.detailButton` (DetailButton.B6DQogHG.js) on Nv.base + buttonReset. */
+  .ui-property-trigger {
+    position: relative;
+    display: inline-flex;
+    flex-shrink: 1;
+    align-items: center;
+    justify-content: flex-start;
+    column-gap: 6px;
+    height: 28px;
+    min-width: 0;
+    max-width: 100%;
+    padding: 0 10px 0 6px;
+    border: 0;
+    border-radius: 9999px;
+    background: transparent;
+    box-shadow: none;
+    color: var(--fg-2);
+    font-size: 13px;
+    font-weight: 500;
+    text-align: left;
+  }
+  /* a.moreHitArea(4, 4, 4, 8) */
+  .ui-property-trigger::before {
+    content: "";
+    position: absolute;
+    inset: -4px -4px -4px -8px;
+  }
+  .ui-property-trigger:is(:hover, [aria-expanded="true"], [data-menu-open="true"]) {
+    background: var(--crumb-hover);
+  }
+  .ui-property-trigger:is(:active, :focus-visible) {
+    background: var(--tab-on);
+  }
+  .ui-property-trigger[data-state="empty"] {
+    color: var(--fg-3);
+  }
+  .ui-property-trigger:disabled {
+    opacity: 0.6;
+  }
+  .ui-property-trigger svg {
+    flex-shrink: 0;
+  }
+  .ui-property-trigger-icon {
+    display: grid;
+    flex-shrink: 0;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+  }
+  .ui-property-trigger-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ui-property-trigger-trailing {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+  }
+}

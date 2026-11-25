@@ -1,0 +1,44 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
+
+/* Linear's r3t body and footer (startup-root.CnUSfl4j.js). */
+@layer components {
+  /* GF: 12px 16px 0. */
+  .ui-due-body {
+    padding: 12px 16px 0;
+  }
+  /* The field: a column 8px apart, 16px above the calendar. */
+  .ui-due-field {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    margin-bottom: 16px;
+  }
+  .ui-due-label {
+    display: flex;
+    align-items: baseline;
+    gap: 4px;
+  }
+  .ui-due-status:empty,
+  .ui-due-status:has(> :empty) {
+    display: none;
+  }
+  /* QF size phone: no calendar, and no dash before the hint, on phones. */
+  @media (max-width: 640px) {
+    .ui-due-calendar,
+    .ui-due-dash {
+      display: none;
+    }
+  }
+  /* YF align center: Remove due date leads, Cancel and Save due date at the end, 6px apart. */
+  .ui-due-footer {
+    align-items: center;
+  }
+  .ui-due-actions {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+  }
+}

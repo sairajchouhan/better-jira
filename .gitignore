@@ -1,0 +1,23 @@
+.env
+.env.*
+credentials.env
+!.env.example
+cache.db*
+cache-*.db*
+.better-jira.local.json
+instances/
+.raj/
+node_modules
+dist
+
+
+# Track this project's agent config (the global gitignore ignores AGENTS.md, CLAUDE.md, .claude/)
+!/AGENTS.md
+!/CLAUDE.md
+!/.agents/
+!/.claude/
+/.claude/settings.local.json
+!/.claude/**/AGENTS.md
+test-results
+test-results-real
+playwright-report

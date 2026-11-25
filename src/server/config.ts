@@ -1,0 +1,151 @@
+import { JIRA_MESSAGES } from "@/shared/jira-trips";
+
+export type JiraAuth = { site: string; email: string; token: string };
+export type Configuration = JiraAuth & {
+  boards: number[];
+  /** The boards setup names (JIRA_BOARDS or saved `boards`); the rest of `boards` were added in the app and may be removed. */
+  setupBoards: number[];
+  port: number;
+};
+export type LocalSettings = {
+  site?: string;
+  boards?: number[];
+  port?: number;
+  /** Boards added from the app, by site origin: a union over JIRA_BOARDS or `boards`, never shared with another site. */
+  addedBoards?: Record<string, number[]>;
+  /** Boards removed from the sidebar in the app, by site origin: hides even a board listed in JIRA_BOARDS. */
+  removedBoards?: Record<string, number[]>;
+  /** Setup's answer to "send your edits to Jira?", for `site` only: another site never inherits it (jira.ts `canWrite`). */
+  writes?: boolean;
+};
+type Environment = Record<string, string | undefined>;
+
+export function siteURL(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error("JIRA_URL must be a complete https URL.");
+  }
+  if (
+    url.protocol !== "https:" ||
+    url.username ||
+    url.password ||
+    url.search ||
+    url.hash ||
+    url.pathname !== "/"
+  )
+    throw new Error(
+      "JIRA_URL must be an https site origin without credentials, path, query, or fragment.",
+    );
+  return url.origin;
+}
+export function boardIDs(value: string | number[]): number[] {
+  const parts = typeof value === "string" ? value.split(",").map((v) => v.trim()) : value;
+  if (
+    !parts.length ||
+    parts.some((v) => !/^\d+$/.test(String(v)) || !Number.isSafeInteger(Number(v)) || Number(v) < 1)
+  )
+    throw new Error("JIRA_BOARDS must contain positive board IDs separated by commas.");
+  return [...new Set(parts.map(Number))];
+}
+export function jiraAuth(env: Environment, local: LocalSettings = {}): JiraAuth {
+  const site = env.JIRA_URL || local.site,
+    email = env.JIRA_EMAIL,
+    token = env.JIRA_TOKEN;
+  if (!site || !email?.trim() || !token?.trim())
+    throw new Error(
+      "Jira setup is incomplete. Run bun run setup <name>, or set JIRA_URL, JIRA_EMAIL, JIRA_TOKEN, and JIRA_BOARDS in the instance's .env.",
+    );
+  return { site: siteURL(site), email: email.trim(), token: token.trim() };
+}
+export function configuration(env: Environment, local: LocalSettings = {}): Configuration {
+  // Saved boards and port belong to the saved site; another site in env must not reuse them.
+  const auth = jiraAuth(env, local),
+    own = !local.site || siteURL(local.site) === auth.site ? local : {};
+  const setupBoards = env.JIRA_BOARDS ? boardIDs(env.JIRA_BOARDS) : (own.boards ?? []);
+  const removed = new Set(local.removedBoards?.[auth.site] ?? []);
+  const combined = [...setupBoards, ...(local.addedBoards?.[auth.site] ?? [])].filter((b) => !removed.has(b));
+  if (!combined.length)
+    throw new Error(
+      "No Jira boards are chosen yet. Run bun run setup <name> to pick your boards, or set JIRA_BOARDS in the instance's .env.",
+    );
+  const boards = boardIDs(combined),
+    port = Number(env.PORT || own.port || 3000);
+  if (!Number.isSafeInteger(port) || port < 1 || port > 65535)
+    throw new Error("PORT must be between 1 and 65535.");
+  return { ...auth, boards, setupBoards, port };
+}
+/** The settings with `board` added for `site` alone (and cleared from `removedBoards` if it had been removed earlier). */
+export const withAddedBoard = (
+  local: LocalSettings,
+  site: string,
+  board: number,
+): LocalSettings => {
+  const remainingRemoved = (local.removedBoards?.[site] ?? []).filter((b) => b !== board);
+  return {
+    ...local,
+    addedBoards: {
+      ...local.addedBoards,
+      [site]: [...new Set([...(local.addedBoards?.[site] ?? []), board])],
+    },
+    ...(local.removedBoards
+      ? { removedBoards: { ...local.removedBoards, [site]: remainingRemoved } }
+      : {}),
+  };
+};
+/** The settings with `board` removed from `site`'s sidebar (whether added in the app, saved in `boards`, or listed in `JIRA_BOARDS`). */
+export const withoutAddedBoard = (
+  local: LocalSettings,
+  site: string,
+  board: number,
+): LocalSettings => {
+  const sameSite = Boolean(local.site) && (() => {
+    try {
+      return siteURL(local.site!) === site;
+    } catch {
+      return false;
+    }
+  })();
+  return {
+    ...local,
+    ...(sameSite && local.boards ? { boards: local.boards.filter((b) => b !== board) } : {}),
+    addedBoards: {
+      ...local.addedBoards,
+      [site]: (local.addedBoards?.[site] ?? []).filter((b) => b !== board),
+    },
+    removedBoards: {
+      ...local.removedBoards,
+      [site]: [...new Set([...(local.removedBoards?.[site] ?? []), board])],
+    },
+  };
+};
+/** A board ID from what the user pasted: a bare ID, or a board link on `site` (…/boards/12, RapidBoard.jspa?rapidView=12). */
+export function boardFromInput(input: string, site: string): number {
+  const text = input.trim();
+  let id = text;
+  if (!/^\d+$/.test(text)) {
+    let url: URL;
+    try {
+      url = new URL(text);
+    } catch {
+      throw new Error("Paste a Jira board link or a board ID.");
+    }
+    if (url.origin !== site)
+      throw new Error(
+        `That board is on ${url.host}, but better-jira is connected to ${new URL(site).host}.`,
+      );
+    id =
+      url.pathname.match(/\/boards\/(\d+)(?:\/|$)/)?.[1] ?? url.searchParams.get("rapidView") ?? "";
+  }
+  const board = Number(id);
+  if (!/^\d+$/.test(id) || !Number.isSafeInteger(board) || board < 1)
+    throw new Error(`That link isn't a Jira board. ${JIRA_MESSAGES["board-address"].phrase}`);
+  return board;
+}
+
+/** A board configuration's `location` as the board's project (Jira names its fields `key`/`name`, or `projectKey`/`projectName`). */
+export function boardProject(location: any): { key: string; name: string } | null {
+  const key = location?.type === "project" ? (location.key ?? location.projectKey) : undefined;
+  return typeof key === "string" ? { key, name: String(location.name ?? location.projectName ?? key) } : null;
+}

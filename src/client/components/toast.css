@@ -1,0 +1,141 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
+@layer components {
+  /* ToastPresenter `V`/`Y`: 384px wide (never wider than the window less 32px), 24px from the right and bottom, 8px apart. */
+  .ui-toast-viewport {
+    position: fixed;
+    right: 24px;
+    bottom: 24px;
+    /* ToastPresenter uses Wte.toast = 580 (startup-entry.Dt5YDWdY.js).
+       Media overlays occupy the local 1000/1001 range; lift the shared toast layer above that base. */
+    --toast-layer: 580;
+    --toast-overlay-base: 1000;
+    z-index: calc(var(--toast-overlay-base) + var(--toast-layer));
+    display: flex;
+    /* Newest first in the DOM, as sonner prepends each toast, and drawn nearest the corner. */
+    flex-direction: column-reverse;
+    gap: 8px;
+    width: 384px;
+    max-width: calc(100vw - 32px);
+    margin: 0;
+    padding: 0;
+    list-style: none;
+    pointer-events: none;
+    /* ⌥T focuses the region itself (tabindex -1); the toast that takes focus next shows the ring. */
+    outline: none;
+  }
+  /* React Aria's Toast: a focusable alertdialog around the card. */
+  .ui-toast-entry {
+    outline: none;
+  }
+  .ui-toast-entry[data-focus-visible] > .ui-toast {
+    outline: 1px solid var(--accent);
+    outline-offset: 2px;
+  }
+  @media (max-width: 640px) {
+    .ui-toast-viewport {
+      right: 16px;
+      bottom: 16px;
+    }
+  }
+  /* The toast card as the "View created" toast measures it (view-editor.css): menu surface, radius 10, 13px/18px. */
+  .ui-toast {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    align-items: start;
+    column-gap: 9px;
+    row-gap: 4px;
+    padding: 13px 16px 13px 14px;
+    border: var(--thin-pixel) solid var(--menu-line);
+    border-radius: 10px;
+    background: var(--menu);
+    box-shadow: var(--menu-shadow);
+    color: var(--fg);
+    font-size: 13px;
+    line-height: 18px;
+    pointer-events: auto;
+  }
+  /* With an image, the title is image + 9px + text, and the lines under it start under the text (14 + 9 = 23px). */
+  .ui-toast-title:has(> .ui-toast-icon) {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+  }
+  .ui-toast-icon {
+    display: grid;
+    flex: none;
+    place-items: center;
+    width: 14px;
+    height: 14px;
+    color: var(--fg-2);
+  }
+  .ui-toast-check {
+    border-radius: 50%;
+    background: #4cb782;
+    color: #fff;
+  }
+  .ui-toast:has(> .ui-toast-title > .ui-toast-icon)
+    > :is(.ui-toast-description, .ui-toast-subject, .ui-toast-actions) {
+    padding-left: 23px;
+  }
+  /* Toast `W[error]` in `styles.icon`: a 16px round box, the text 8px after it (the row's gap). */
+  .ui-toast-title:has(> .ui-toast-error) {
+    gap: 8px;
+  }
+  .ui-toast-error {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    color: var(--red-base);
+  }
+  .ui-toast-error > svg {
+    fill: currentColor;
+  }
+  .ui-toast:has(> .ui-toast-title > .ui-toast-error)
+    > :is(.ui-toast-description, .ui-toast-subject, .ui-toast-actions) {
+    padding-left: 24px;
+  }
+  .ui-toast-subject {
+    grid-column: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    min-width: 0;
+    color: var(--fg-2);
+  }
+  .ui-toast-subject > :last-child {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ui-toast-description {
+    grid-column: 1;
+    color: var(--fg-3);
+    font-size: 12px;
+  }
+  .ui-toast-actions {
+    grid-column: 1;
+    display: flex;
+    gap: 12px;
+    margin-top: 5px;
+  }
+  .ui-toast-action {
+    color: var(--accent);
+  }
+  .ui-toast-action:hover {
+    text-decoration: underline;
+  }
+  .ui-toast-close {
+    grid-row: 1;
+    grid-column: 2;
+    display: grid;
+    place-items: center;
+    width: 16px;
+    height: 16px;
+    color: var(--fg-3);
+  }
+  .ui-toast-close:hover {
+    color: var(--fg);
+  }
+}

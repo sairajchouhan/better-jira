@@ -1,0 +1,106 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
+@layer components {
+  /* ry / oy / Fke: Linear's text input, 32px with 6px 12px padding and an 8px radius. */
+  .ui-input {
+    box-sizing: border-box;
+    width: 100%;
+    height: 32px;
+    padding: 6px 12px;
+    border: var(--thin-pixel) solid var(--border-solid-thin);
+    border-radius: 8px;
+    /* inputBackground is the current theme's bgBase, which is the surface the input sits on (page or menu), so transparent. */
+    background: transparent;
+    color: var(--fg);
+    font: inherit;
+    font-size: 13px;
+    font-feature-settings: "calt" 0;
+    outline-offset: -1px;
+    appearance: none;
+    transition: border 0.15s;
+  }
+  .ui-input::placeholder {
+    color: var(--fg-4);
+  }
+  .ui-input:disabled {
+    color: var(--fg-3);
+  }
+  /* oy.inputBorderHover + borderHoverColor(highlightVariant(bgBorderSolid)) */
+  .ui-input:is(:hover, :active):not(:disabled) {
+    border-color: var(--border-solid-highlight);
+    transition-duration: 0s;
+  }
+  .ui-input:focus-visible {
+    outline: 1px solid var(--accent);
+  }
+  .ui-input[data-size="small"] {
+    height: 26px;
+    font-size: 12px;
+  }
+  .ui-input[data-size="medium"] {
+    height: 28px;
+    font-size: 12px;
+  }
+  .ui-input:is([data-size="large"], [data-size="xlarge"]) {
+    height: 44px;
+    padding: 12px;
+    border-radius: 10px;
+  }
+  .ui-input[data-size="xlarge"] {
+    height: 48px;
+  }
+
+  /* AutoResizingTextarea: the textarea and a hidden copy of its text share one grid cell, so the copy sets the height.
+     Where `field-sizing: content` exists the browser sizes the textarea itself and the copy is dropped. */
+  .ui-autosize {
+    display: grid;
+  }
+  .ui-autosize > .ui-input {
+    grid-area: 1 / 1;
+    height: auto;
+    min-height: 3lh;
+    max-height: 30lh;
+    overflow-y: auto;
+    scroll-padding-block: 0.5lh;
+    white-space: pre-wrap;
+    overflow-wrap: break-word;
+    line-height: 1.5;
+    resize: none;
+  }
+  .ui-autosize > .ui-input:is([data-size="small"], [data-size="medium"]) {
+    line-height: 1.4;
+  }
+  .ui-autosize > .ui-input:is([data-size="large"], [data-size="xlarge"]) {
+    border-radius: 6px;
+  }
+  /* Title appearance: Linear's 24px/32px heading, shared by issue and document titles. */
+  .ui-autosize[data-appearance="heading"] > .ui-input {
+    min-height: 1lh;
+    max-height: none;
+    overflow: hidden;
+    padding: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    font-size: 24px;
+    font-weight: 600;
+    line-height: 32px;
+    letter-spacing: -0.16px;
+    font-variation-settings: "opsz" 32;
+    outline: none;
+  }
+  .ui-autosize-sizer {
+    visibility: hidden;
+    overflow: hidden;
+    transition: none;
+  }
+  @supports (field-sizing: content) {
+    .ui-autosize > textarea {
+      field-sizing: content;
+    }
+    .ui-autosize-sizer {
+      display: none;
+    }
+  }
+}

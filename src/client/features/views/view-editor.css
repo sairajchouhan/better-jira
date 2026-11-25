@@ -1,0 +1,223 @@
+.view-editor {
+  /* Linear's measured editor text colours (light; dark below). */
+  --view-name: lch(10 0 282);
+  --view-placeholder: lch(66 1 282);
+  --view-icon-fill: lch(78.2 3.6 260.7 / 0.125);
+  padding: 40px 24px 12px;
+  color: var(--fg);
+  border-bottom: 1px solid var(--line-2);
+}
+.view-editor-heading {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.view-editor input:not([type="color"]) {
+  background: transparent;
+  border: 0;
+  outline: none;
+  border-radius: 8px;
+  padding: 6px;
+  min-width: 0;
+}
+.view-name {
+  flex: 1;
+  color: var(--view-name);
+  height: 24px;
+  font-size: 15px;
+  font-weight: 500;
+}
+/* Lines up with the name: icon button (28px) + heading gap (6px). Filled text is full contrast; only the placeholder is dimmed. */
+.view-description {
+  display: block;
+  margin: 8px 0 8px 34px;
+  width: calc(100% - 34px);
+  height: 32px;
+  font-size: 13px;
+  color: var(--view-name);
+}
+.view-name::placeholder,
+.view-description::placeholder {
+  color: var(--view-placeholder);
+}
+.view-icon-button {
+  flex-shrink: 0;
+  width: 28px;
+  height: 28px;
+  display: grid;
+  place-items: center;
+  border-radius: 4px;
+  background: var(--view-icon-fill);
+}
+.view-icon-button:hover {
+  background: var(--control-tertiary-hover);
+}
+@media (prefers-color-scheme: dark) {
+  .view-editor {
+    --view-name: lch(100 0 272);
+    --view-placeholder: lch(39.5 1.425 272);
+    --view-icon-fill: lch(78.2 3.6 260.7 / 0.175);
+  }
+}
+/* Keep the existing toolbar live, positioned beneath the editor metadata. */
+header:has(.view-editor) {
+  position: relative;
+}
+header:has(.view-editor) > div:nth-child(2) > .ml-auto {
+  position: absolute;
+  right: 44px;
+  bottom: 20px;
+  z-index: 1;
+}
+header:has(.view-editor) > div:nth-child(2) > button:last-child {
+  position: absolute;
+  right: 12px;
+  bottom: 20px;
+  z-index: 1;
+}
+header:has(.view-editor) .view-editor {
+  margin: 0 8px 8px;
+  padding: 12px 16px 52px;
+  border: 0.5px solid var(--line-2);
+  border-radius: 10px;
+  background: var(--card);
+}
+/* Edit mode: the base-filter row is the editor card's last section, with no Clear/Save of its own (Linear's
+   editor Cancel/Save are the only save controls). */
+header:has(.view-editor) .ui-filter-actions {
+  display: none;
+}
+header:has(.view-editor):has(.ui-filter-bar) .view-editor {
+  margin-bottom: 0;
+  padding-bottom: 12px;
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+}
+header:has(.view-editor) .ui-filter-bar {
+  min-height: 40px;
+  margin: 0 8px 8px;
+  padding: 8px 96px 8px 16px;
+  border: 0.5px solid var(--line-2);
+  border-radius: 0 0 10px 10px;
+  background: var(--card);
+  box-shadow: none;
+}
+header:has(.view-editor):has(.ui-filter-bar) > div:nth-child(2) > .ml-auto,
+header:has(.view-editor):has(.ui-filter-bar) > div:nth-child(2) > button:last-child {
+  bottom: 14px;
+}
+
+/* Icon picker (Linear: 410px; tabs, colour row, search, 14 × 28px categories). */
+.view-icon-picker {
+  width: 410px;
+  max-width: calc(100vw - 24px);
+  font-size: 13px;
+}
+.view-icon-tabs {
+  display: flex;
+  height: 36px;
+  padding: 0 4px;
+  border-bottom: 0.5px solid var(--line-2);
+}
+.view-icon-tabs button {
+  padding: 0 10px;
+  color: var(--fg-3);
+  font-weight: 500;
+  border-bottom: 2px solid transparent;
+}
+.view-icon-tabs [aria-pressed="true"] {
+  color: var(--fg);
+  border-bottom-color: var(--accent);
+}
+.view-color-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 12px 16px 16px;
+  border-bottom: 0.5px solid var(--line-2);
+}
+.view-color-row button,
+.view-custom-color {
+  position: relative;
+  display: grid;
+  place-items: center;
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  color: lch(0 0 0 / 0.7);
+  cursor: pointer;
+}
+.view-color-row button:focus-visible,
+.view-custom-color:focus-within {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+.view-color-divider {
+  flex-shrink: 0;
+  width: 1px;
+  height: 20px;
+  background: var(--line-2);
+}
+.view-custom-color {
+  background: conic-gradient(#eb5757, #f2c94c, #4cb782, #26b5ce, #5e6ad2, #d77ba9, #eb5757);
+}
+.view-custom-color input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+}
+.view-icon-search {
+  width: 100%;
+  height: 40px;
+  padding: 0 14px;
+  border-bottom: 0.5px solid var(--line-2);
+  background: transparent;
+  outline: none;
+}
+.view-icon-search::placeholder {
+  color: var(--fg-3);
+}
+.view-icon-list {
+  max-height: 284px;
+  overflow-y: auto;
+  padding: 8px 8px 12px;
+}
+.view-icon-list section {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, 28px);
+}
+.view-icon-list header {
+  grid-column: 1 / -1;
+  padding: 8px 6px 4px;
+  color: var(--fg-3);
+  font-size: 12px;
+  font-weight: 500;
+}
+.view-icon {
+  display: grid;
+  place-items: center;
+  height: 28px;
+  border-radius: 6px;
+  color: var(--fg-3);
+  font-size: 18px;
+  cursor: pointer;
+  outline: none;
+}
+.view-icon.is-current {
+  color: var(--fg);
+}
+.view-icon[data-focused],
+.view-icon[data-hovered] {
+  background: var(--menu-sel);
+  color: var(--fg);
+}
+.view-icon-empty {
+  padding: 8px 6px;
+  color: var(--fg-3);
+}
+
+/* The "View created" toast's check badge; the name and action line up after it. */

@@ -1,0 +1,40 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
+@layer components {
+  /* `N9` outside a panel: a column, the content header strip, then the message filling the rest. */
+  .ui-not-found {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+  }
+  /* `renderContentHeader`: Linear's empty page header, the 44px every page header takes (PAGE_HEADER). */
+  .ui-not-found-header {
+    flex: none;
+    height: 44px;
+  }
+  /* `abi.container` (sx-5yr21d height 100%), grow 1, centred, 20px between image and text. */
+  .ui-not-found-body {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 20px;
+    height: 100%;
+  }
+  /* Title and message, 8px apart, centred. */
+  .ui-not-found-text {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+  }
+  /* `abi.body`: max-width 500px, line-height 1.5, centred, balanced lines. Outranks Text's small variant line height. */
+  .ui-not-found-text > .ui-text.ui-not-found-message {
+    max-width: 500px;
+    line-height: 1.5;
+    text-wrap: balance;
+  }
+}

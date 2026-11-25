@@ -1,0 +1,107 @@
+/* Linear's resize handle (`V_.handle` + `L_` track/indicator, startup-root.CnUSfl4j.js). */
+.resize-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: col-resize;
+  z-index: 91; /* handleZIndexDetailsPane */
+}
+/* trackY: a thinPixel line down the middle in bgBorderSolidThin, faded over its first and last 10%. */
+.resize-track {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: calc(50% - 0.5px);
+  width: var(--thin-pixel);
+  overflow: hidden;
+  background-color: var(--border-solid-thin);
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.25s 0s;
+  -webkit-mask-image: linear-gradient(#0000 0%, #000 10% 90%, #0000 100%);
+  mask-image: linear-gradient(#0000 0%, #000 10% 90%, #0000 100%);
+}
+.resize-handle:active .resize-track,
+.resize-handle[data-dragging] .resize-track {
+  opacity: 1;
+  transition-delay: 0.1s;
+}
+.resize-handle[data-dragging] .resize-track {
+  transition-delay: 0s;
+}
+@media (any-hover: hover) and (any-pointer: fine) {
+  .resize-handle:hover .resize-track {
+    opacity: 1;
+    transition-delay: 0.1s;
+  }
+}
+/* indicatorY: twice the track's height, centred on the pointer, solid over its middle and eased out to both ends.
+   Its colour is bgBorderSolidAlphaThin with alpha .95 (light) or .15 (dark). */
+.resize-indicator {
+  position: absolute;
+  top: -50%;
+  left: 0;
+  right: 0;
+  height: 200%;
+  background-color: lch(0% 0 0 / 0.95);
+  --resize-indicator-mask: linear-gradient(
+    #0000 5%,
+    #0000001a 11.4125%,
+    #0003 17.15%,
+    #0000004d 22.2125%,
+    #0006 26.6%,
+    #00000080 30.3125%,
+    #0009 33.35%,
+    #000000b3 35.7125%,
+    #000c 37.4%,
+    #000000e6 38.4125%,
+    #000 38.75% 61.25%,
+    #000000e6 61.5875%,
+    #000c 62.6%,
+    #000000b3 64.2875%,
+    #0009 66.65%,
+    #00000080 69.6875%,
+    #0006 73.4%,
+    #0000004d 77.7875%,
+    #0003 82.85%,
+    #0000001a 88.5875%,
+    #0000 95%
+  );
+  -webkit-mask-image: var(--resize-indicator-mask);
+  mask-image: var(--resize-indicator-mask);
+}
+@media (prefers-color-scheme: dark) {
+  .resize-indicator {
+    background-color: lch(100% 0 0 / 0.15);
+  }
+}
+/* V_.tooltip: a column, 4px apart, 4px radius; the app's tooltip surface places it (resize-handle.tsx). Its anchor spans the
+   handle at the pointer's height. */
+.resize-tooltip.app-tooltip {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 4px;
+  border-radius: 4px;
+  white-space: nowrap;
+}
+.resize-tooltip-anchor {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 0;
+  pointer-events: none;
+}
+/* The drag layer (`x_` portal): over everything, so iframes and hovers never take the pointer mid-drag. */
+.resize-drag-layer {
+  position: fixed;
+  inset: 0;
+  z-index: 1101;
+}
+/* I_.colResizeCursor + I_.disableTextSelection on body while dragging. */
+body.resize-dragging {
+  cursor: col-resize !important;
+  -webkit-user-select: none !important;
+  user-select: none !important;
+}

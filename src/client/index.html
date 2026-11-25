@@ -1,0 +1,42 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>better-jira</title>
+    <!-- Linear preloads its upright Inter file so text paints in Inter on the first frame (index.css @font-face). -->
+    <link rel="preload" href="./assets/fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin />
+
+    <link rel="icon" href="./assets/notch/favicon.ico" sizes="48x48" />
+    <link rel="icon" href="./assets/notch/favicon.svg" type="image/svg+xml" />
+    <link rel="apple-touch-icon" href="./assets/notch/apple-touch-icon.png" />
+    <meta name="theme-color" content="#FFFFFF" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0B0B0E" media="(prefers-color-scheme: dark)" />
+    <!-- Linear's head script reads its splashScreenConfig before first paint so the boot shell's sidebar column matches the
+         app. Ours: the sidebar is 244px or hidden (better-jira:sidebar, browser-preferences.ts), so the shell drops it. -->
+    <script>
+      try {
+        if (localStorage.getItem("better-jira:sidebar") === "hidden") document.documentElement.classList.add("sidebar-hidden");
+      } catch {}
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- Linear's boot shell (its index.html #loading): the sidebar column, the framed main panel and a grey logo that
+         fades in after 1s, painted before any script. boot-shell.ts fades it out once the app has painted. Styles in
+         index.css (#loading). -->
+    <div id="loading" aria-hidden="true">
+      <div id="loading-panel"></div>
+      <div id="loading-content">
+        <div id="loading-mark">
+          <svg id="loading-logo" width="32" height="32" viewBox="0 0 16 16" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8 1A7 7 0 1 0 15 8H8Z" />
+            <rect x="10" y="1" width="5" height="5" rx="1.25" />
+          </svg>
+        </div>
+        <div id="loading-text">Loading…</div>
+      </div>
+    </div>
+    <script type="module" src="./main.tsx"></script>
+  </body>
+</html>

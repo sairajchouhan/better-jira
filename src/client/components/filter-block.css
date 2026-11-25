@@ -1,0 +1,154 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
+@layer components {
+  /* Linear's filter bar (ContentViewHeaderFilterPanel `G`/`K`): a 10px-padded card, 0.5px bgBorderFaint, 8px radius, blocks left
+     and the side (Clear/Save) right; the card sits in a 0 8px 8px wrapper directly under the toolbar. */
+  .ui-filter-bar {
+    /* The theme's tokens (index.css, control-tokens.css), so the bar follows light, dark and elevated surfaces: the panel's
+       bgBaseHover and bgBorderFaint; FilterBlockStyles' bgBorderAlphaThin border, controlSecondary sections, controlSecondaryHover
+       and bgBorderSolidThin divider. */
+    --filter-card-bg: var(--row-hover);
+    --filter-card-border: var(--border-faint-thin);
+    --chip-border: var(--border-alpha-thin);
+    --chip-bg: var(--btn);
+    --chip-hover: var(--control-secondary-hover);
+    --chip-divider: var(--border-solid-thin);
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    flex-shrink: 0;
+    margin: 0 8px 8px;
+    padding: 10px;
+    border: 0.5px solid var(--filter-card-border);
+    border-radius: 8px;
+    background: var(--filter-card-bg);
+    font-size: 12px;
+  }
+  .ui-filter-blocks {
+    display: flex;
+    flex: auto;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 4px;
+    max-width: 100%;
+    min-width: 0;
+  }
+  /* FilterBlock: FilterButtonContainer (min-height 24, radius 8, clip) around FilterButton (0.5px border, 24px). */
+  .ui-filter-block {
+    display: flex;
+    align-items: stretch;
+    flex-shrink: 1;
+    box-sizing: border-box;
+    max-width: 100%;
+    height: 24px;
+    border: 0.5px solid var(--chip-border);
+    border-radius: 8px;
+    overflow: hidden;
+    font-size: 12px;
+    line-height: 18px;
+    font-weight: 400;
+  }
+  /* FilterBlockStyles section: 0 6px, gap 4, labelBase on bgBase, 0.5px divider; outer corners 7.5px. */
+  .ui-filter-segment {
+    display: flex;
+    align-items: center;
+    align-content: center;
+    justify-content: center;
+    gap: 4px;
+    min-width: 0;
+    padding: 0 6px;
+    background: var(--chip-bg);
+    color: var(--fg-2);
+    font-size: 12px;
+    --icon-replacement-color: var(--fg-3);
+  }
+  .ui-filter-segment:first-child {
+    border-radius: 7.5px 0 0 7.5px;
+  }
+  .ui-filter-segment:last-child {
+    border-radius: 0 7.5px 7.5px 0;
+  }
+  .ui-filter-segment:not(:last-child) {
+    border-right: 0.5px solid var(--chip-divider);
+  }
+  .ui-filter-segment > span {
+    max-width: 150px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .ui-filter-segment svg {
+    width: 12px !important;
+    height: 12px !important;
+  }
+  button.ui-filter-segment:hover,
+  button.ui-filter-segment:active,
+  button.ui-filter-segment[aria-expanded="true"] {
+    background: var(--chip-hover);
+    --icon-replacement-color: var(--fg-2);
+  }
+  button.ui-filter-segment:focus-visible {
+    z-index: 10;
+    outline-offset: -1px;
+  }
+  .ui-filter-operator {
+    flex-grow: 0;
+    color: var(--fg-3);
+  }
+  .ui-filter-operator:hover {
+    color: var(--fg-2);
+  }
+  .ui-filter-remove {
+    flex-shrink: 0;
+    color: var(--icon-replacement-color);
+  }
+  /* imageForValues: up to three 14px icons, each overlapping the next by a quarter. */
+  .ui-filter-icons {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+  }
+  /* Each slot is Linear's 14px Ik; a user avatar is pj "micro" (14px). */
+  .ui-filter-icons > * {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    max-height: 14px;
+  }
+  .ui-filter-icons > * > * {
+    width: 14px !important;
+    height: 14px !important;
+  }
+  .ui-filter-icons > :not(:last-child) {
+    max-width: 14px;
+    margin-right: -3.5px;
+  }
+  /* Linear's read-only block (`tooltipSectionReadOnly`, `openSectionReadOnly`): plain text, the default cursor, no hover. */
+  .ui-filter-block[data-read-only] {
+    cursor: default;
+  }
+  /* `appearance: "tooltip"` (FilterBlockStyles `sectionTooltip`, `buttonTooltip`; a view card's filters, `Y8n`): the bar's chip
+     look on the card's own surface, so it takes the same tokens outside a bar. Its micro text is Linear's
+     `round(up, .6875rem, 2px)`, 12px live, as the chip already is; a section may shrink. Live, the card's chips draw no value
+     icons. */
+  .ui-filter-blocks[data-appearance="tooltip"] {
+    --chip-border: var(--border-alpha-thin);
+    --chip-bg: var(--btn);
+    --chip-hover: var(--control-secondary-hover);
+    --chip-divider: var(--border-solid-thin);
+  }
+  .ui-filter-blocks[data-appearance="tooltip"] .ui-filter-segment,
+  .ui-filter-blocks[data-appearance="tooltip"] .ui-filter-block {
+    min-width: 0;
+  }
+  .ui-filter-blocks[data-appearance="tooltip"] .ui-filter-icons {
+    display: none;
+  }
+  .ui-filter-actions {
+    display: flex;
+    align-items: center;
+    align-self: center;
+    margin-left: 20px;
+  }
+}

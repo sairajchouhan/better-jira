@@ -1,0 +1,82 @@
+{
+  "name": "better-jira",
+  "version": "0.1.0",
+  "description": "A fast, Linear-inspired local UI for Jira Cloud Kanban boards.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/sairajchouhan/better-jira.git"
+  },
+  "homepage": "https://github.com/sairajchouhan/better-jira#readme",
+  "bugs": {
+    "url": "https://github.com/sairajchouhan/better-jira/issues"
+  },
+  "keywords": [
+    "jira",
+    "kanban",
+    "linear",
+    "local-first",
+    "bun",
+    "react"
+  ],
+  "type": "module",
+  "scripts": {
+    "dev": "bun scripts/instance.ts dev",
+    "start": "bun scripts/instance.ts start",
+    "build:server": "bun scripts/build-server.ts",
+    "build:binary": "bun scripts/build-binary.ts",
+    "build": "bun run build.ts",
+    "typecheck": "bun check",
+    "setup": "bun scripts/instance.ts setup",
+    "lint": "oxlint --deny-warnings --report-unused-disable-directives",
+    "lint:fix": "oxlint --fix",
+    "verify:models": "bun scripts/verify-models.ts",
+    "test:e2e": "playwright test",
+    "test:real": "playwright test -c playwright.real.config.ts",
+    "speed": "bun scripts/speed.ts",
+    "scan:documents": "bun scripts/scan-documents.ts",
+    "trips": "bun scripts/trips.ts"
+  },
+  "dependencies": {
+    "@internationalized/date": "3.12.4",
+    "@tanstack/pacer": "0.23.1",
+    "@tanstack/query-core": "5.107.1",
+    "@tanstack/react-hotkeys": "^0.22.0",
+    "@tanstack/react-router": "1.170.46",
+    "bun-plugin-tailwind": "^0.1.2",
+    "chrono-node": "^2.10.3",
+    "lowlight": "^3.3.0",
+    "marked": "^18.2.0",
+    "prosemirror-commands": "^1.7.2",
+    "prosemirror-history": "^1.5.1",
+    "prosemirror-inputrules": "^1.5.1",
+    "prosemirror-keymap": "^1.2.3",
+    "prosemirror-model": "^1.25.12",
+    "prosemirror-schema-list": "^1.6.0",
+    "prosemirror-state": "^1.4.4",
+    "prosemirror-tables": "^1.8.5",
+    "prosemirror-transform": "^1.12.5",
+    "prosemirror-view": "^1.42.9",
+    "react": "^19",
+    "react-aria-components": "^1.22.1",
+    "react-dom": "^19",
+    "tailwindcss": "^4.1.11",
+    "xstate": "^5.33.3"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.65.0",
+    "@tanstack/react-router-devtools": "1.167.3",
+    "@types/bun": "latest",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "fake-indexeddb": "^6.2.7",
+    "oxlint": "1.92.0",
+    "skills": "^1.9.0"
+  },
+  "peerDependencies": {
+    "typescript": "^7"
+  },
+  "patchedDependencies": {
+    "@tanstack/router-core@1.171.39": "patches/@tanstack%2Frouter-core@1.171.39.patch"
+  }
+}

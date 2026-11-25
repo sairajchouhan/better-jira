@@ -1,0 +1,691 @@
+import { type Board, type Issue, type User } from "@/shared/issue-model";
+import { lazy, memo, Suspense, use, useEffect, useState } from "react";
+import { useStableCallback } from "@/client/lib/stable-callback";
+import { useBoardIssues } from "@/client/state/board-issues";
+import { Avatar } from "@/client/components/avatar";
+import { Icon, PriorityIcon, StatusIcon, TypeDot, hue } from "@/client/components/icons";
+import {
+  assigneeGroups,
+  listsOtherPeople,
+  labelSections,
+  priorityChoices,
+  milestoneChoices,
+  statuses,
+} from "@/shared/board-catalog";
+import { useStore, ME, issueBoardId, issueBoard } from "@/client/state/store";
+import { personKeywords, rowKeywords } from "@/client/lib/fuzzy-score";
+import { hotkeyOf } from "@/client/features/navigation/shortcuts";
+import { LoadingState } from "@/client/components/empty-state";
+import { kept, useCommand } from "@/client/features/navigation/commands";
+import { DUE_DIALOG, duePresets, shortDate } from "@/client/lib/due-date";
+import { Dialog } from "@/client/components/dialog";
+import { loadable } from "@/client/lib/loadable";
+const dueDialog = loadable("due-date-dialog", () => import("./date-input").then((m) => ({ default: m.DueDateDialog })), 100);
+const DueDateDialog = lazy(dueDialog.load);
+/** The due menu's parser (chrono, its one heavy import), fetched by the idle walk so the first Shift+D doesn't pay for
+ *  chrono (R3-issue-fields-D7), and kept once loaded so a later menu has it on its first render. */
+const dueParserChunk = loadable("due-parser", () => import("@/client/lib/due-parse").then((m) => m.parseDueDate), 100);
+export const loadDueParser = dueParserChunk.load;
+import type { ReactNode } from "react";
+import { Menu } from "@/client/components/menu";
+import { LIMIT_HEIGHT } from "@/client/components/menu-geometry";
+import { MenuSurface, MenuSurfaceContext } from "@/client/components/menu-surface";
+import { CheckRow } from "@/client/components/action-menu";
+import { actions } from "@/client/state/issue-actions";
+import { epicChoices } from "@/shared/epics";
+import { CommandMenu, useCommandTarget } from "@/client/components/command-menu";
+
+/** Linear's property menu (RAJ-52 status, priority, assignee and labels): 208px wide beside the open issue's property button, a 36px
+ *  filter with the key that opens it at its right, rows 6px below. Inside a `CommandTarget` (a shortcut over a card or row) the same
+ *  menu is Linear's command menu on that issue instead (ISSUE-11). With an empty filter, a row's number key picks it, as in Linear.
+ *  Every picker searches with Linear's one action score (menuFilter); a row's `keywords` say what it is found by. */
+export function PropertyMenu({
+  label,
+  placeholder,
+  hotkey,
+  anchor,
+  close,
+  current,
+  query,
+  onQuery,
+  side,
+  onKeyDown,
+  children,
+}: {
+  label: string;
+  placeholder: string;
+  /** The registry chord that opens this menu, drawn at the input's right. */
+  hotkey?: string | readonly string[];
+  anchor: HTMLElement | null;
+  close: () => void;
+  current?: string;
+  query?: string;
+  onQuery?: (value: string) => void;
+  side?: "left";
+  onKeyDown?: (event: React.KeyboardEvent<HTMLDivElement>) => void;
+  children: ReactNode;
+}) {
+  const target = useCommandTarget();
+  const menu = (
+    <Menu
+      defaultValue={current}
+      search={query}
+      onSearchChange={onQuery}
+      width={target ? "auto" : 206}
+      onKeyDown={onKeyDown}
+    >
+      <Menu.Input
+        autoFocus
+        placeholder={placeholder}
+        aria-label={placeholder}
+        hotkey={target ? undefined : hotkey}
+      />
+      <Menu.List maxHeight={LIMIT_HEIGHT}>
+        <Menu.Empty>No results</Menu.Empty>
+        {children}
+      </Menu.List>
+    </Menu>
+  );
+  return target ? (
+    <CommandMenu label={label} issue={target} close={close}>
+      {menu}
+    </CommandMenu>
+  ) : (
+    <MenuSurface label={label} anchor={anchor} close={close} fit gap={4.5} side={side}>
+      {menu}
+    </MenuSurface>
+  );
+}
+
+/** One choice: its icon, name, a check when it is the current value, and its number key. */
+export function PickerRow({
+  value,
+  icon,
+  current,
+  number,
+  hint = number,
+  keywords,
+  onSelect,
+  children,
+}: {
+  value: string;
+  icon?: ReactNode;
+  current?: boolean;
+  number?: number;
+  /** Trailing text; the number key by default. */
+  hint?: ReactNode;
+  /** What the row is searched by instead of its value: its name, then `rowKeywords` or personKeywords (menuFilter). */
+  keywords?: string[];
+  onSelect: () => void;
+  children: ReactNode;
+}) {
+  return (
+    <Menu.Item
+      value={value}
+      keywords={keywords}
+      data-number={number}
+      icon={icon}
+      checked={current}
+      hint={hint}
+      onSelect={onSelect}
+    >
+      {children}
+    </Menu.Item>
+  );
+}
+
+export type FieldMenuProps<T> = {
+  anchor: HTMLElement | null;
+  board: Board | undefined;
+  value: T;
+  onChange: (value: T) => void;
+  close: () => void;
+};
+function useCatalog(board: Board | undefined) {
+  // The board's issues, shared and kept until they change: not filtered again on every keystroke in a picker's search.
+  const issues = useBoardIssues(board?.id);
+  const options = useStore((s) => s.options);
+  const writable = useStore((s) => s.writable);
+  return { issues, options, writable };
+}
+export function StatusMenu({ anchor, board, value, onChange, close }: FieldMenuProps<string>) {
+  return (
+    <PropertyMenu
+      label="Change status"
+      placeholder="Change status…"
+      hotkey="S"
+      anchor={anchor}
+      close={close}
+      current={statuses(board).find((s) => s.id === value)?.name}
+    >
+      {statuses(board).map((s, i) => (
+        <PickerRow
+          key={s.id}
+          value={s.name}
+          // Linear's status rows have no keywords; their place in the workflow orders the names a query starts (PCn).
+          keywords={[s.name, ...rowKeywords({ order: i })]}
+          icon={<StatusIcon status={s} />}
+          current={value === s.id}
+          number={i < 9 ? i + 1 : undefined}
+          onSelect={() => {
+            onChange(s.id);
+            close();
+          }}
+        >
+          {s.name}
+        </PickerRow>
+      ))}
+    </PropertyMenu>
+  );
+}
+/**
+ * The assignee rows (Linear's `Qun`), built by `assigneeGroups`: No assignee (0) and you (1), the current assignee, then
+ * "Suggested", "Team members" and, once the search has two characters, "Users from other spaces". Rows rank by Linear's people
+ * score (personKeywords), so "me" lifts you to the top. One component for the A picker and Issue options › Assignee.
+ */
+export function AssigneeRows({
+  board,
+  value,
+  suggested,
+  query,
+  onPick,
+}: {
+  board: number | undefined;
+  value: User | null;
+  suggested?: readonly User[];
+  query: string;
+  onPick: (user: User | null) => void;
+}) {
+  const issues = useStore((s) => s.issues);
+  const jiraUsers = useStore((s) => s.options.users);
+  // Groups are fixed as the menu opens, so picking the current assignee never moves a row under the pointer.
+  const [groups] = useState(() =>
+    assigneeGroups({ me: ME, current: value, suggested, jiraUsers, issues: issues.values(), board }),
+  );
+  const row = (user: User | null, team = false) => (
+    <PickerRow
+      key={user?.id ?? "none"}
+      value={user ? assigneeValue(user) : "No assignee"}
+      keywords={user ? personKeywords(user.name, { me: user.id === ME.id, team }) : undefined}
+      icon={<Avatar user={user} size={16} />}
+      current={(value?.id ?? null) === (user?.id ?? null)}
+      // Linear binds only 0 (No assignee) and 1 (you).
+      number={!user ? 0 : user.id === ME.id ? 1 : undefined}
+      onSelect={() => onPick(user)}
+    >
+      {user ? user.name : "No assignee"}
+    </PickerRow>
+  );
+  return (
+    <>
+      <Menu.Group>{groups.assigned.map((u) => row(u))}</Menu.Group>
+      {groups.suggested.length > 0 && <Menu.Group heading="Suggested">{groups.suggested.map((u) => row(u))}</Menu.Group>}
+      {groups.team.length > 0 && (
+        <Menu.Group heading={groups.teamHeading}>{groups.team.map((u) => row(u, board !== undefined))}</Menu.Group>
+      )}
+      {listsOtherPeople(query) && groups.others.length > 0 && (
+        <Menu.Group heading="Users from other spaces">{groups.others.map((u) => row(u))}</Menu.Group>
+      )}
+    </>
+  );
+}
+/** A person row's menu value: unique by account id, while the row is searched by its name alone (personKeywords). */
+export const assigneeValue = (u: User) => `${u.name} ${u.id}`;
+/** Issue options › Assignee: AssigneeRows on the issue's live assignee. */
+export function IssueAssigneeRows({ issue, query }: { issue: string; query: string }) {
+  const current = useStore((s) => s.issues.get(issue));
+  const board = useStore((s) => current && issueBoardId(current, s));
+  const surface = use(MenuSurfaceContext);
+  return (
+    <AssigneeRows
+      board={board}
+      value={current?.assignee ?? null}
+      query={query}
+      onPick={(user) => {
+        actions.assign(issue, user);
+        surface?.close();
+      }}
+    />
+  );
+}
+export function AssigneeMenu({
+  anchor,
+  board,
+  value,
+  onChange,
+  close,
+  suggested,
+}: FieldMenuProps<User | null> & { suggested?: readonly User[] }) {
+  const [query, setQuery] = useState("");
+  return (
+    <PropertyMenu
+      label="Assign issue"
+      placeholder="Assign to…"
+      hotkey="A"
+      anchor={anchor}
+      close={close}
+      current={value ? assigneeValue(value) : "No assignee"}
+      query={query}
+      onQuery={setQuery}
+    >
+      <AssigneeRows
+        board={board?.id}
+        value={value}
+        suggested={suggested}
+        query={query}
+        onPick={(user) => {
+          onChange(user);
+          close();
+        }}
+      />
+    </PropertyMenu>
+  );
+}
+export function PriorityMenu({
+  anchor,
+  board,
+  value,
+  onChange,
+  close,
+  empty,
+}: FieldMenuProps<string> & {
+  /** The unset row's text, or no unset row: a draft's "Default priority", a saved issue's `clearPriorityRow`. */
+  empty: string | undefined;
+}) {
+  const { options, issues, writable } = useCatalog(board);
+  const choices = [...(empty ? [""] : []), ...priorityChoices(options, issues, writable)];
+  return (
+    <PropertyMenu
+      label="Set priority"
+      placeholder="Change priority to…"
+      hotkey="P"
+      anchor={anchor}
+      close={close}
+      current={value || empty}
+    >
+      {choices.map((p, i) => (
+        <PickerRow
+          key={p}
+          value={p || (empty ?? "")}
+          icon={<PriorityIcon name={p || undefined} />}
+          current={p === value}
+          // Linear's priority numbers: 0 is No priority, so the named rows keep 1… without the unset row.
+          number={empty ? i : i + 1}
+          onSelect={() => {
+            onChange(p);
+            close();
+          }}
+        >
+          {p || empty}
+        </PickerRow>
+      ))}
+    </PropertyMenu>
+  );
+}
+export function TypeMenu({
+  anchor,
+  value,
+  onChange,
+  close,
+  choices,
+}: FieldMenuProps<string> & { choices: string[] }) {
+  return (
+    <PropertyMenu
+      label="Change issue type"
+      placeholder="Change issue type to…"
+      hotkey={hotkeyOf("type")}
+      anchor={anchor}
+      close={close}
+      current={value}
+    >
+      {choices.map((t) => (
+        <PickerRow
+          key={t}
+          value={t}
+          icon={<TypeDot type={t} />}
+          current={t === value}
+          onSelect={() => {
+            onChange(t);
+            close();
+          }}
+        >
+          {t}
+        </PickerRow>
+      ))}
+    </PropertyMenu>
+  );
+}
+/** A project row's menu value: its name, then its key, so a search finds an epic by either. */
+const epicValue = (epic: { key: string; name: string }) => `${epic.name} ${epic.key}`;
+/**
+ * Linear's project picker (`zBn`, ⇧P): "No project" (number 0, `YBn`), then the epics `epicChoices` lists; Linear's project is a
+ * Jira epic (shared/epics.ts). `value` is the epic's key; `project` the Jira project the issue is in, whose epics it can join;
+ * `suggested` the epics the view's filter names, listed first.
+ */
+export function ProjectMenu({
+  anchor,
+  board,
+  value,
+  onChange,
+  close,
+  project,
+  suggested,
+}: FieldMenuProps<string | null> & { project?: string; suggested?: readonly string[] }) {
+  const { issues } = useCatalog(board);
+  const [query, setQuery] = useState("");
+  const choices = epicChoices(issues, board, { project, current: value ?? undefined, query, suggested });
+  const current = choices.find((e) => e.key === value);
+  return (
+    <PropertyMenu
+      label="Change epic"
+      // Linear's `subActionPlaceholder` ("Add to project…", else "Move to project…"), worded Epic.
+      placeholder={value ? "Move to epic…" : "Add to epic…"}
+      hotkey={hotkeyOf("project")}
+      anchor={anchor}
+      close={close}
+      current={current ? epicValue(current) : "No epic"}
+      query={query}
+      onQuery={setQuery}
+    >
+      <PickerRow
+        value="No epic"
+        // `YBn` takes `VBn`'s keywords.
+        keywords={["No epic", ...rowKeywords({ keywords: "project delete" })]}
+        current={!value}
+        number={0}
+        icon={<Icon name="layers" />}
+        onSelect={() => {
+          onChange(null);
+          close();
+        }}
+      >
+        No epic
+      </PickerRow>
+      {choices.map((epic) => (
+        <PickerRow
+          key={epic.key}
+          value={epicValue(epic)}
+          keywords={[epic.name, ...rowKeywords({ keywords: epic.key })]}
+          current={epic.key === value}
+          icon={<Icon name="layers" />}
+          onSelect={() => {
+            onChange(epic.key);
+            close();
+          }}
+        >
+          {epic.name}
+        </PickerRow>
+      ))}
+    </PropertyMenu>
+  );
+}
+export function MilestoneMenu({
+  anchor,
+  board,
+  value,
+  onChange,
+  close,
+  project,
+}: FieldMenuProps<NonNullable<Issue["milestones"]>> & { project?: string }) {
+  const { issues, options } = useCatalog(board);
+  return (
+    <PropertyMenu
+      label="Set milestone"
+      placeholder="Set milestone…"
+      anchor={anchor}
+      close={close}
+      current={value[0]?.name ?? "No milestone"}
+    >
+      <PickerRow
+        value="No milestone"
+        // `JBn` takes `GBn`'s keywords.
+        keywords={["No milestone", ...rowKeywords({ keywords: "project" })]}
+        current={!value.length}
+        icon={<Icon name="calendar" />}
+        onSelect={() => {
+          onChange([]);
+          close();
+        }}
+      >
+        No milestone
+      </PickerRow>
+      {milestoneChoices(options, issues, project).map((m) => (
+        <PickerRow
+          key={m.id}
+          value={m.name}
+          current={value.some((v) => v.id === m.id)}
+          icon={<Icon name="calendar" />}
+          onSelect={() => {
+            onChange([m]);
+            close();
+          }}
+        >
+          {m.name}
+        </PickerRow>
+      ))}
+    </PropertyMenu>
+  );
+}
+/** One label's checkbox row. Memoised with a stable `onToggle`, so typing in the search or toggling one label re-renders the rows
+ *  that changed, not a workspace's thousand labels. */
+export const LabelRow = memo(function LabelRow({
+  name,
+  checked,
+  onToggle,
+}: {
+  name: string;
+  checked: boolean;
+  onToggle: (name: string) => void;
+}) {
+  return (
+    <CheckRow
+      value={name}
+      data-label={name}
+      checked={checked}
+      checkboxLabel={`${checked ? "Remove" : "Add"} label ${name}`}
+      onToggle={() => onToggle(name)}
+      icon={<span className="size-[9px] rounded-full" style={{ background: hue(name) }} />}
+    >
+      {name}
+    </CheckRow>
+  );
+});
+
+/**
+ * The label checkbox rows (Linear's labels action, multiSelectSubActions): the labels on the issue first, as the menu opened, or with
+ * none "Frequently used"; then "Workspace labels", then "Create new label" for a new name. One component for the L picker and Issue options › Labels.
+ */
+export function LabelRows({
+  board,
+  value,
+  onChange,
+  query,
+}: Omit<FieldMenuProps<string[]>, "anchor" | "close"> & { query: string }) {
+  const { issues, options } = useCatalog(board);
+  const surface = use(MenuSurfaceContext);
+  // Sections are fixed as the menu opens, so a row never jumps while you toggle it.
+  const [order] = useState(() => labelSections(issues, options.labels, value));
+  const toggle = useStableCallback((name: string) =>
+    onChange(value.includes(name) ? value.filter((l) => l !== name) : [...value, name]),
+  );
+  const row = (name: string) => <LabelRow key={name} name={name} checked={value.includes(name)} onToggle={toggle} />;
+  // Jira labels can't contain spaces: a new label joins its words with hyphens (R2-issue-fields-D5).
+  const created = query.trim().replace(/\s+/g, "-");
+  const all = [...order.selected, ...order.frequent, ...order.rest];
+  const exact = all.some((l) => l.toLowerCase() === created.toLowerCase());
+  const above = order.selected.length > 0 || order.frequent.length > 0;
+  return (
+    <>
+      {order.selected.map(row)}
+      {order.selected.length > 0 && order.frequent.length > 0 && <Menu.Divider />}
+      {order.frequent.length > 0 && <Menu.Group heading="Frequently used">{order.frequent.map(row)}</Menu.Group>}
+      {above && order.rest.length > 0 && <Menu.Divider />}
+      {above && order.rest.length > 0 ? (
+        <Menu.Group heading="Workspace labels">{order.rest.map(row)}</Menu.Group>
+      ) : (
+        order.rest.map(row)
+      )}
+      {query.trim() && !exact && (
+        <Menu.Item
+          value={`Create ${query}`}
+          // Linear's create row: `skipFilterScoring` and `sortPriority: -1/0`, so it stays, under every label that matches.
+          keywords={["Create new label", ...rowKeywords({ pin: "last" })]}
+          icon={<Icon name="plus" size={14} />}
+          // Like Enter on an existing label: apply it and close, so the menu never shows a list without it.
+          onSelect={() => {
+            toggle(created);
+            surface?.close();
+          }}
+        >
+          Create new label: "{created}"
+        </Menu.Item>
+      )}
+    </>
+  );
+}
+/** Issue options › Labels: LabelRows on the issue's live labels, so a checkbox reflects each toggle while the menu stays open. */
+export function IssueLabelRows({ issue, query }: { issue: string; query: string }) {
+  const labels = useStore((s) => s.issues.get(issue)?.labels) ?? [];
+  const board = useStore((s) => issueBoard(s.issues.get(issue), s));
+  return (
+    <LabelRows
+      board={board}
+      value={labels}
+      onChange={(next) => actions.patch(issue, { labels: next })}
+      query={query}
+    />
+  );
+}
+export function LabelsMenu({ anchor, board, value, onChange, close }: FieldMenuProps<string[]>) {
+  const [query, setQuery] = useState("");
+  return (
+    <PropertyMenu
+      label="Change labels"
+      placeholder={value.length ? "Change or add labels…" : "Add labels…"}
+      hotkey="L"
+      anchor={anchor}
+      // Linear's label badges open `horizontal-left`, in the issue's properties and on a card's badge row alike.
+      side={anchor?.closest("[data-properties], [data-badges]") ? "left" : undefined}
+      close={close}
+      query={query}
+      onQuery={setQuery}
+    >
+      <LabelRows board={board} value={value} onChange={onChange} query={query} />
+    </PropertyMenu>
+  );
+}
+/** The due-date rows (Linear's due action `oK`, its rows from `cfn` and `gfn`): Remove due date with a date set, Custom…, the presets
+ *  and a typed date like "24h" or "Feb 9", drawn first and always listed (skipFilterScoring). One component for the Shift+D picker
+ *  and Issue options › Due date. The parser (chrono) loads with it. */
+export function DueRows({
+  query,
+  value,
+  onPick,
+  onCustom,
+}: {
+  query: string;
+  value: string | null;
+  onPick: (due: string | null) => void;
+  onCustom: () => void;
+}) {
+  const [parseDue, setParseDue] = useState(dueParserChunk.loaded);
+  useEffect(() => {
+    if (parseDue) return;
+    let active = true;
+    loadDueParser().then((parse) => active && setParseDue(() => parse), () => {});
+    return () => {
+      active = false;
+    };
+  }, [parseDue]);
+  const parsed = parseDue?.(query) ?? null;
+  return (
+    <>
+      {parsed && (
+        <PickerRow
+          value={`Due ${query}`}
+          keywords={["Due", ...rowKeywords({ pin: "first" })]}
+          icon={<Icon name="calendar" />}
+          hint={shortDate(parsed)}
+          onSelect={() => onPick(parsed)}
+        >
+          Due
+        </PickerRow>
+      )}
+      {value && (
+        <PickerRow
+          value="Remove due date"
+          keywords={["Remove due date", ...rowKeywords({ keywords: "clear delete" })]}
+          icon={<Icon name="close" />}
+          onSelect={() => onPick(null)}
+        >
+          Remove due date
+        </PickerRow>
+      )}
+      <PickerRow
+        value="Custom…"
+        keywords={["Custom…", ...rowKeywords({ keywords: "select specific pick" })]}
+        icon={<Icon name="calendar" />}
+        onSelect={onCustom}
+      >
+        Custom…
+      </PickerRow>
+      {duePresets().map((preset) => (
+        <PickerRow
+          key={preset.name}
+          value={preset.name}
+          keywords={[preset.name, ...rowKeywords({ keywords: preset.keywords })]}
+          icon={<Icon name="calendar" />}
+          current={value === preset.due}
+          hint={shortDate(preset.due)}
+          onSelect={() => onPick(preset.due)}
+        >
+          {preset.name}
+        </PickerRow>
+      ))}
+    </>
+  );
+}
+export function DueMenu({ anchor, value, onChange, close }: FieldMenuProps<string | null>) {
+  const [query, setQuery] = useState("");
+  const [custom, setCustom] = useState(() => kept("issue-options-start") === "due");
+  useCommand("issue-options-start", (start) => {
+    if (start !== "due") return;
+    setCustom(true);
+    return true;
+  });
+  if (!custom)
+    // Linear (RAJ-61): a click or Enter applies at once; typed text like "24h" or "Feb 9" offers that date.
+    return (
+      <PropertyMenu
+        label="Due date"
+        placeholder="Try: 24h, 7 days, Feb 9"
+        hotkey={hotkeyOf("due")}
+        anchor={anchor}
+        close={close}
+        query={query}
+        onQuery={setQuery}
+      >
+        <DueRows
+          query={query}
+          value={value}
+          onPick={(due) => {
+            onChange(due);
+            close();
+          }}
+          onCustom={() => setCustom(true)}
+        />
+      </PropertyMenu>
+    );
+  // Linear's "Custom…" (`cfn`): the due-date dialog, in place of the menu.
+  return (
+    <Suspense
+      fallback={
+        <Dialog label="Due date" close={close} placement="third" width={DUE_DIALOG.WIDTH}>
+          <LoadingState>Loading dates…</LoadingState>
+        </Dialog>
+      }
+    >
+      <DueDateDialog value={value} onSave={onChange} close={close} />
+    </Suspense>
+  );
+}

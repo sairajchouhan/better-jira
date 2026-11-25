@@ -1,0 +1,84 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
+@layer components {
+  /* Linear's header view tabs (computed styles): 28px pills, 0 10px, 12px/500, a 0.5px ring. */
+  /* The rings, one definition: a thinPixel ring over shadowLow, the selected tab's ring alone. Declared on the list, so
+     inside a popup each reads the surface's elevated colours (control-tokens.css [data-elevation]). Header tabs ring
+     both states with bgBorderAlphaThin. */
+  .ui-tabs-list {
+    --tab-ring: var(--border-alpha-thin);
+    --tab-on-ring: var(--border-alpha-thin);
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  .ui-tab {
+    display: inline-flex;
+    flex-shrink: 0;
+    align-items: center;
+    gap: 6px;
+    height: 28px;
+    padding: 0 10px;
+    border: var(--thin-pixel) solid transparent;
+    border-radius: 9999px;
+    background: var(--tab);
+    box-shadow: 0 0 0 var(--thin-pixel) var(--tab-ring), var(--frame-shadow);
+    color: var(--fg-3);
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+  }
+  /* UEe.tab hover: controlTertiaryHover and labelBase. */
+  .ui-tab:hover {
+    background: var(--control-tertiary-hover);
+    color: var(--fg-2);
+  }
+  .ui-tab[aria-selected="true"] {
+    background: var(--tab-on);
+    box-shadow: 0 0 0 var(--thin-pixel) var(--tab-on-ring);
+    color: var(--fg);
+  }
+  .ui-tab[data-disabled] {
+    opacity: 0.6;
+  }
+}
+
+@layer components {
+  .ui-tabs-list[data-variant="summary"] {
+    width: 100%;
+    gap: 8px;
+  }
+  .ui-tabs-list[data-variant="summary"] .ui-tab {
+    height: 32px;
+    flex: auto;
+    justify-content: center;
+    padding-inline: 12px;
+  }
+}
+
+/* `sq` fullWidth (cq, I_n): the track is bgBase; each trigger is a jv tab in Mv medium (28px, 12/500, 0 8px beside its
+   icon, 6px gap) with 2px margins, sharing the row equally (137 each in the 300px panel, live). Off: controlTertiary + labelMuted, a bgBorderAlphaThin ring over
+   shadowLow; hover controlTertiaryHover + labelBase; on controlTertiarySelected + labelTitle, ringed with
+   bgBorderSolidAlphaThin. Inside a popover every token is the elevated one (control-tokens.css [data-elevation]). */
+@layer components {
+  .ui-tabs-list[data-variant="options"] {
+    --tab-on-ring: var(--border-solid-alpha-thin);
+    isolation: isolate;
+    width: 100%;
+    gap: 2px;
+    margin: -2px 0;
+    padding: 0;
+    border-radius: 5px;
+    background: var(--panel);
+  }
+  .ui-tabs-list[data-variant="options"] .ui-tab {
+    flex: 1 1 0;
+    justify-content: center;
+    margin: 2px;
+    padding: 0 8px;
+  }
+  .ui-tabs-list[data-variant="options"] .ui-tab:focus-visible {
+    outline-offset: -1px;
+  }
+}

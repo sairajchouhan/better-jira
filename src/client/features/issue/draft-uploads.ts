@@ -1,0 +1,185 @@
+import { storedMediaIds } from "./issue-attachments";
+import { remember, UploadRefused, type Uploaded } from "@/client/state/jira-media";
+
+/**
+ * Files an issue's editors (description, comments, documents) upload go to Jira at once. Each is noted here before it starts, under
+ * its local id (the upload's client id), so one a reload cut off mid-upload, one whose answer was lost, or one a draft
+ * dropped just before leaving, is removed from Jira on the next load; its upload slot goes too (R2-comments-D5). `local`
+ * is the file's local id once the upload answered.
+ */
+export type DraftUpload = {
+  id: string;
+  key: string;
+  name: string;
+  size: number;
+  at: number;
+  local?: string;
+};
+/** Another open tab may still be uploading or placing a file, so only entries this old are cleaned. */
+export const SETTLE_MS = 2 * 60_000;
+/** An upload whose send still has no answer after this long is given up on: the server can't say what it made. */
+export const PENDING_MAX_MS = 24 * 3600_000;
+const store = (namespace: string) => `better-jira:draft-uploads:${namespace}`;
+export function readDraftUploads(namespace: string): DraftUpload[] {
+  try {
+    const list = JSON.parse(localStorage.getItem(store(namespace)) ?? "[]");
+    return Array.isArray(list) ? list : [];
+  } catch {
+    return [];
+  }
+}
+function edit(namespace: string, fn: (list: DraftUpload[]) => DraftUpload[]) {
+  try {
+    const list = fn(readDraftUploads(namespace));
+    if (list.length) localStorage.setItem(store(namespace), JSON.stringify(list));
+    else localStorage.removeItem(store(namespace));
+  } catch {}
+}
+function noteDraftUpload(namespace: string, key: string, file: { id: string; name: string; size: number }) {
+  edit(namespace, (list) => [...list, { id: file.id, key, name: file.name, size: file.size, at: Date.now() }]);
+}
+/** `local`: the saved file's local id; without it (a refused upload) the entry goes. */
+function settleDraftUpload(namespace: string, id: string, local?: string) {
+  edit(namespace, (list) =>
+    list.flatMap((entry) => (entry.id !== id ? [entry] : local ? [{ ...entry, local }] : [])),
+  );
+}
+/**
+ * Notes `file` (an editor's local copy) while `upload` sends it under its local id, then settles the note: an uploaded file
+ * keeps it with its local id, a refusal drops it. A send with no answer (a reload cut it off, or a lost answer) keeps it, so
+ * the cleaner asks the server what it made and removes it unless something still shows it (R3-comments-D1).
+ */
+export async function trackDraftUpload(
+  namespace: string,
+  key: string,
+  file: { id: string; name: string; size: number },
+  upload: () => Promise<unknown>,
+) {
+  noteDraftUpload(namespace, key, file);
+  try {
+    await upload();
+  } catch (error) {
+    if (error instanceof UploadRefused) settleDraftUpload(namespace, file.id);
+    throw error;
+  }
+  settleDraftUpload(namespace, file.id, file.id);
+}
+
+const slot = (entry: DraftUpload) => `better-jira:upload:${entry.key}:${entry.local}`;
+function uploaded(entry: DraftUpload): Uploaded | undefined {
+  try {
+    return JSON.parse(localStorage.getItem(slot(entry)) ?? "null") ?? undefined;
+  } catch {}
+}
+
+type Jira = {
+  full: (key: string) => Promise<any>;
+  remove: (key: string, attachment: string) => Promise<void>;
+  /** What the server made for this upload (the entry's id): its attachment id, `pending` while the send has no answer
+   * yet, or undefined if the server never got it. */
+  uploaded: (
+    client: string,
+  ) => Promise<{ id?: string; pending?: boolean; found?: boolean } | undefined>;
+};
+/**
+ * Settles old entries: a file a draft or an unsent change still holds stays; one Jira's description or comments show
+ * keeps its attachment and loses only its slot; any other is deleted from Jira. `pending` is the unsent local changes
+ * (documents, which live only here, among them).
+ */
+export async function cleanDraftUploads(
+  namespace: string,
+  pending: string,
+  jira: Jira,
+  now = Date.now(),
+) {
+  const due = readDraftUploads(namespace).filter((entry) => now - entry.at >= SETTLE_MS);
+  if (!due.length) return { kept: [] as string[] };
+  const held = new Set<string>();
+  // Drafts are stored as JSON strings of documents; read their media nodes.
+  try {
+    for (let i = 0; i < localStorage.length; i++) {
+      const name = localStorage.key(i);
+      if (name?.includes("-draft:"))
+        storedMediaIds(JSON.parse(localStorage.getItem(name) ?? "null"), held);
+    }
+  } catch {}
+  const done: string[] = [],
+    kept: string[] = [];
+  // A draft or unsent change holds the file by its local id, answered or not: a file goes into its editor before its upload
+  // starts. Entries noted before that have their own id and the local id once answered. A held file stays, at no cost.
+  const free = due.filter((entry) => {
+    const local = entry.local ?? entry.id;
+    return !held.has(local) && !pending.includes(local);
+  });
+  const byKey = Map.groupBy(free, (entry) => entry.key);
+  for (const [key, entries] of byKey) {
+    let full: any;
+    try {
+      full = await jira.full(key);
+    } catch {
+      continue;
+    }
+    // The issue is gone: nothing left to remove.
+    if (!full) {
+      done.push(...entries.map((e) => e.id));
+      continue;
+    }
+    const shown = storedMediaIds([
+      full.fields?.description,
+      ...(full.fields?.comment?.comments ?? []).map((c: any) => c.body),
+    ]);
+    const files: any[] = full.fields?.attachment ?? [];
+    for (const entry of entries) {
+      const local = entry.local ?? entry.id;
+      // Only the attachment this upload made, by id: from its slot, or, when the answer never arrived (a reload cut it
+      // off), from the server's record of it. A file of the same name and size someone else attached is never touched.
+      let id: string | undefined, media: string | undefined, found: boolean | undefined;
+      const slotted = uploaded({ ...entry, local });
+      try {
+        if (slotted) ({ id, mediaId: media, found } = slotted.attachment);
+        else {
+          const made = await jira.uploaded(entry.id);
+          // Still uploading (a slow or large file): look again later rather than lose track of it.
+          if (made?.pending && now - entry.at < PENDING_MAX_MS) continue;
+          ({ id, found } = made ?? {});
+        }
+      } catch {
+        continue;
+      }
+      // Matched by name and size after a lost answer, so possibly the user's own file: kept, never deleted.
+      if (found) {
+        kept.push(id!);
+        if (slotted) remember(key, local);
+        done.push(entry.id);
+        continue;
+      }
+      const file = files.find((f) => String(f.id) === id);
+      media ??= file?.mediaId;
+      const attachment =
+        file && !shown.has(id!) && !(media && shown.has(media)) ? String(file.id) : undefined;
+      try {
+        if (attachment) await jira.remove(key, attachment);
+      } catch {
+        continue;
+      }
+      if (slotted) remember(key, local);
+      done.push(entry.id);
+    }
+  }
+  edit(namespace, (list) => list.filter((entry) => !done.includes(entry.id)));
+  return { kept };
+}
+
+/** Cleans now, then again when the next entry is old enough; one already old enough (held, or not yet answerable) is looked
+ *  at again a settle time later. */
+export async function keepDraftUploadsClean(namespace: string, pending: () => string, jira: Jira) {
+  await cleanDraftUploads(namespace, pending(), jira).catch(() => {});
+  const next = Math.min(
+    ...readDraftUploads(namespace).map((e) => {
+      const wait = e.at + SETTLE_MS - Date.now();
+      return wait > 0 ? wait : SETTLE_MS;
+    }),
+  );
+  if (Number.isFinite(next))
+    setTimeout(() => void keepDraftUploadsClean(namespace, pending, jira), Math.max(next, 1000));
+}

@@ -1,0 +1,235 @@
+/* Tailwind's layer order, stated before this file's own layer: Bun's dev server may load this stylesheet first. */
+@layer properties, theme, base, components, utilities;
+
+@layer components {
+  /* Nv.base + GEe: every Linear button. Size "normal" is the default (jv: size=`normal`). */
+  .ui-button {
+    position: relative;
+    display: inline-flex;
+    vertical-align: top;
+    flex-shrink: 0;
+    align-items: center;
+    justify-content: center;
+    gap: 6px;
+    height: 32px;
+    min-width: 32px;
+    padding: 0 12px;
+    border: var(--thin-pixel) solid transparent;
+    border-radius: 9999px;
+    font-size: 13px;
+    font-weight: 500;
+    line-height: normal;
+    white-space: nowrap;
+    user-select: none;
+    transition-property: border, background-color, color, opacity;
+    transition-duration: 0.15s;
+  }
+  .ui-button:hover,
+  .ui-button:active,
+  .ui-button[data-menu-open="true"] {
+    transition-duration: 0s;
+  }
+  a.ui-button {
+    text-decoration: none;
+  }
+  .ui-button:disabled {
+    opacity: 0.6;
+    cursor: default;
+  }
+  /* LEe / Av: 14px icons on small and medium, 16px otherwise. */
+  .ui-button-icon {
+    display: inline-flex;
+    flex-shrink: 0;
+  }
+  .ui-button-icon > svg {
+    width: 16px;
+    height: 16px;
+  }
+  .ui-button:is([data-size="small"], [data-size="medium"]) .ui-button-icon > svg {
+    width: 14px;
+    height: 14px;
+  }
+
+  /* GEe heights / min-widths / font sizes, ZEe text padding. */
+  .ui-button[data-size="small"] {
+    height: 24px;
+    min-width: 24px;
+    padding: 0 8px;
+    font-size: 12px;
+  }
+  .ui-button[data-size="medium"] {
+    height: 28px;
+    min-width: 28px;
+    padding: 0 10px;
+    font-size: 12px;
+  }
+  .ui-button[data-size="large"] {
+    height: 44px;
+    min-width: 32px;
+    padding: 0 18px;
+  }
+  /* QEe: a leading icon pulls the left padding in (jv only; the link button fk keeps its padding). */
+  button.ui-button:not([data-shape="icon"]):has(> .ui-button-icon:first-child) {
+    padding: 0 12px 0 10px;
+  }
+  button.ui-button[data-size="small"]:not([data-shape="icon"]):has(> .ui-button-icon:first-child) {
+    padding: 0 8px 0 6px;
+  }
+  button.ui-button[data-size="medium"]:not([data-shape="icon"]):has(> .ui-button-icon:first-child) {
+    padding: 0 10px 0 8px;
+  }
+  button.ui-button[data-size="large"]:not([data-shape="icon"]):has(> .ui-button-icon:first-child) {
+    padding: 0 16px 0 14px;
+  }
+  /* qEe: icon-only buttons are square. */
+  .ui-button[data-shape="icon"] {
+    width: 32px;
+    padding: 0;
+  }
+  .ui-button[data-shape="icon"][data-size="small"] {
+    width: 24px;
+  }
+  .ui-button[data-shape="icon"][data-size="medium"] {
+    width: 28px;
+  }
+  .ui-button[data-shape="icon"][data-size="large"] {
+    width: 44px;
+  }
+
+  /* UEe variants (hover = active colour) and WEe active states. "Active" is :active, an open menu, or a pressed toggle. */
+  .ui-button[data-variant="primary"] {
+    background: var(--accent);
+    color: var(--control-primary-label);
+    box-shadow: var(--frame-shadow);
+  }
+  .ui-button[data-variant="primary"]:focus-visible {
+    outline-offset: 2px;
+  }
+  .ui-button[data-variant="primary"]:is(:hover, :active, [aria-expanded="true"], [aria-pressed="true"], [data-menu-open="true"]) {
+    background: var(--control-primary-hover);
+  }
+
+  .ui-button[data-variant="secondary"] {
+    background: var(--btn);
+    color: var(--fg-2);
+    box-shadow: 0 0 0 var(--thin-pixel) var(--border-alpha-thin), var(--frame-shadow);
+  }
+  .ui-button[data-variant="secondary"]:hover {
+    background: var(--control-secondary-hover);
+    box-shadow: 0 0 0 var(--thin-pixel) var(--border-solid-alpha-thin), var(--frame-shadow);
+  }
+  .ui-button[data-variant="secondary"]:is(:active, [aria-expanded="true"], [aria-pressed="true"], [data-menu-open="true"]) {
+    background: var(--control-secondary-hover);
+    color: var(--fg);
+  }
+
+  /* Nv.ghostBorder(highlightVariant(bgBorderSolid)) on UEe.ghost's 1px dashed border. */
+  .ui-button[data-variant="ghost"] {
+    border: 1px dashed var(--border-solid-highlight);
+    background: transparent;
+    color: var(--fg-2);
+  }
+  .ui-button:is([data-variant="ghost"], [data-variant="borderless"]):hover {
+    background: var(--control-tertiary-hover);
+    color: var(--fg);
+  }
+
+  .ui-button[data-variant="borderless"] {
+    background: transparent;
+    color: var(--fg-2);
+  }
+  /* WEe.borderless reads a runtime theme var (--sx-ljw4h1) the bundle leaves empty; live Linear measured --sel (RAJ-52). */
+  .ui-button[data-variant="borderless"]:is(:active, [aria-expanded="true"], [aria-pressed="true"], [data-menu-open="true"]) {
+    background: var(--sel);
+    color: var(--fg);
+  }
+
+  .ui-button[data-variant="muted"] {
+    background: transparent;
+    color: var(--fg-3);
+  }
+  .ui-button[data-variant="muted"]:is(:hover, :active, [aria-expanded="true"], [aria-pressed="true"], [data-menu-open="true"]) {
+    background: var(--control-tertiary-hover);
+    color: var(--fg-2);
+  }
+
+  .ui-button[data-variant="link"] {
+    background: transparent;
+    box-shadow: none;
+    color: var(--fg-2);
+  }
+  .ui-button[data-variant="link"]:hover {
+    color: var(--fg);
+  }
+
+  /* UEe.tab: controlTertiary on the secondary ring, labelMuted turning labelBase on hover. WEe.tab (active):
+     controlTertiarySelected and labelTitle, the ring without shadowLow. */
+  .ui-button[data-variant="tab"] {
+    background: var(--tab);
+    color: var(--fg-3);
+    box-shadow: 0 0 0 var(--thin-pixel) var(--border-alpha-thin), var(--frame-shadow);
+  }
+  .ui-button[data-variant="tab"]:hover {
+    background: var(--control-tertiary-hover);
+    color: var(--fg-2);
+    box-shadow: 0 0 0 var(--thin-pixel) var(--border-solid-alpha-thin), var(--frame-shadow);
+  }
+  .ui-button[data-variant="tab"]:is(:active, [aria-expanded="true"], [aria-pressed="true"], [data-menu-open="true"]) {
+    background: var(--tab-on);
+    color: var(--fg);
+    box-shadow: 0 0 0 var(--thin-pixel) var(--border-alpha-thin);
+  }
+  /* A pressed tab is Linear's SmallToggleButton (Nxr): D4.smallToggleButtonActive paints controlSecondarySelected at
+     rest, hover and :active. */
+  .ui-button[data-variant="tab"][aria-pressed="true"] {
+    background: var(--control-secondary-selected);
+  }
+  /* Mv `active` on a tab (WEe.tab, the header's current view tab): controlTertiarySelected and labelTitle at rest and
+     under the pointer, ringed with bgBorderAlphaThin alone. */
+  .ui-button[data-variant="tab"][data-active="true"] {
+    background: var(--tab-on);
+    color: var(--fg);
+    box-shadow: 0 0 0 var(--thin-pixel) var(--border-alpha-thin);
+  }
+
+  .ui-button[data-variant="dangerous"] {
+    background: var(--red-base);
+    color: var(--control-primary-label);
+  }
+  .ui-button[data-variant="dangerous"]:is(:hover, :active, [aria-expanded="true"], [data-menu-open="true"]) {
+    background: var(--red-base-hover);
+  }
+
+  .ui-button[data-variant="dangerous-borderless"] {
+    background: transparent;
+    color: var(--red-text);
+  }
+  .ui-button[data-variant="dangerous-borderless"]:is(:hover, :active, [aria-expanded="true"], [data-menu-open="true"]) {
+    background: var(--red-tint);
+  }
+
+  /* SendButton: Linear's filled comment send circle (no UEe variant), the arrow in the card's fg-3. */
+  .ui-button[data-variant="send"] {
+    background: var(--send);
+    color: var(--card-fg-3);
+  }
+  /* Linear's tooltip trigger (`_tooltipTriggerContent`, a flex Q box): a disabled button inside lets the hover reach
+     the wrapper, which carries the disabled reason. */
+  .ui-tooltip-trigger {
+    display: inline-flex;
+    flex-shrink: 0;
+  }
+  .ui-tooltip-trigger > button:disabled {
+    pointer-events: none;
+  }
+  /* Linear DetailLabelControl.labelIconButton: 25px square, circular. */
+  .ui-button[data-shape="icon"][data-appearance="label"] {
+    width: 25px;
+    height: 25px;
+    border-radius: 100%;
+  }
+  /* Preserve the live Linear comment menu selected colour. */
+  .ui-button[data-appearance="comment-action"][aria-expanded="true"] {
+    background: var(--card-pressed);
+  }
+}
