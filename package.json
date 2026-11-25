@@ -1,6 +1,6 @@
 {
   "name": "better-jira",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "A fast, Linear-inspired local UI for Jira Cloud Kanban boards.",
   "license": "MIT",
   "repository": {
