@@ -22,8 +22,8 @@ Press `Ctrl+C` in the terminal to stop it anytime.
 ### Useful CLI commands
 
 ```sh
-better-jira                    # start on http://127.0.0.1:3000 and open browser
-better-jira --port 3001        # use another local port
+better-jira                    # start on http://127.0.0.1:4747 and open browser
+better-jira --port 4748        # use another local port
 better-jira --instance work    # keep a separate Jira account/site under another name
 better-jira --no-open          # start without opening the browser
 better-jira status             # show running status and config/cache paths

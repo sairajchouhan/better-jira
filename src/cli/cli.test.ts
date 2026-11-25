@@ -3,7 +3,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { defaultCacheRoot, defaultConfigRoot, loadCredentialsEnv, parseEnvText, resolveInstancePaths } from "./env";
-import { parseCliArgs } from "./index";
+import { DEFAULT_PORT, parseCliArgs } from "./index";
 
 describe("CLI env & instance paths", () => {
   test("splits config (~/.config/better-jira) and cache (~/.cache/better-jira) with credentials.env", () => {
@@ -62,7 +62,8 @@ describe("CLI env & instance paths", () => {
 });
 
 describe("CLI argument parsing", () => {
-  test("parses default start, flags, and subcommands", () => {
+  test("uses collision-free default port 4747 and parses flags and subcommands", () => {
+    expect(DEFAULT_PORT).toBe(4747);
     expect(parseCliArgs([])).toMatchObject({ command: "start", instance: "default", noOpen: false });
     expect(parseCliArgs(["start", "--instance", "work", "--port", "3010", "--no-open"])).toMatchObject({
       command: "start",

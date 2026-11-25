@@ -3,6 +3,7 @@ import pkg from "../../package.json";
 import { loadCredentialsEnv, readSavedPort, resolveInstancePaths } from "./env";
 
 export const CLI_VERSION = pkg.version;
+export const DEFAULT_PORT = 4747;
 
 export type CliCommand = "start" | "status" | "open" | "help" | "version";
 
@@ -100,7 +101,7 @@ Commands:
 
 Options:
   -i, --instance <name>   Instance name under ~/.config/better-jira/instances/ (default: default)
-  -p, --port <port>       Local port to listen on (default: 3000)
+  -p, --port <port>       Local port to listen on (default: ${DEFAULT_PORT})
   --home <dir>            Explicit instance directory (overrides --instance)
   --no-open               Do not open the browser automatically
   -v, --version           Print version
@@ -112,7 +113,7 @@ function resolvePort(parsed: ParsedCli, instanceDir: string): number {
   if (parsed.port) return parsed.port;
   const envPort = Number(process.env.PORT);
   if (Number.isSafeInteger(envPort) && envPort >= 1 && envPort <= 65535) return envPort;
-  return readSavedPort(instanceDir) ?? 3000;
+  return readSavedPort(instanceDir) ?? DEFAULT_PORT;
 }
 
 /** Probes `127.0.0.1:<port>/api/client` to tell running better-jira, setup mode, another process, and stopped apart. */
