@@ -40,10 +40,20 @@ ASSET="better-jira-${OS}-${ARCH}"
 TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/better-jira-install.XXXXXX")
 trap 'rm -rf "$TMP_DIR"' EXIT INT TERM
 
-fetch_public() {
+fetch_silent() {
   url="$1"
   dest="$2"
   curl -fsSL --retry 3 --retry-delay 1 -o "$dest" "$url"
+}
+
+fetch_binary() {
+  url="$1"
+  dest="$2"
+  if [ -t 2 ]; then
+    curl -fL --progress-bar --retry 3 --retry-delay 1 -o "$dest" "$url"
+  else
+    curl -fsSL --retry 3 --retry-delay 1 -o "$dest" "$url"
+  fi
 }
 
 # For private repos, pass GITHUB_TOKEN (with repo read access) to download release assets via the GitHub API.
@@ -72,8 +82,14 @@ download_release_files() {
     [ -n "$asset_url" ] || fail "release asset ${ASSET} not found in ${REPO} (${VERSION})"
     [ -n "$checksum_url" ] || fail "checksums.txt not found in ${REPO} (${VERSION})"
 
-    curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/octet-stream" \
-      -o "${TMP_DIR}/${ASSET}" "$asset_url" || fail "failed to download ${ASSET}"
+    say "Downloading ${ASSET}..."
+    if [ -t 2 ]; then
+      curl -fL --progress-bar -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/octet-stream" \
+        -o "${TMP_DIR}/${ASSET}" "$asset_url" || fail "failed to download ${ASSET}"
+    else
+      curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/octet-stream" \
+        -o "${TMP_DIR}/${ASSET}" "$asset_url" || fail "failed to download ${ASSET}"
+    fi
     curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/octet-stream" \
       -o "${TMP_DIR}/checksums.txt" "$checksum_url" || fail "failed to download checksums.txt"
   else
@@ -82,12 +98,14 @@ download_release_files() {
     else
       base_url="https://github.com/${REPO}/releases/download/${VERSION}"
     fi
-    fetch_public "${base_url}/${ASSET}" "${TMP_DIR}/${ASSET}" || fail "failed to download ${base_url}/${ASSET}"
-    fetch_public "${base_url}/checksums.txt" "${TMP_DIR}/checksums.txt" || fail "failed to download ${base_url}/checksums.txt"
+    say "Downloading ${ASSET}..."
+    fetch_binary "${base_url}/${ASSET}" "${TMP_DIR}/${ASSET}" || fail "failed to download ${base_url}/${ASSET}"
+    fetch_silent "${base_url}/checksums.txt" "${TMP_DIR}/checksums.txt" || fail "failed to download ${base_url}/checksums.txt"
   fi
 }
 
 verify_checksum() {
+  say "Verifying SHA-256 checksum..."
   expected=$(awk -v target="$ASSET" '$2 == target || $2 == ("*" target) { print $1; exit }' "${TMP_DIR}/checksums.txt")
   [ -n "$expected" ] || fail "checksum for ${ASSET} not found in checksums.txt"
   if command -v shasum >/dev/null 2>&1; then
