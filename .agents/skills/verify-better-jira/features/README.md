@@ -4,13 +4,13 @@ This directory is the maintained source for verifying what a better-jira user ca
 
 ## Baseline preconditions
 
-- `verify.sh doctor` passes: the instance is ours, on the personal sandbox Jira, writable, and holds issues.
+- `verify.sh doctor` passes: the instance is ours, on the personal sandbox Jira, writable (`settings.json` has `"writes": true`, or `JIRA_WRITES=<sandbox-origin>` is set), and holds issues.
 - The `verify-better-jira` tab is open in your personal browser profile on the instance URL.
-- The sandbox Jira holds board 1 (`SAM1 board`) with SAM1-1 … SAM1-10, and `KAN board` with KAN-1, KAN-2, KAN-3, KAN-15, KAN-16. SAM1-6, SAM1-8 and SAM1-9 are plain To Do tasks, safe to edit and put back.
+- The sandbox Jira holds board 1 (`SAM1 board`) with SAM1-1 … SAM1-10, and `KAN board` with KAN-1, KAN-2, KAN-3, KAN-15, KAN-16. SAM1-6, SAM1-8 and SAM1-9 are plain To Do tasks, safe to edit and put back (SAM1-6 and SAM1-8 have priorities; SAM1-9 has none, so avoid setting a priority on SAM1-9).
 
 ## Driving conventions
 
-- Prefer roles and accessible names (`Issue title`, `Jira save status`, `Drag <KEY> <title>`) over CSS or position.
+- Prefer roles and accessible names (`Issue title`, `Jira save status`, column `grid` + card `row` named `<KEY> <title>`) over CSS or position.
 - A change counts as saved when `Jira save status` reads `Saved to Jira` and `verify.sh jira` shows the new value.
 - Put back every value you changed, through the UI, and confirm it with `verify.sh jira`.
 

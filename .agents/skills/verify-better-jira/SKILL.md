@@ -14,7 +14,7 @@ Never drive `:3000` (reserved for a read-only work Jira copy).
 
 ## Launch
 
-**Main checkout:** drive `:3002` directly (`bun start personal`, on `instances/personal/`). It runs the code it was built from: after a change, the main session restarts it, and nothing reloads on its own. `up` and `down` refuse here.
+**Main checkout:** drive `:3002` directly (`bun start personal`, on `instances/personal/`). If `instances/personal/settings.json` is absent and `.env` has no `JIRA_WRITES`, start it with `JIRA_WRITES=<sandbox-origin> bun start personal` so `writable` is `true`. It runs the code it was built from: after a change, the main session restarts it, and nothing reloads on its own. `up` and `down` refuse here.
 
 **Worktree:** start a throwaway build of the worktree's code, from its root:
 
@@ -38,7 +38,7 @@ Read-only. In the main checkout it checks `:3002`; in a worktree, the instance `
 
 ## Drive
 
-- Inspect with `await snapshot({ within: "body", interactive: true })` and act on refs or roles.
+- Drive via `browse execute --tab verify-better-jira --file -` (stdin script) or individual `browse` subcommands; inspect with `await snapshot({ within: "body", interactive: true })` and act on refs or roles.
 - Open an issue by clicking its title text: `page.getByText("<title>", { exact: true }).first().click()`.
 - Save state is the status `Jira save status`: `Saved to Jira`, `Still sending N to Jira: …`, or `Not saved to Jira: …`.
 - Offline: `await browse.emulate({ offline: true })`, and `{ offline: false }` to reconnect.

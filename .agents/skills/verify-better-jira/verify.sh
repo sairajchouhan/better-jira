@@ -9,7 +9,25 @@ set -u
 SELF=${0:A}
 cd "${SELF:h}/../../.." || exit 1
 PERSONAL_HOME=${REAL_JIRA_HOME:-instances/personal}
-SITE=${REAL_JIRA_SITE:-$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1])).get("site",""))' "$PERSONAL_HOME/settings.json" 2>/dev/null)}
+CREDS_FILE="$PERSONAL_HOME/credentials.env"
+[ -f "$CREDS_FILE" ] || CREDS_FILE="$PERSONAL_HOME/.env"
+SITE=${REAL_JIRA_SITE:-$(python3 -c '
+import json, os, re, sys
+home, creds = sys.argv[1], sys.argv[2]
+try:
+    site = json.load(open(os.path.join(home, "settings.json"))).get("site", "")
+    if site:
+        print(site.rstrip("/")); sys.exit(0)
+except Exception:
+    pass
+try:
+    for line in open(creds):
+        m = re.match(r"^\s*JIRA_URL\s*=\s*(.+?)\s*$", line)
+        if m:
+            print(m.group(1).strip("\"\x27").rstrip("/")); sys.exit(0)
+except Exception:
+    pass
+' "$PERSONAL_HOME" "$CREDS_FILE" 2>/dev/null)}
 REX_SESSION=${REX_SESSION:-}
 STATE=.raj/tmp/verify/instance
 EVIDENCE=.raj/tmp/verify/runs
@@ -70,7 +88,24 @@ doctor)
   ;;
 jira)
   [ -n "${2:-}" ] || fail "usage: verify.sh jira /rest/api/3/issue/<KEY>"
-  bun scripts/personal-jira.ts get "$2"
+  if [ -f "$PERSONAL_HOME/settings.json" ]; then
+    bun scripts/personal-jira.ts get "$2"
+  else
+    [ -n "$SITE" ] || fail "cannot resolve sandbox site from $PERSONAL_HOME (set REAL_JIRA_SITE or add settings.json)"
+    bun --env-file="$CREDS_FILE" -e '
+      const apiPath = process.argv[1]!;
+      const site = process.argv[2]!;
+      const email = process.env.JIRA_EMAIL?.trim() ?? "";
+      const token = process.env.JIRA_TOKEN?.trim() ?? "";
+      if (!email || !token) { console.error("verify: missing JIRA_EMAIL or JIRA_TOKEN"); process.exit(1); }
+      const res = await fetch(site + apiPath, {
+        headers: { Authorization: "Basic " + btoa(`${email}:${token}`), Accept: "application/json" },
+      });
+      const text = await res.text();
+      if (!res.ok) { console.error(`verify: Jira GET ${apiPath} answered ${res.status}: ${text.slice(0, 500)}`); process.exit(1); }
+      console.log(JSON.stringify(text ? JSON.parse(text) : null, null, 1));
+    ' "$2" "$SITE"
+  fi
   ;;
 evidence)
   [ -n "${2:-}" ] || fail "usage: verify.sh evidence <run-id>"

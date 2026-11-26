@@ -5,9 +5,9 @@ A user comments on an issue, edits and deletes their comments, and replies insid
 ## Sub-features
 
 - `comment-add`: write in `Leave a comment…` and submit.
-- `comment-edit`: `Comment options` › `Edit`, then `Save comment`.
+- `comment-edit`: hover the comment, click `Comment options` (or `Reply options` on a reply) › `Edit`, then `Save comment` (visible button text `Save`).
 - `comment-reply`: `Reply to thread`, then `Submit reply`.
-- `comment-delete`: `Comment options` › `Delete`, then confirm in the dialog. ⌘Z undoes it.
+- `comment-delete`: `Comment options` (root) or `Reply options` (reply) › `Delete`, then confirm in the dialog (`Delete`). `⌘Z` undoes it; the Jira `DELETE` is held for an 8 s undo window.
 
 ## How to get to it (user POV)
 
@@ -19,11 +19,11 @@ Preconditions:
 
 - `verify.sh doctor` passes, and SAM1-9 is open.
 
-- **Add.** Fill the textbox `Leave a comment…` with a unique text such as `verify <run-id>`, then click `Submit comment`. The comment shows in `Activity` and `Jira save status` reads `Saved to Jira`.
-- **Read back.** `verify.sh jira '/rest/api/3/issue/SAM1-9/comment'` lists it.
-- **Edit.** Open that comment's `Comment options`, choose `Edit`, change the text in `Edit comment`, then `Save comment`. Read it back.
-- **Reply.** `Reply to thread`, fill the textbox `Reply to thread`, then `Submit reply`. The reply shows inside the thread after a reload.
-- **Delete (cleanup).** `Comment options` › `Delete`, then the dialog's `Delete`, for each comment the run made. Read back that none is left.
+- **Add.** Click the textbox `Leave a comment…`, type a unique text such as `verify <run-id>`, then click `Submit comment`. The comment shows in `Activity` and `Jira save status` reads `Saved to Jira`.
+- **Read back.** `verify.sh jira '/rest/api/3/issue/SAM1-9/comment?maxResults=100'` lists it.
+- **Edit.** Hover the root comment, click `Comment options` › `Edit`, change the text in `Edit comment`, then click `Save comment` (visible label `Save`). Wait for `Saved to Jira` and read it back.
+- **Reply.** Click `Reply to thread`, type in the `Reply to thread` textbox, then click `Submit reply`. Wait for `Saved to Jira`, reload, and verify the reply stays nested inside the thread (with `parentId` matching the root comment ID in Jira).
+- **Delete (cleanup).** Hover each reply and use `Reply options` › `Delete` › dialog `Delete`; hover the root comment and use `Comment options` › `Delete` › dialog `Delete`. Wait **>8 s** (the `COMMENT_UNDO_WINDOW` hold) plus settlement (`Saved to Jira`) before reading back or reloading — during the 8 s hold, `Jira save status` still shows `Saved to Jira` while Jira still holds the comment. Read back with `verify.sh jira '/rest/api/3/issue/SAM1-9/comment?maxResults=100'` that none is left.
 
 On fake Jira: `e2e/comments-journeys.e2e.ts`.
 
