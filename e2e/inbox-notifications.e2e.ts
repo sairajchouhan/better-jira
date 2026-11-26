@@ -125,6 +125,7 @@ test("53. mark all as read, then undo, and Jira receives both", async ({ page, a
   const before = [1, 2, 3, 6, 9].map(group).sort();
   await inboxLink(page).click();
   await expect(row(page, "Unread", "TEST-1")).toBeVisible();
+  await expect(page.locator('link[rel="icon"][data-unread-favicon]')).toHaveCount(1);
   expect(await jiraUnread(fixtureUrl)).toEqual(before);
 
   await page.getByRole("button", { name: "Notification actions" }).click();
@@ -132,6 +133,7 @@ test("53. mark all as read, then undo, and Jira receives both", async ({ page, a
 
   for (const key of ["TEST-2", "TEST-1", "TEST-3", "TEST-6", "OUT-9"]) await expect(row(page, "Read", key)).toBeVisible();
   await expect(inboxLink(page)).toHaveAccessibleName("Inbox");
+  await expect(page.locator('link[rel="icon"][data-unread-favicon]')).toHaveCount(0);
   await expect.poll(() => jiraUnread(fixtureUrl)).toEqual([]);
   expect(await inboxWrites(app)).toContainEqual({ action: "read-all" });
 
@@ -139,6 +141,7 @@ test("53. mark all as read, then undo, and Jira receives both", async ({ page, a
 
   for (const key of ["TEST-2", "TEST-1", "TEST-3", "TEST-6", "OUT-9"]) await expect(row(page, "Unread", key)).toBeVisible();
   await expect(inboxLink(page)).toHaveAccessibleName("Inbox 5");
+  await expect(page.locator('link[rel="icon"][data-unread-favicon]')).toHaveCount(1);
   await expect.poll(() => jiraUnread(fixtureUrl)).toEqual(before);
   expect((await inboxWrites(app)).filter((s) => s.action === "unread").flatMap((s) => s.groups!).sort()).toEqual(before);
 

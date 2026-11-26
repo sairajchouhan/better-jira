@@ -14,6 +14,7 @@ import { peopleOf } from "@/shared/people";
 import { defaultPreferences } from "@/shared/view-model";
 import { placeOf } from "./navigation";
 import { announcement, ERROR_TITLE, NOT_FOUND_TITLE, titleOf } from "./route-title";
+import { syncFavicon } from "./favicon-badge";
 
 const placeIn = (s: State) => placeOf(s, (board) => (s.preferences[board] ?? defaultPreferences()).scope);
 /** The screen's title; a store selector, so it re-renders only when the words change. */
@@ -37,9 +38,13 @@ export function RouteTitle() {
   const { count } = useUnreadCount();
   const screen = useStore((s) => screenTitle(s, count));
   const title = failed ?? screen;
+  const hasUnread = count > 0;
   useEffect(() => {
     if (document.title !== title) document.title = title;
   }, [title]);
+  useEffect(() => {
+    syncFavicon(hasUnread);
+  }, [hasUnread]);
   return <NavigationAnnouncer title={title} />;
 }
 
