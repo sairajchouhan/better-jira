@@ -16,7 +16,7 @@ import { FindField } from "@/client/components/find-field";
 import { Tabs } from "@/client/components/tabs";
 import { Text } from "@/client/components/text";
 import { Icon, PriorityIcon, StatusIcon, TypeDot, type IconName } from "@/client/components/icons";
-import { FILTER_FIELDS, filterOperator, withOperator, withoutFilter, describe, emptyInbox, groupSummary, rowLabel, feedCategory, hasFilters, missingIssueNote, needsWholeFeed, shortAgo, type FilterField, type InboxItem, type InboxView, snoozeMarks, type SnoozeMarks } from "@/shared/inbox-model";
+import { FILTER_FIELDS, filterOperator, withOperator, withoutFilter, describe, emptyInbox, groupSummary, rowLabel, feedCategory, hasFilters, missingIssueNote, needsWholeFeed, notificationSource, shortAgo, type FilterField, type InboxItem, type InboxView, snoozeMarks, type SnoozeMarks } from "@/shared/inbox-model";
 import { CommentCard, InboxGroupUpdates } from "@/client/features/inbox/inbox-group";
 import { TIME_PLACEHOLDER, TimeOptionRows } from "@/client/features/time-options/time-option-rows";
 import { snoozedFor } from "@/shared/time-options";
@@ -1068,18 +1068,20 @@ export function InboxPane() {
   const row = useSelectedRow();
   const mirrored = useStore((s) => !!row && s.issues.has(row.key));
   const unread = useUnreadCount().count;
-  if (row && !mirrored)
+  if (row && !mirrored) {
+    const source = notificationSource(row);
+    const copyButtons = row.key ? COPY.slice(0, 2) : COPY.slice(1, 2);
     return (
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex h-11 shrink-0 items-center gap-1.5 border-b border-line px-3">
           <Text variant="mini" color="muted">
-            {row.key}
+            {row.key || row.space || source}
           </Text>
           <InboxIssueActions />
-          {COPY.slice(0, 2).map(([kind, id]) => (
+          {copyButtons.map(([kind, id]) => (
             <IconButton
               key={kind}
-              label={`Copy issue ${kind}`}
+              label={row.key ? `Copy issue ${kind}` : `Copy ${kind}`}
               shortcut={hotkeyOf(id)}
               onClick={() => void copyRow(row, kind)}
             >
@@ -1088,12 +1090,13 @@ export function InboxPane() {
           ))}
           <span className="flex-1" />
           <ButtonLink variant="link" size="small" href={row.link || row.url} target="_blank" rel="noreferrer" data-trip="inbox-open-in-jira">
-            Open in Jira <Icon name="external" />
+            Open in {source} <Icon name="external" />
           </ButtonLink>
         </div>
         <InboxNotification row={row} />
       </div>
     );
+  }
   return <InboxEmptyPane unread={unread} />;
 }
 
@@ -1136,7 +1139,7 @@ export function InboxNotification({ row }: { row: InboxItem }) {
         {row.title}
       </Text>
       <Text as="p" variant="small" color="muted" className="mt-1">
-        {[row.issueType, row.key, row.status, row.category === "watching" ? "Watching" : "Direct"].filter(Boolean).join(" · ")}
+        {[row.issueType, row.key || row.space, row.status, row.category === "watching" ? "Watching" : "Direct"].filter(Boolean).join(" · ")}
       </Text>
       <Text as="p" variant="small" color="base" className="mt-3">
         {describe({ ...row, preview: "" })}{" "}
@@ -1152,9 +1155,11 @@ export function InboxNotification({ row }: { row: InboxItem }) {
       <div className="mt-4">
         <InboxGroupUpdates key={row.id} row={row} mirrored={false} />
       </div>
-      <Text as="p" variant="mini" color="muted" className="mt-4">
-        {missingIssueNote(outcome)}
-      </Text>
+      {row.key && (
+        <Text as="p" variant="mini" color="muted" className="mt-4">
+          {missingIssueNote(outcome)}
+        </Text>
+      )}
     </div>
   );
 }

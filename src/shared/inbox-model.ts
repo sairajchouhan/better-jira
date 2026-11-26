@@ -38,6 +38,8 @@ export type InboxItem = Omit<InboxNote, "id"> & {
   /** The head notification. A new notification on the issue changes it, which resets local state kept for the old one. */
   head: string;
   key: string;
+  /** Space or container title for non-issue notifications (e.g. Confluence spaces) where `key` is empty. */
+  space?: string;
   title: string;
   /** The issue's address, without Jira's comment or assignment context. */
   url: string;
@@ -209,10 +211,10 @@ export function mapFeed(
       headNote = mapNote(head);
     if (!node?.groupId || !headNote) return [];
     const url = str(content.entity?.url) || str(content.url),
-      pathKey = (content.path ?? [])
-        .map((p: any) => str(p?.title))
-        .find((t: string) => ISSUE_KEY.test(t)),
+      pathTitles = (content.path ?? []).map((p: any) => str(p?.title)).filter(Boolean),
+      pathKey = pathTitles.find((t: string) => ISSUE_KEY.test(t)),
       key = pathKey ?? url.match(/\/browse\/([A-Z][A-Z0-9_]+-\d+)/)?.[1] ?? "",
+      space = !key ? (pathTitles[0] ?? "") : "",
       states: unknown[] = Array.isArray(node.readStates) ? node.readStates : [],
       unread = states.length ? states.includes("unread") : head.readState !== "read",
       group = (children[str(node.groupId)] ?? []).flatMap((c) => mapNote(c) ?? []),
@@ -230,6 +232,7 @@ export function mapFeed(
         id: str(node.groupId),
         head: headNote.id,
         key,
+        ...(space ? { space } : {}),
         title: str(content.entity?.title) || headNote.message,
         status: headNote.status,
         url: url.replace(/[?#].*$/, "") || url,
@@ -244,10 +247,15 @@ export function mapFeed(
   });
 }
 
-/** Jira's sentence names the issue type ("updated a story", "changed a work item from …", "commented on an epic"). */
+/** Atlassian product a notification opens in, derived from its URL. */
+export function notificationSource(item: Pick<InboxItem, "url" | "link">): "Confluence" | "Jira" {
+  return /\/wiki(\/|$)/.test(item.url || item.link) ? "Confluence" : "Jira";
+}
+
+/** Jira's sentence names the item type ("updated a story", "changed a work item from …", "commented on your page"). */
 export function issueTypeOf(message: string): string {
   const m = message.match(
-    /\b(?:updated|changed|assigned|unassigned|created|commented on|replied to|reacted to|mentioned you on|resolved|deleted|moved|linked|attached \w+ to) an? ([a-z][a-z-]*(?: item)?)\b/i,
+    /\b(?:updated|changed|assigned|unassigned|created|commented on|replied to|reacted to|mentioned you on|resolved|deleted|moved|linked|attached \w+ to) (?:an?|your) ([a-z][a-z-]*(?: item)?)\b/i,
   );
   const type = m?.[1]?.toLowerCase();
   return type && type !== "comment" ? type[0]!.toUpperCase() + type.slice(1) : "";
@@ -460,7 +468,7 @@ export function facetsOf(
   return {
     type: TYPE[item.kind],
     from: item.actor?.name ?? "Jira",
-    project: issue?.project?.name ?? (prefix ? (projects?.get(prefix) ?? prefix) : "No space"),
+    project: issue?.project?.name ?? (prefix ? (projects?.get(prefix) ?? prefix) : item.space || "No space"),
     priority: PRIORITY[issue ? priorityRank(issue.priority) : 4]!,
     statusType: statusType(status ?? { name: item.status, category: "" }),
   };

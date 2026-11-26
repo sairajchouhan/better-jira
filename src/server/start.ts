@@ -45,6 +45,7 @@ export async function startServer(): Promise<Server<undefined>> {
     server = serve({
       hostname: "127.0.0.1",
       port: configuredPort(),
+      idleTimeout: 60,
       routes,
       development,
     });
@@ -64,6 +65,7 @@ export async function startServer(): Promise<Server<undefined>> {
   server = serve({
     hostname: "127.0.0.1",
     port: configuredPort(),
+    idleTimeout: 60,
     routes: {
       "/*": index,
       "/api/client": localOnly(() => Response.json(setupPayload())),

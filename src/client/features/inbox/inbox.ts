@@ -92,12 +92,13 @@ function openInboxRow(item: InboxItem, open: "side" | "page") {
   } else {
     navigate({ selected: null, panel: false, inbox: true });
     keepRowInUrl(item.id);
-    // An issue on no board opens here once the mirror keeps it (BJ-341); the notification shows meanwhile, and stays when
-    // Jira has no such issue. A row chosen since wins.
-    void keepIssue(item.key).then((issue) => {
-      const search = router.latestLocation.search as Record<string, string | undefined>;
-      if (issue && search[ROW_PARAM] === item.id) openInboxRow(item, open);
-    });
+    // An issue on no board opens here once the mirror keeps it (BJ-341); non-issue notifications (e.g. Confluence) stay in the notification pane.
+    if (item.key) {
+      void keepIssue(item.key).then((issue) => {
+        const search = router.latestLocation.search as Record<string, string | undefined>;
+        if (issue && search[ROW_PARAM] === item.id) openInboxRow(item, open);
+      });
+    }
   }
   requestAnimationFrame(() =>
     document

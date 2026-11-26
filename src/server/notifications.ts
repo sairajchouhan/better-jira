@@ -78,8 +78,8 @@ const NOTE = `notificationId timestamp readState category
           }`;
 const FEED = `query InboxFeed($ari: String, $first: Int, $after: String, $category: InfluentsNotificationCategory) {
   notifications {
-    unseenNotificationCount(product: "jira", collabContextRoutingAri: $ari)
-    notificationFeed(first: $first, after: $after, collabContextRoutingAri: $ari, filter: { productFilter: "jira", categoryFilter: $category }) {
+    unseenNotificationCount(collabContextRoutingAri: $ari)
+    notificationFeed(first: $first, after: $after, collabContextRoutingAri: $ari, filter: { categoryFilter: $category }) {
       pageInfo { hasNextPage endCursor }
       nodes {
         groupId groupSize readStates
@@ -106,7 +106,7 @@ async function groupChunk(groups: string[]): Promise<Record<string, { nodes: unk
   const fields = groups
     .map(
       (_, i) =>
-        `g${i}: notificationGroup(groupId: $g${i}, first: ${GROUP_FIRST}, collabContextRoutingAri: $ari, filter: { productFilter: "jira" }) { pageInfo { hasNextPage endCursor } nodes { ${NOTE} } }`,
+        `g${i}: notificationGroup(groupId: $g${i}, first: ${GROUP_FIRST}, collabContextRoutingAri: $ari) { pageInfo { hasNextPage endCursor } nodes { ${NOTE} } }`,
     )
     .join("\n");
   const vars = groups.map((_, i) => `$g${i}: String!`).join(", ");
@@ -130,7 +130,7 @@ async function groupChunk(groups: string[]): Promise<Record<string, { nodes: unk
 
 const GROUP = `query InboxGroup($ari: String, $group: String!, $first: Int, $after: String) {
   notifications {
-    notificationGroup(groupId: $group, first: $first, after: $after, collabContextRoutingAri: $ari, filter: { productFilter: "jira" }) {
+    notificationGroup(groupId: $group, first: $first, after: $after, collabContextRoutingAri: $ari) {
       pageInfo { hasNextPage endCursor }
       nodes { ${NOTE} }
     }
@@ -169,7 +169,7 @@ export async function feed(category?: "direct" | "watching", after?: string): Pr
 
 const UNREAD = `query InboxUnread($ari: String, $after: String) {
   notifications {
-    notificationFeed(first: 50, after: $after, collabContextRoutingAri: $ari, filter: { productFilter: "jira", readStateFilter: unread }) {
+    notificationFeed(first: 50, after: $after, collabContextRoutingAri: $ari, filter: { readStateFilter: unread }) {
       pageInfo { hasNextPage endCursor }
       nodes { groupId headNotification { notificationId } }
     }
@@ -182,10 +182,11 @@ export async function unreadGroups(): Promise<{ id: string; head: string }[]> {
   // ponytail: 10 pages (about 500 unread rows) at most; raise it if anyone gets near that.
   for (let i = 0; i < 10; i++) {
     const f: any = (await gateway("InboxUnread", UNREAD, { after })).notificationFeed;
-    for (const n of f?.nodes ?? [])
+    const nodes = f?.nodes ?? [];
+    for (const n of nodes)
       if (n?.groupId)
         out.push({ id: String(n.groupId), head: String(n.headNotification?.notificationId ?? "") });
-    if (!f?.pageInfo?.hasNextPage || !f.pageInfo.endCursor) break;
+    if (!nodes.length || !f?.pageInfo?.hasNextPage || !f.pageInfo.endCursor) break;
     after = String(f.pageInfo.endCursor);
   }
   return out;
@@ -262,7 +263,7 @@ export async function mark(groups: string[], read: boolean) {
 export const markAllRead = () =>
   gateway(
     "InboxMarkAllRead",
-    `mutation InboxMarkAllRead($ari: String) { notifications { markNotificationsAsRead(product: "jira", collabContextRoutingAri: $ari) } }`,
+    `mutation InboxMarkAllRead($ari: String) { notifications { markNotificationsAsRead(collabContextRoutingAri: $ari) } }`,
     {},
   );
 
@@ -282,14 +283,14 @@ export async function readAll(except: string[]) {
 export const clearUnseen = () =>
   gateway(
     "InboxSeen",
-    `mutation InboxSeen($ari: String) { notifications { clearUnseenCount(product: "jira", collabContextRoutingAri: $ari) } }`,
+    `mutation InboxSeen($ari: String) { notifications { clearUnseenCount(collabContextRoutingAri: $ari) } }`,
     {},
   );
 
 const PULSE = `query InboxPulse($ari: String) {
   notifications {
-    unseenNotificationCount(product: "jira", collabContextRoutingAri: $ari)
-    notificationFeed(first: 1, collabContextRoutingAri: $ari, filter: { productFilter: "jira" }) {
+    unseenNotificationCount(collabContextRoutingAri: $ari)
+    notificationFeed(first: 1, collabContextRoutingAri: $ari) {
       nodes { headNotification { notificationId } }
     }
   }

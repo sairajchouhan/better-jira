@@ -24,6 +24,7 @@ import {
   kindOf,
   mapFeed,
   missingIssueNote,
+  notificationSource,
   rowLabel,
   shortAgo,
   unreadCount,
@@ -119,6 +120,52 @@ group("mapFeed", () => {
       headNotification: { ...live.headNotification, readState: "read" },
     };
     expect(mapFeed([node])[0]?.unread).toBe(true);
+  });
+  test("maps a Confluence bell node with its space, page type, and source", () => {
+    const confluenceUrl = "https://example.atlassian.net/wiki/spaces/ENG/pages/42/Architecture?focusedCommentId=99";
+    const [row] = mapFeed([
+      {
+        groupId: "ari:cloud:confluence:a42d:page/42",
+        groupSize: 3,
+        readStates: ["unread"],
+        headNotification: {
+          notificationId: "conf-1",
+          timestamp: "2026-11-26T07:12:19.117Z",
+          readState: "unread",
+          category: "direct",
+          content: {
+            type: "created",
+            message: "Alex Rivera commented on your page",
+            url: confluenceUrl,
+            actor: { displayName: "Alex Rivera" },
+            entity: { title: "Architecture overview", url: confluenceUrl, status: null },
+            path: [{ title: "Engineering Docs", url: "https://example.atlassian.net/wiki/spaces/ENG" }],
+            bodyItems: [
+              {
+                document: {
+                  format: "ADF",
+                  data: '{"type":"doc","version":1,"content":[{"type":"paragraph","content":[{"type":"text","text":"Looks solid"}]}]}',
+                },
+              },
+            ],
+          },
+        },
+      },
+    ]);
+    expect(row).toMatchObject({
+      id: "ari:cloud:confluence:a42d:page/42",
+      key: "",
+      space: "Engineering Docs",
+      title: "Architecture overview",
+      issueType: "Page",
+      kind: "comment",
+      preview: "Looks solid",
+      unread: true,
+      count: 3,
+    });
+    expect(notificationSource(row!)).toBe("Confluence");
+    expect(notificationSource(mapFeed([live])[0]!)).toBe("Jira");
+    expect(facetsOf(row!).project).toBe("Engineering Docs");
   });
 });
 

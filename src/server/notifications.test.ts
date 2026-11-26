@@ -1,5 +1,5 @@
 import { afterAll, afterEach, expect, test } from "bun:test";
-import { mark, NoAnswer } from "./notifications";
+import { clearUnseen, feed, group, mark, markAllRead, NoAnswer, unreadGroups } from "./notifications";
 
 // A made-up writable site for this file only: env, not mock.module, which would reach every other test file.
 const SITE = "https://fixture.atlassian.net";
@@ -35,4 +35,42 @@ test("a mark Jira refuses is not NoAnswer: the tab rolls it back", async () => {
   const failure = await mark(["group-1"], true).catch((error: unknown) => error);
   expect(failure).toBeInstanceOf(Error);
   expect(failure).not.toBeInstanceOf(NoAnswer);
+});
+
+test("notification queries and mutations match Jira's bell without productFilter: \"jira\"", async () => {
+  const sent: { operationName: string; query: string }[] = [];
+  globalThis.fetch = (async (url: string | URL | Request, init?: RequestInit) => {
+    if (String(url).endsWith("/_edge/tenant_info")) return Response.json({ cloudId: "cloud-1" });
+    const body = JSON.parse(String(init?.body ?? "{}")) as { operationName: string; query: string };
+    sent.push(body);
+    return Response.json({
+      data: {
+        notifications: {
+          unseenNotificationCount: 0,
+          notificationFeed: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] },
+          notificationGroup: { pageInfo: { hasNextPage: false, endCursor: null }, nodes: [] },
+          markNotificationsAsRead: "",
+          clearUnseenCount: "",
+        },
+      },
+    });
+  }) as typeof fetch;
+
+  await feed("direct");
+  await group("ari:cloud:confluence:cloud-1:page/1");
+  await unreadGroups();
+  await markAllRead();
+  await clearUnseen();
+
+  expect(sent.map((s) => s.operationName)).toEqual([
+    "InboxFeed",
+    "InboxGroup",
+    "InboxUnread",
+    "InboxMarkAllRead",
+    "InboxSeen",
+  ]);
+  for (const call of sent) {
+    expect(call.query).not.toContain('productFilter: "jira"');
+    expect(call.query).not.toContain('product: "jira"');
+  }
 });
