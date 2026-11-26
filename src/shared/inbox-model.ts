@@ -85,8 +85,8 @@ export type InboxFeed = {
   items: InboxItem[];
   more: boolean;
   cursor?: string;
-  /** On the unfiltered first page: every unread row in Jira, loaded or not. */
-  unread?: { id: string; head: string }[];
+  /** On the unfiltered first page: every unread group in Jira, with its unread notification count (matching Jira's bell). */
+  unread?: { id: string; head: string; count?: number }[];
 };
 
 const ISSUE_KEY = /^[A-Z][A-Z0-9_]+-\d+$/;
@@ -373,21 +373,25 @@ export const missingIssueNote = (outcome: KeptOutcome) =>
     unreachable: "Couldn't reach Jira to open this issue. Select the notification again to retry.",
   })[outcome];
 
-/** Linear's unread count: Jira's unread rows (all of them from `unread`, plus the loaded ones), plus rows being marked unread
- *  here (an undone ⌥U reaches unloaded rows: R3-inbox-D5), less this browser's deletes, snoozes and read marks. */
+/** Unread notification count matching Jira's bell: sums each unread group's unread count (`u.count ?? 1`), plus any
+ *  loaded unread rows or rows marked unread locally, less this browser's deletes, snoozes and read marks. */
 export function unreadCount(
-  unread: { head: string }[] | undefined,
+  unread: { head: string; count?: number }[] | undefined,
   items: InboxItem[],
   local: Record<string, Local>,
   now = Date.now(),
 ): number {
-  const heads = new Set(unread?.map((u) => u.head));
-  for (const i of items) if (i.unread) heads.add(i.head);
-  for (const head in local) if (local[head]!.read === false) heads.add(head);
+  const weights = new Map<string, number>();
+  for (const u of unread ?? []) {
+    const w = typeof u.count === "number" && u.count > 0 ? u.count : 1;
+    weights.set(u.head, Math.max(weights.get(u.head) ?? 0, w));
+  }
+  for (const i of items) if (i.unread && !weights.has(i.head)) weights.set(i.head, 1);
+  for (const head in local) if (local[head]!.read === false && !weights.has(head)) weights.set(head, 1);
   let count = 0;
-  for (const head of heads) {
+  for (const [head, weight] of weights) {
     const own = local[head];
-    if (!own?.deleted && !(own?.snoozed && own.snoozed > now) && !own?.read) count++;
+    if (!own?.deleted && !(own?.snoozed && own.snoozed > now) && !own?.read) count += weight;
   }
   return count;
 }

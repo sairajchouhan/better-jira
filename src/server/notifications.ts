@@ -167,33 +167,39 @@ export async function feed(category?: "direct" | "watching", after?: string): Pr
   };
 }
 
+const UNREAD_PAGE = 50;
 const UNREAD = `query InboxUnread($ari: String, $after: String) {
   notifications {
-    notificationFeed(first: 50, after: $after, collabContextRoutingAri: $ari, filter: { readStateFilter: unread }) {
+    notificationFeed(first: ${UNREAD_PAGE}, after: $after, collabContextRoutingAri: $ari, filter: { readStateFilter: unread }) {
       pageInfo { hasNextPage endCursor }
-      nodes { groupId headNotification { notificationId } }
+      nodes { groupId groupSize headNotification { notificationId } }
     }
   }
 }`;
-/** Every unread row in Jira's feed: Jira has no unread count, and the feed itself pages, so loaded rows undercount. */
-export async function unreadGroups(): Promise<{ id: string; head: string }[]> {
-  const out: { id: string; head: string }[] = [];
+/** Every unread group in Jira's feed, with its unread notification count (`groupSize` under `readStateFilter: unread`). */
+export async function unreadGroups(): Promise<{ id: string; head: string; count: number }[]> {
+  const out: { id: string; head: string; count: number }[] = [];
   let after: string | null = null;
-  // ponytail: 10 pages (about 500 unread rows) at most; raise it if anyone gets near that.
+  // ponytail: 10 pages (about 500 unread groups) at most; raise it if anyone gets near that.
   for (let i = 0; i < 10; i++) {
     const f: any = (await gateway("InboxUnread", UNREAD, { after })).notificationFeed;
     const nodes = f?.nodes ?? [];
     for (const n of nodes)
       if (n?.groupId)
-        out.push({ id: String(n.groupId), head: String(n.headNotification?.notificationId ?? "") });
-    if (!nodes.length || !f?.pageInfo?.hasNextPage || !f.pageInfo.endCursor) break;
+        out.push({
+          id: String(n.groupId),
+          head: String(n.headNotification?.notificationId ?? ""),
+          count: Math.max(Number(n.groupSize) || 1, 1),
+        });
+    // Jira reports hasNextPage: true on the final short page before returning 0 nodes; stop once short.
+    if (nodes.length < UNREAD_PAGE || !f?.pageInfo?.hasNextPage || !f.pageInfo.endCursor) break;
     after = String(f.pageInfo.endCursor);
   }
   return out;
 }
 
-/** What GET /api/inbox answers without a cursor: a tab's first page, and for the whole feed every unread row (the badge). */
-export type FirstPage = InboxFeed & { unread?: { id: string; head: string }[] };
+/** What GET /api/inbox answers without a cursor: a tab's first page, and for the whole feed every unread group (the badge). */
+export type FirstPage = InboxFeed & { unread?: { id: string; head: string; count?: number }[] };
 /** The last first page Jira gave, per bell tab. Jira's feed takes 3–4 s to read (feed, then its groups); a browser with no
  *  page of its own shows this one at once and reads Jira's meanwhile, as one with a stored page does (R4-inbox-D5). Linear's
  *  inbox is instant because notifications are synced models in its local pool; this server is the nearest local copy. */
@@ -291,19 +297,30 @@ const PULSE = `query InboxPulse($ari: String) {
   notifications {
     unseenNotificationCount(collabContextRoutingAri: $ari)
     notificationFeed(first: 1, collabContextRoutingAri: $ari) {
-      nodes { headNotification { notificationId } }
+      nodes { groupId groupSize readStates headNotification { notificationId } }
+    }
+    unread: notificationFeed(first: 50, collabContextRoutingAri: $ari, filter: { readStateFilter: unread }) {
+      nodes { groupId groupSize headNotification { notificationId } }
     }
   }
 }`;
 const g = globalThis as { inboxPulse?: string; inboxChecked?: number };
-/** Called from the mirror's poll loop while a tab is open: a cheap read, at most every 10 s. True when the feed moved, so tabs refetch it.
- *  The count alone misses a new notification once a tab's "seen" cleared it in between (1 → 0 → 1 reads as no change), so the newest notification's id counts too (R2-inbox-D4). */
+/** Called from the mirror's poll loop: a cheap read, at most every 10 s. True when the feed or any unread group moved,
+ *  so the server refreshes its kept first page and tells open tabs to refetch. */
 export async function unseenChanged(): Promise<boolean> {
   if (Date.now() - (g.inboxChecked ?? 0) < 10_000) return false;
   g.inboxChecked = Date.now();
   const data = await gateway("InboxPulse", PULSE, {});
-  const pulse = `${Number(data.unseenNotificationCount) || 0}:${data.notificationFeed?.nodes?.[0]?.headNotification?.notificationId ?? ""}`;
+  const top = data.notificationFeed?.nodes?.[0];
+  const topSig = top
+    ? `${top.groupId ?? ""}:${top.headNotification?.notificationId ?? ""}:${top.groupSize ?? ""}:${(top.readStates ?? []).join(",")}`
+    : "";
+  const unreadSig = (data.unread?.nodes ?? [])
+    .map((n: any) => `${n.groupId ?? ""}:${n.headNotification?.notificationId ?? ""}:${n.groupSize ?? ""}`)
+    .join("|");
+  const pulse = `${Number(data.unseenNotificationCount) || 0}#${topSig}#${unreadSig}`;
   const changed = g.inboxPulse !== undefined && pulse !== g.inboxPulse;
   g.inboxPulse = pulse;
+  if (changed) refreshKept();
   return changed;
 }

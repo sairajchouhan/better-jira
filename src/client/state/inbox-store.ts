@@ -228,7 +228,7 @@ export function createInboxStore(ports: InboxPorts) {
     initialDataUpdatedAt: 0,
     initialPageParam: "",
     getNextPageParam: (last: Feed) => (last.more && last.cursor) || undefined,
-    staleTime: 30_000,
+    staleTime: 10_000,
     refetchOnWindowFocus: true,
     refetchInterval: 5 * 60_000, // backstop; the server's unseen-count poll pushes changes sooner
   });
@@ -245,17 +245,19 @@ export function createInboxStore(ports: InboxPorts) {
     }
     return observer;
   }
-  /** With no first page stored in this browser, the server's kept one shows at once while Jira's is read (3–4 s), as a
-   *  stored one does: it counts as not fetched yet (`updatedAt` 0, like `initialData`), and Jira's replaces it on arrival.
-   *  Only while the query has no data, so it never stands in for a fetched page (R4-inbox-D5). */
+  /** Seeds the query with the server's warm kept first page before the live fetch finishes, even when localStorage
+   *  held an older snapshot (`dataUpdatedAt === 0`). Never overwrites a live fetch once `dataUpdatedAt > 0`. */
   function seedKept(category: Category) {
     const key = ["inbox", category];
-    if (!ports.fetchKept || queryClient.getQueryData(key)) return;
+    if (!ports.fetchKept) return;
+    const state = queryClient.getQueryState(key);
+    if (state && state.dataUpdatedAt > 0) return;
     void ports
       .fetchKept(new URLSearchParams(category === "all" ? {} : { category }))
       .then((page) => {
-        if (page?.items && !queryClient.getQueryData(key))
-          queryClient.setQueryData<InfiniteData<Feed, string>>(key, { pages: [page], pageParams: [""] }, { updatedAt: 0 });
+        const current = queryClient.getQueryState(key);
+        if (!page?.items || (current && current.dataUpdatedAt > 0)) return;
+        queryClient.setQueryData<InfiniteData<Feed, string>>(key, { pages: [page], pageParams: [""] }, { updatedAt: 0 });
       })
       .catch(() => {});
   }

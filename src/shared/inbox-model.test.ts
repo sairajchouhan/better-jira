@@ -305,6 +305,29 @@ test("unreadCount counts Jira's unread rows beyond the loaded pages, less local 
   ).toBe(61 - 3 + 1);
   // Without Jira's list (an older server), the loaded rows still count.
   expect(unreadCount(undefined, loaded, {}, now)).toBe(1);
+  // Multi-notification unread groups count each unread notification inside the group (matching Jira's bell).
+  expect(
+    unreadCount(
+      [
+        { head: "h0", count: 2 },
+        { head: "h1", count: 3 },
+      ],
+      [],
+      {},
+      now,
+    ),
+  ).toBe(5);
+  expect(
+    unreadCount(
+      [
+        { head: "h0", count: 2 },
+        { head: "h1", count: 3 },
+      ],
+      [],
+      { h0: { read: true } },
+      now,
+    ),
+  ).toBe(3);
 });
 
 test("an undone ⌥U counts rows being marked unread that Jira's last list and the loaded pages lack (R3-inbox-D5)", () => {

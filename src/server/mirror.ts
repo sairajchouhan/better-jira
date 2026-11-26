@@ -459,11 +459,10 @@ async function loop() {
     if (changed.includes(true)) notify();
     syncGitHub();
     readPullRequestNumbers(changed.includes(true));
-    if (live.clients.size)
-      void unseenChanged().then(
-        (moved) => moved && notify("inbox"),
-        (e) => console.error("[inbox]", String(e).slice(0, 200)),
-      );
+    void unseenChanged().then(
+      (moved) => moved && live.clients.size && notify("inbox"),
+      (e) => console.error("[inbox]", String(e).slice(0, 200)),
+    );
     void enrichProperties().catch((e) => console.error("[properties]", String(e).slice(0, 200)));
     await new Promise<void>((resolve) => {
       live.wake = resolve;

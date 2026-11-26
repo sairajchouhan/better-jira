@@ -74,3 +74,31 @@ test("notification queries and mutations match Jira's bell without productFilter
     expect(call.query).not.toContain('product: "jira"');
   }
 });
+
+test("unreadGroups reads per-group unread counts from groupSize and stops on a short page", async () => {
+  let calls = 0;
+  globalThis.fetch = (async (url: string | URL | Request) => {
+    if (String(url).endsWith("/_edge/tenant_info")) return Response.json({ cloudId: "cloud-1" });
+    calls++;
+    return Response.json({
+      data: {
+        notifications: {
+          notificationFeed: {
+            pageInfo: { hasNextPage: true, endCursor: "cursor-1" },
+            nodes: [
+              { groupId: "g1", groupSize: 2, headNotification: { notificationId: "h1" } },
+              { groupId: "g2", groupSize: 3, headNotification: { notificationId: "h2" } },
+            ],
+          },
+        },
+      },
+    });
+  }) as typeof fetch;
+
+  const groups = await unreadGroups();
+  expect(calls).toBe(1);
+  expect(groups).toEqual([
+    { id: "g1", head: "h1", count: 2 },
+    { id: "g2", head: "h2", count: 3 },
+  ]);
+});
