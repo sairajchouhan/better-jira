@@ -16,11 +16,26 @@ export const PERSONAL = process.env.REAL_JIRA_HOME
   ? path.resolve(process.env.REAL_JIRA_HOME)
   : path.join(REPO_ROOT, "instances", "personal");
 
+function readPersonalSettings(): Record<string, any> {
+  const settingsPath = path.join(PERSONAL, "settings.json");
+  if (!existsSync(settingsPath)) return {};
+  return JSON.parse(readFileSync(settingsPath, "utf8")) as Record<string, any>;
+}
+
+function readPersonalEnv(): Record<string, string | undefined> {
+  const credsPath = existsSync(path.join(PERSONAL, "credentials.env"))
+    ? path.join(PERSONAL, "credentials.env")
+    : path.join(PERSONAL, ".env");
+  return existsSync(credsPath) ? parseEnv(readFileSync(credsPath, "utf8")) : {};
+}
+
 function resolveSandboxSite(): string {
   if (process.env.REAL_JIRA_SITE?.trim()) return siteURL(process.env.REAL_JIRA_SITE.trim());
   try {
-    const settings = JSON.parse(readFileSync(path.join(PERSONAL, "settings.json"), "utf8")) as { site?: string };
+    const settings = readPersonalSettings();
     if (settings.site) return siteURL(settings.site);
+    const env = readPersonalEnv();
+    if (env.JIRA_URL) return siteURL(env.JIRA_URL);
   } catch {}
   return "";
 }
@@ -30,11 +45,8 @@ const RESERVED_PORTS = new Set([3000, 3002, 3003, 6000]);
 
 /** The personal sandbox instance's site and credentials. Throws if `REAL_JIRA_SITE` is pinned and does not match. */
 export function personalAuth(): JiraAuth {
-  const credsPath = existsSync(path.join(PERSONAL, "credentials.env"))
-    ? path.join(PERSONAL, "credentials.env")
-    : path.join(PERSONAL, ".env");
-  const env = parseEnv(readFileSync(credsPath, "utf8"));
-  const settings = JSON.parse(readFileSync(path.join(PERSONAL, "settings.json"), "utf8"));
+  const env = readPersonalEnv();
+  const settings = readPersonalSettings();
   const auth = jiraAuth(env, settings);
   const pinned = process.env.REAL_JIRA_SITE?.trim() ? siteURL(process.env.REAL_JIRA_SITE.trim()) : SITE;
   if (!pinned || auth.site !== pinned) {

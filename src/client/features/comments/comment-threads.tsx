@@ -681,7 +681,7 @@ function Thread({
       {deleting && (
         <ConfirmDialog
           title="Delete this comment?"
-          description="You cannot undo this action."
+          description="This removes the comment from Jira. Press ⌘Z to undo."
           confirmLabel="Delete"
           onConfirm={() => {
             trackEdit(deleting, null);

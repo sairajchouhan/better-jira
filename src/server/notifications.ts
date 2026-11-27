@@ -93,10 +93,37 @@ const FEED = `query InboxFeed($ari: String, $first: Int, $after: String, $catego
  *  parallel requests of six. Measured on a 28-group feed: one request 1.63–1.83 s, six-group requests 1.36–1.63 s
  *  (R4-inbox-D5). */
 export const GROUP_CHUNK = 6;
-/** The first page of every group with more than one notification (aliases, like `mark`): each row leads with Linear's
- *  main notification, and expanding the group shows the same page at once. A failed request only costs its groups: their
- *  rows fall back to Jira's newest, and each group reads its page when it is expanded. */
+/** Maximum grouped rows prefetched alongside a feed page; older read groups hydrate lazily when expanded. */
+export const GROUP_PREFETCH_CAP = 12;
+
+/** Picks which multi-item groups to prefetch with the feed: every unread group (up to `GROUP_PREFETCH_CAP`) so recent
+ *  mentions still promote cleanly, plus top recent groups to fill at least one `GROUP_CHUNK` request without blocking on
+ *  dozens of older read groups. */
+export function groupsToPrefetch(nodes: any[], max = GROUP_PREFETCH_CAP, minTop = GROUP_CHUNK): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  const add = (n: any) => {
+    const id = n?.groupId ? String(n.groupId) : "";
+    if (!id || Number(n.groupSize) <= 1 || seen.has(id) || out.length >= max) return;
+    seen.add(id);
+    out.push(id);
+  };
+  for (const n of nodes) {
+    const states: unknown[] = Array.isArray(n?.readStates) ? n.readStates : [];
+    const unread = states.length ? states.includes("unread") : n?.headNotification?.readState !== "read";
+    if (unread) add(n);
+  }
+  for (const n of nodes) {
+    if (out.length >= minTop) break;
+    add(n);
+  }
+  return out;
+}
+
+/** The first page of prefetched groups (aliases, like `mark`): each row leads with Linear's main notification, and
+ *  expanding the group shows the same page at once. Unprefetched older groups read their page on demand when expanded. */
 async function groupNotes(groups: string[]): Promise<Record<string, { nodes: unknown[]; pageInfo?: any }>> {
+  if (!groups.length) return {};
   const chunks: string[][] = [];
   for (let i = 0; i < groups.length; i += GROUP_CHUNK) chunks.push(groups.slice(i, i + GROUP_CHUNK));
   const read = await Promise.all(chunks.map(groupChunk));
@@ -152,9 +179,7 @@ export async function feed(category?: "direct" | "watching", after?: string): Pr
   });
   const page = data.notificationFeed?.pageInfo,
     nodes: any[] = data.notificationFeed?.nodes ?? [];
-  const children = await groupNotes(
-    nodes.filter((n) => n?.groupId && Number(n.groupSize) > 1).map((n) => String(n.groupId)),
-  );
+  const children = await groupNotes(groupsToPrefetch(nodes));
   const items = mapFeed(nodes, Object.fromEntries(Object.entries(children).map(([id, c]) => [id, c.nodes])));
   return {
     unseen: Number(data.unseenNotificationCount) || 0,

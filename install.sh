@@ -20,6 +20,7 @@ need_cmd() {
 
 need_cmd curl
 need_cmd uname
+need_cmd tar
 
 OS_RAW=$(uname -s)
 ARCH_RAW=$(uname -m)
@@ -37,6 +38,8 @@ case "$ARCH_RAW" in
 esac
 
 ASSET="better-jira-${OS}-${ARCH}"
+ARCHIVE="${ASSET}.tar.gz"
+DOWNLOAD_FILE=""
 TMP_DIR=$(mktemp -d "${TMPDIR:-/tmp}/better-jira-install.XXXXXX")
 trap 'rm -rf "$TMP_DIR"' EXIT INT TERM
 
@@ -56,6 +59,10 @@ fetch_binary() {
   fi
 }
 
+checksum_for() {
+  awk -v target="$1" '$2 == target || $2 == ("*" target) { print $1; exit }' "${TMP_DIR}/checksums.txt"
+}
+
 # For private repos, pass GITHUB_TOKEN (with repo read access) to download release assets via the GitHub API.
 download_release_files() {
   if [ -n "${GITHUB_TOKEN:-}" ]; then
@@ -70,52 +77,68 @@ download_release_files() {
       -H "Accept: application/vnd.github+json" \
       -o "$release_json" "$api_url" || fail "could not read release metadata from ${api_url}"
 
-    asset_url=$(awk -v name="\"$ASSET\"" '
-      /"url": "https:\/\/api\.github\.com\/repos\/.*\/releases\/assets\// { last_url=$2 }
-      $1 == "\"name\":" && $2 ~ name { gsub(/[",]/, "", last_url); print last_url; exit }
-    ' "$release_json")
     checksum_url=$(awk '
       /"url": "https:\/\/api\.github\.com\/repos\/.*\/releases\/assets\// { last_url=$2 }
       $1 == "\"name\":" && $2 ~ /"checksums\.txt"/ { gsub(/[",]/, "", last_url); print last_url; exit }
     ' "$release_json")
-
-    [ -n "$asset_url" ] || fail "release asset ${ASSET} not found in ${REPO} (${VERSION})"
     [ -n "$checksum_url" ] || fail "checksums.txt not found in ${REPO} (${VERSION})"
 
-    say "Downloading ${ASSET}..."
-    if [ -t 2 ]; then
-      curl -fL --progress-bar -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/octet-stream" \
-        -o "${TMP_DIR}/${ASSET}" "$asset_url" || fail "failed to download ${ASSET}"
-    else
-      curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/octet-stream" \
-        -o "${TMP_DIR}/${ASSET}" "$asset_url" || fail "failed to download ${ASSET}"
-    fi
     curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/octet-stream" \
       -o "${TMP_DIR}/checksums.txt" "$checksum_url" || fail "failed to download checksums.txt"
+
+    if [ -n "$(checksum_for "$ARCHIVE")" ]; then
+      DOWNLOAD_FILE="$ARCHIVE"
+    elif [ -n "$(checksum_for "$ASSET")" ]; then
+      DOWNLOAD_FILE="$ASSET"
+    else
+      fail "release asset ${ARCHIVE} (or ${ASSET}) not found in checksums.txt"
+    fi
+
+    asset_url=$(awk -v name="\"$DOWNLOAD_FILE\"" '
+      /"url": "https:\/\/api\.github\.com\/repos\/.*\/releases\/assets\// { last_url=$2 }
+      $1 == "\"name\":" && $2 ~ name { gsub(/[",]/, "", last_url); print last_url; exit }
+    ' "$release_json")
+    [ -n "$asset_url" ] || fail "release asset ${DOWNLOAD_FILE} not found in ${REPO} (${VERSION})"
+
+    say "Downloading ${DOWNLOAD_FILE}..."
+    if [ -t 2 ]; then
+      curl -fL --progress-bar -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/octet-stream" \
+        -o "${TMP_DIR}/${DOWNLOAD_FILE}" "$asset_url" || fail "failed to download ${DOWNLOAD_FILE}"
+    else
+      curl -fsSL -H "Authorization: Bearer ${GITHUB_TOKEN}" -H "Accept: application/octet-stream" \
+        -o "${TMP_DIR}/${DOWNLOAD_FILE}" "$asset_url" || fail "failed to download ${DOWNLOAD_FILE}"
+    fi
   else
     if [ "$VERSION" = "latest" ]; then
       base_url="https://github.com/${REPO}/releases/latest/download"
     else
       base_url="https://github.com/${REPO}/releases/download/${VERSION}"
     fi
-    say "Downloading ${ASSET}..."
-    fetch_binary "${base_url}/${ASSET}" "${TMP_DIR}/${ASSET}" || fail "failed to download ${base_url}/${ASSET}"
     fetch_silent "${base_url}/checksums.txt" "${TMP_DIR}/checksums.txt" || fail "failed to download ${base_url}/checksums.txt"
+    if [ -n "$(checksum_for "$ARCHIVE")" ]; then
+      DOWNLOAD_FILE="$ARCHIVE"
+    elif [ -n "$(checksum_for "$ASSET")" ]; then
+      DOWNLOAD_FILE="$ASSET"
+    else
+      fail "release asset ${ARCHIVE} (or ${ASSET}) not found in checksums.txt"
+    fi
+    say "Downloading ${DOWNLOAD_FILE}..."
+    fetch_binary "${base_url}/${DOWNLOAD_FILE}" "${TMP_DIR}/${DOWNLOAD_FILE}" || fail "failed to download ${base_url}/${DOWNLOAD_FILE}"
   fi
 }
 
 verify_checksum() {
   say "Verifying SHA-256 checksum..."
-  expected=$(awk -v target="$ASSET" '$2 == target || $2 == ("*" target) { print $1; exit }' "${TMP_DIR}/checksums.txt")
-  [ -n "$expected" ] || fail "checksum for ${ASSET} not found in checksums.txt"
+  expected=$(checksum_for "$DOWNLOAD_FILE")
+  [ -n "$expected" ] || fail "checksum for ${DOWNLOAD_FILE} not found in checksums.txt"
   if command -v shasum >/dev/null 2>&1; then
-    actual=$(shasum -a 256 "${TMP_DIR}/${ASSET}" | awk '{print $1}')
+    actual=$(shasum -a 256 "${TMP_DIR}/${DOWNLOAD_FILE}" | awk '{print $1}')
   elif command -v sha256sum >/dev/null 2>&1; then
-    actual=$(sha256sum "${TMP_DIR}/${ASSET}" | awk '{print $1}')
+    actual=$(sha256sum "${TMP_DIR}/${DOWNLOAD_FILE}" | awk '{print $1}')
   else
     fail "neither shasum nor sha256sum is installed to verify download integrity"
   fi
-  [ "$actual" = "$expected" ] || fail "checksum mismatch for ${ASSET} (expected ${expected}, got ${actual})"
+  [ "$actual" = "$expected" ] || fail "checksum mismatch for ${DOWNLOAD_FILE} (expected ${expected}, got ${actual})"
 }
 
 say "Installing better-jira (${OS}/${ARCH}) from ${REPO} (${VERSION})..."
@@ -123,7 +146,17 @@ download_release_files
 verify_checksum
 
 mkdir -p "$INSTALL_DIR"
-mv "${TMP_DIR}/${ASSET}" "${INSTALL_DIR}/better-jira"
+case "$DOWNLOAD_FILE" in
+  *.tar.gz)
+    mkdir -p "${TMP_DIR}/extract"
+    tar -xzf "${TMP_DIR}/${DOWNLOAD_FILE}" -C "${TMP_DIR}/extract"
+    [ -f "${TMP_DIR}/extract/better-jira" ] || fail "archive ${DOWNLOAD_FILE} did not contain better-jira binary"
+    mv "${TMP_DIR}/extract/better-jira" "${INSTALL_DIR}/better-jira"
+    ;;
+  *)
+    mv "${TMP_DIR}/${DOWNLOAD_FILE}" "${INSTALL_DIR}/better-jira"
+    ;;
+esac
 chmod 755 "${INSTALL_DIR}/better-jira"
 
 say ""

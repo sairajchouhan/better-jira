@@ -1,5 +1,5 @@
 import { afterAll, afterEach, expect, test } from "bun:test";
-import { clearUnseen, feed, group, mark, markAllRead, NoAnswer, unreadGroups } from "./notifications";
+import { clearUnseen, feed, group, groupsToPrefetch, mark, markAllRead, NoAnswer, unreadGroups } from "./notifications";
 
 // A made-up writable site for this file only: env, not mock.module, which would reach every other test file.
 const SITE = "https://fixture.atlassian.net";
@@ -101,4 +101,14 @@ test("unreadGroups reads per-group unread counts from groupSize and stops on a s
     { id: "g1", head: "h1", count: 2 },
     { id: "g2", head: "h2", count: 3 },
   ]);
+});
+
+test("groupsToPrefetch prioritizes unread multi-item groups and caps read prefetch to one chunk", () => {
+  const nodes = Array.from({ length: 20 }, (_, i) => ({
+    groupId: `g${i}`,
+    groupSize: i === 0 ? 1 : 3,
+    readStates: i === 12 || i === 15 ? ["unread"] : ["read"],
+  }));
+  // Unread g12, g15 come first, then top read grouped nodes fill up to minTop (6), skipping g0 (size 1).
+  expect(groupsToPrefetch(nodes)).toEqual(["g12", "g15", "g1", "g2", "g3", "g4"]);
 });

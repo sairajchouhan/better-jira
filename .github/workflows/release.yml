@@ -35,11 +35,15 @@ jobs:
       - uses: oven-sh/setup-bun@v2
       - run: bun install --frozen-lockfile
       - name: Compile standalone binary
-        run: bun scripts/build-binary.ts --target "${{ matrix.target }}" --out "dist/release/${{ matrix.asset }}"
+        run: |
+          bun scripts/build-binary.ts --target "${{ matrix.target }}" --out "dist/release/better-jira"
+          chmod +x dist/release/better-jira
+          tar -czf "dist/release/${{ matrix.asset }}.tar.gz" -C dist/release better-jira
+          ls -lh "dist/release/better-jira" "dist/release/${{ matrix.asset }}.tar.gz"
       - uses: actions/upload-artifact@v6
         with:
           name: ${{ matrix.asset }}
-          path: dist/release/${{ matrix.asset }}
+          path: dist/release/${{ matrix.asset }}.tar.gz
 
   publish:
     name: Publish GitHub Release
@@ -54,8 +58,7 @@ jobs:
       - name: Generate SHA-256 checksums
         working-directory: release-assets
         run: |
-          chmod +x better-jira-*
-          sha256sum better-jira-* > checksums.txt
+          sha256sum better-jira-*.tar.gz > checksums.txt
           cat checksums.txt
       - name: Create or update GitHub Release
         env:
